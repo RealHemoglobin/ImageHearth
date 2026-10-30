@@ -1,0 +1,318 @@
+"""ComfyUI y Ollama simulados sobre HTTP real, sin tocar la GPU."""
+
+import io
+import json
+import logging
+import shutil
+import tempfile
+import threading
+import unittest
+from email.parser import BytesParser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from unittest import mock
+from urllib.parse import parse_qs, urlparse
+
+from PIL import Image
+
+from engine import config
+
+# Antes de importar módulos con logger: las pruebas no escriben en logs/.
+_LOGS = Path(tempfile.mkdtemp(prefix="imageengine-test-logs-"))
+config.LOG_DIR = _LOGS
+config.ENGINE_LOG_FILE = _LOGS / "imageengine.log"
+
+from engine.log import get_logger
+
+get_logger("tests")
+
+for _handler in list(logging.getLogger("imageengine").handlers):
+    if type(_handler) is logging.StreamHandler:
+        logging.getLogger("imageengine").removeHandler(_handler)
+
+
+def png_bytes():
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), "red").save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+class FakeServer:
+    def __init__(self):
+        fake = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def _reply(self, status, body):
+                data = body if isinstance(body, bytes) else json.dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                url = urlparse(self.path)
+                self._reply(*fake.get(url.path, parse_qs(url.query)))
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                fake.events.append(f"POST {self.path}")
+                self._reply(*fake.post(self.path, self.headers, body))
+
+        self.events = []
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.closed = False
+
+    def stop(self):
+        if not self.closed:
+            self.closed = True
+            self.server.shutdown()
+            self.server.server_close()
+
+
+class FakeOllama(FakeServer):
+    def __init__(self):
+        self.loaded = {}
+        self.requests = []
+        self.fail_restore = False
+        super().__init__()
+
+    def add(self, name, **fields):
+        self.loaded[name] = {"name": name, "size_vram": 1024 * 1024, **fields}
+
+    def get(self, path, query):
+        if path == "/api/ps":
+            return 200, {"models": list(self.loaded.values())}
+        if path == "/api/version":
+            return 200, {"version": "test"}
+        return 404, {}
+
+    def post(self, path, headers, body):
+        data = json.loads(body)
+        self.requests.append(data)
+
+        if data.get("keep_alive") == 0:
+            self.loaded.pop(data["model"], None)
+            self.events.append(f"unload {data['model']}")
+            return 200, {}
+
+        if self.fail_restore:
+            return 500, {"error": "fallo"}
+
+        self.events.append(f"load {data['model']}")
+        self.loaded[data["model"]] = {
+            "name": data["model"],
+            "size_vram": 1024 * 1024,
+        }
+        return 200, {}
+
+
+class FakeComfy(FakeServer):
+    def __init__(self, comfy_dir):
+        self.comfy_dir = comfy_dir
+        self.models_loaded = 0
+        self.free_ok = True
+        self.running = []
+        self.pending = []
+        self.history = {}
+        self.outputs = {}
+        self.workflows = []
+        self.behavior = "ok"
+        self.reject = None
+        self.on_prompt = None
+        self.status_route = True
+        super().__init__()
+
+    def get(self, path, query):
+        if path == "/system_stats":
+            return 200, {"devices": []}
+        if path == "/imageengine/status":
+            if not self.status_route:
+                return 404, {}
+            return 200, {
+                "models_loaded": self.models_loaded,
+                "loaded_models": [{"class": "x"}] * self.models_loaded,
+            }
+        if path == "/queue":
+            return 200, {
+                "queue_running": [[0, item] for item in self.running],
+                "queue_pending": [[0, item] for item in self.pending],
+            }
+        if path.startswith("/history/"):
+            return 200, self.get_history(path.rsplit("/", 1)[1])
+        if path == "/view":
+            if self.behavior == "corrupt":
+                return 200, b"no es una imagen"
+            return 200, png_bytes()
+        return 404, {}
+
+    def get_history(self, prompt_id):
+        if self.behavior == "never":
+            return {}
+
+        if prompt_id not in self.outputs:
+            return {}
+
+        if prompt_id in self.running:
+            self.running.remove(prompt_id)
+
+        if self.behavior == "error":
+            return {
+                prompt_id: {
+                    "status": {
+                        "status_str": "error",
+                        "messages": [
+                            [
+                                "execution_error",
+                                {
+                                    "node_id": "5",
+                                    "node_type": "KSampler",
+                                    "exception_message": "Out of memory",
+                                },
+                            ]
+                        ],
+                    }
+                }
+            }
+
+        outputs = {}
+
+        if self.behavior != "empty":
+            outputs = {"7": {"images": [self.outputs[prompt_id]]}}
+
+        return {
+            prompt_id: {
+                "status": {"status_str": "success", "completed": True},
+                "outputs": outputs,
+            }
+        }
+
+    def post(self, path, headers, body):
+        if path == "/prompt":
+            return self.post_prompt(json.loads(body)["prompt"])
+        if path == "/upload/image":
+            return self.post_upload(headers, body)
+        if path == "/free":
+            if self.free_ok:
+                self.models_loaded = 0
+            return 200, {}
+        if path == "/interrupt":
+            target = json.loads(body).get("prompt_id")
+            self.events.append(f"interrupt {target}")
+            if target in self.running:
+                self.running.remove(target)
+            return 200, {}
+        if path == "/queue":
+            for item in json.loads(body).get("delete", []):
+                self.pending.remove(item)
+            return 200, {}
+        return 404, {}
+
+    def post_prompt(self, workflow):
+        if self.reject:
+            return 400, self.reject
+
+        self.workflows.append(workflow)
+        prompt_id = f"prompt-{len(self.workflows)}"
+        self.models_loaded = 1
+        self.running.append(prompt_id)
+
+        prefix = next(
+            node["inputs"]["filename_prefix"]
+            for node in workflow.values()
+            if node.get("class_type") == "SaveImage"
+        )
+        subfolder, _, name = prefix.rpartition("/")
+        filename = f"{name}_00001_.png"
+        copy = self.comfy_dir / "output" / subfolder / filename
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_bytes(png_bytes())
+
+        self.outputs[prompt_id] = {
+            "filename": filename,
+            "subfolder": subfolder,
+            "type": "output",
+        }
+
+        if self.on_prompt:
+            self.on_prompt()
+
+        return 200, {"prompt_id": prompt_id}
+
+    def post_upload(self, headers, body):
+        message = BytesParser().parsebytes(
+            b"Content-Type: " + headers["Content-Type"].encode() + b"\r\n\r\n" + body
+        )
+        fields = {}
+        filename = None
+        content = None
+
+        for part in message.get_payload():
+            name = part.get_param("name", header="content-disposition")
+            if part.get_filename():
+                filename = part.get_filename()
+                content = part.get_payload(decode=True)
+            else:
+                fields[name] = part.get_payload(decode=True).decode()
+
+        target = self.comfy_dir / "input" / fields.get("subfolder", "") / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+
+        return 200, {
+            "name": filename,
+            "subfolder": fields.get("subfolder", ""),
+            "type": "input",
+        }
+
+
+class EngineTestCase(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="imageengine-test-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+        self.comfy_dir = self.tmp / "ComfyUI"
+        (self.comfy_dir / "input").mkdir(parents=True)
+        (self.comfy_dir / "output").mkdir()
+
+        self.comfy = FakeComfy(self.comfy_dir)
+        self.ollama = FakeOllama()
+        self.addCleanup(self.comfy.stop)
+        self.addCleanup(self.ollama.stop)
+
+        patches = {
+            "COMFY_DIR": self.comfy_dir,
+            "COMFY_PORT": self.comfy.port,
+            "COMFY_API": f"http://127.0.0.1:{self.comfy.port}",
+            "OLLAMA_API": f"http://127.0.0.1:{self.ollama.port}",
+            "OUTPUT_DIR": self.tmp / "output",
+            "LOCK_FILE": self.tmp / "engine.lock",
+            "STATE_FILE": self.tmp / "state" / "session.json",
+            "POLL_INTERVAL": 0.01,
+            "OLLAMA_CHECK_INTERVAL": 0.0,
+            "FREE_TIMEOUT": 0.1,
+            "CANCEL_TIMEOUT": 1,
+            "UNLOAD_TIMEOUT": 1,
+            "RESTORE_TIMEOUT": 1,
+        }
+
+        for name, value in patches.items():
+            patcher = mock.patch.object(config, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        gpu = mock.patch(
+            "engine.comfyui_manager.gpu_free_mib",
+            return_value=20000,
+        )
+        self.gpu_free = gpu.start()
+        self.addCleanup(gpu.stop)
+
+    def outputs(self):
+        return list(config.OUTPUT_DIR.glob("*")) if config.OUTPUT_DIR.exists() else []

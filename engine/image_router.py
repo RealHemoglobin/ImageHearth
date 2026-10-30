@@ -1,61 +1,15 @@
-from pathlib import Path
-import re
-
+from engine import config
 from engine.kontext import generate as edit_with_kontext
+from engine.validation import (
+    resolve_workflow,
+    validate_dimensions,
+    validate_prompt,
+)
 from engine.workflow_runner import run_workflow
 
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOWS_DIR = ROOT / "workflows"
-
 DEFAULT_WIDTH = 1024
 DEFAULT_HEIGHT = 1024
-MAX_DIMENSION = 4096
-MAX_REFERENCES = 6
-
-
-def validate_prompt(prompt):
-    if not isinstance(prompt, str) or not prompt.strip():
-        raise ValueError("El prompt no puede estar vacío.")
-
-
-def validate_dimensions(width, height, allow_zero=False):
-    minimum = 0 if allow_zero else 64
-
-    for name, value in (("width", width), ("height", height)):
-        if not isinstance(value, int) or isinstance(value, bool):
-            raise ValueError(f"{name} debe ser un número entero.")
-
-        if value < minimum or value > MAX_DIMENSION:
-            raise ValueError(
-                f"{name} debe estar entre {minimum} y {MAX_DIMENSION}."
-            )
-
-
-def resolve_workflow(workflow, quality):
-    if workflow:
-        if not isinstance(workflow, str):
-            raise ValueError("workflow debe ser un nombre de workflow.")
-
-        if not re.fullmatch(r"[A-Za-z0-9_-]+", workflow):
-            raise ValueError("Nombre de workflow no válido.")
-
-        selected = workflow
-    else:
-        selected = "sdxl_turbo" if quality == "fast" else "flux_dev"
-
-    workflow_file = WORKFLOWS_DIR / f"{selected}.json"
-
-    if not workflow_file.is_file():
-        available = sorted(
-            path.stem for path in WORKFLOWS_DIR.glob("*.json")
-        )
-        raise ValueError(
-            f"Workflow '{selected}' no disponible. "
-            f"Workflows existentes: {available}"
-        )
-
-    return selected
 
 
 def create_image(
@@ -83,6 +37,8 @@ def create_image(
     Dimensions:
         Generation defaults to 1024x1024.
         Editing preserves the first reference dimensions when omitted.
+
+    Returns the image path, followed by one warning per line if any.
     """
 
     validate_prompt(prompt)
@@ -95,9 +51,9 @@ def create_image(
 
     references = list(image_paths or [])
 
-    if len(references) > MAX_REFERENCES:
+    if len(references) > config.MAX_REFERENCES:
         raise ValueError(
-            f"Se permiten como máximo {MAX_REFERENCES} referencias."
+            f"Se permiten como máximo {config.MAX_REFERENCES} referencias."
         )
 
     if mode == "auto":
@@ -109,14 +65,17 @@ def create_image(
 
         validate_dimensions(width, height, allow_zero=True)
 
-        return str(
-            edit_with_kontext(
-                prompt=prompt,
-                image_paths=references,
-                width=width,
-                height=height,
-            )
+        result = edit_with_kontext(
+            prompt=prompt,
+            image_paths=references,
+            width=width,
+            height=height,
         )
+
+        if negative_prompt:
+            result.warnings.insert(0, "FLUX Kontext ignora negative_prompt.")
+
+        return str(result)
 
     if references:
         raise ValueError(

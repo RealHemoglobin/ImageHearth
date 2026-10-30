@@ -1,19 +1,21 @@
 import json
-import time
+import random
 import uuid
 from pathlib import Path
 
 import requests
 from PIL import Image
 
+from engine import comfyui_client, config
+from engine.log import get_logger
 from engine.orchestrator import generation_session
+from engine.result import ImageResult
+from engine.validation import fit_to_limits, validate_dimensions, validate_prompt
+from engine.workflow_runner import save_session_image
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-WORKFLOW_FILE = BASE_DIR / "workflows" / "flux_kontext_dev_basic.json"
-OUTPUT_DIR = BASE_DIR / "output"
+log = get_logger("kontext")
 
-API = "http://127.0.0.1:8188"
-MAX_REFERENCE_IMAGES = 6
+WORKFLOW_FILE = config.WORKFLOWS_DIR / "flux_kontext_dev_basic.json"
 
 
 def normalize_image_paths(image_path=None, image_paths=None):
@@ -41,9 +43,9 @@ def normalize_image_paths(image_path=None, image_paths=None):
     if not unique:
         raise ValueError("Debes proporcionar al menos una imagen.")
 
-    if len(unique) > MAX_REFERENCE_IMAGES:
+    if len(unique) > config.MAX_REFERENCES:
         raise ValueError(
-            f"Kontext admite como máximo {MAX_REFERENCE_IMAGES} imágenes."
+            f"Kontext admite como máximo {config.MAX_REFERENCES} imágenes."
         )
 
     for path in unique:
@@ -59,37 +61,48 @@ def normalize_image_paths(image_path=None, image_paths=None):
     return unique
 
 
-def upload_image(image_path):
+def upload_image(image_path, index, run_id):
+    """Sube la referencia a una carpeta exclusiva de esta ejecución."""
     image_path = Path(image_path)
+    subfolder = comfyui_client.run_input_subfolder(run_id)
+    name = f"reference_{index}{image_path.suffix.lower()}"
 
     with image_path.open("rb") as image:
         response = requests.post(
-            f"{API}/upload/image",
-            files={"image": (image_path.name, image)},
-            data={"overwrite": "true"},
+            f"{config.COMFY_API}/upload/image",
+            files={"image": (name, image)},
+            data={"subfolder": subfolder, "type": "input"},
             timeout=120,
         )
 
     response.raise_for_status()
-    return response.json()["name"]
+    uploaded = response.json()
+    return f"{uploaded['subfolder']}/{uploaded['name']}"
 
 
 def output_dimensions(first_image, width=0, height=0):
+    """Devuelve las dimensiones de salida y un aviso si se han reducido."""
+    validate_dimensions(width, height, allow_zero=True)
+    warning = None
+
     if not width or not height:
         with Image.open(first_image) as image:
             original_width, original_height = image.size
 
-        width = width or original_width
-        height = height or original_height
+        inherited = (width or original_width, height or original_height)
+        width, height = fit_to_limits(*inherited)
+
+        if (width, height) != inherited:
+            warning = (
+                f"La referencia de {inherited[0]}x{inherited[1]} "
+                f"se ha reducido a {width}x{height}."
+            )
 
     # EmptySD3LatentImage requiere dimensiones múltiplos de 16.
-    width = max(256, round(width / 16) * 16)
-    height = max(256, round(height / 16) * 16)
+    width = max(256, int(width / 16) * 16)
+    height = max(256, int(height / 16) * 16)
 
-    if width > 4096 or height > 4096:
-        raise ValueError("Las dimensiones máximas de salida son 4096x4096.")
-
-    return width, height
+    return width, height, warning
 
 
 def build_workflow(uploaded_images, prompt, width, height, filename):
@@ -116,6 +129,7 @@ def build_workflow(uploaded_images, prompt, width, height, filename):
         workflow.pop(node_id, None)
 
     workflow["192:6"]["inputs"]["text"] = prompt
+    workflow["192:31"]["inputs"]["seed"] = random.randint(0, 2**64 - 1)
 
     # Crear un latente de salida independiente de las referencias.
     latent_id = "IMAGEENGINE_EMPTY_LATENT"
@@ -184,95 +198,44 @@ def build_workflow(uploaded_images, prompt, width, height, filename):
 def generate(
     prompt,
     image_path=None,
-    timeout=1800,
+    timeout=config.KONTEXT_TIMEOUT,
     image_paths=None,
     width=0,
     height=0,
 ):
-    if not prompt or not prompt.strip():
-        raise ValueError("El prompt no puede estar vacío.")
+    validate_prompt(prompt)
 
     paths = normalize_image_paths(image_path, image_paths)
-    width, height = output_dimensions(paths[0], width, height)
+    width, height, warning = output_dimensions(paths[0], width, height)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    image_id = f"kontext_{uuid.uuid4().hex[:12]}"
 
-    with generation_session():
-        uploaded_images = [upload_image(path) for path in paths]
-
-        filename = f"kontext_{uuid.uuid4().hex[:12]}"
+    with generation_session() as session:
+        uploaded_images = [
+            upload_image(path, index, session.run_id)
+            for index, path in enumerate(paths, start=1)
+        ]
 
         workflow = build_workflow(
             uploaded_images=uploaded_images,
             prompt=prompt,
             width=width,
             height=height,
-            filename=filename,
+            filename=f"{config.COMFY_SUBFOLDER}/{image_id}",
         )
 
-        response = requests.post(
-            f"{API}/prompt",
-            json={"prompt": workflow},
-            timeout=60,
+        log.info("Referencias independientes: %s", len(paths))
+        log.info("Dimensiones de salida: %sx%s", width, height)
+
+        destination = save_session_image(
+            session,
+            workflow,
+            timeout,
+            config.OUTPUT_DIR / f"{image_id}.png",
         )
-        response.raise_for_status()
 
-        result = response.json()
-
-        if "prompt_id" not in result:
-            raise RuntimeError(f"ComfyUI rechazó el workflow: {result}")
-
-        prompt_id = result["prompt_id"]
-
-        print(f"Generación Kontext iniciada: {prompt_id}")
-        print(f"Referencias independientes: {len(paths)}")
-        print(f"Dimensiones de salida: {width}x{height}")
-
-        deadline = time.time() + timeout
-
-        while time.time() < deadline:
-            history_response = requests.get(
-                f"{API}/history/{prompt_id}",
-                timeout=15,
-            )
-            history_response.raise_for_status()
-
-            history = history_response.json().get(prompt_id)
-
-            if history:
-                status = history.get("status", {})
-
-                if status.get("status_str") == "error":
-                    raise RuntimeError(f"Error en ComfyUI: {status}")
-
-                if status.get("completed"):
-                    for node in history.get("outputs", {}).values():
-                        for image in node.get("images", []):
-                            if image.get("type") != "output":
-                                continue
-
-                            image_response = requests.get(
-                                f"{API}/view",
-                                params={
-                                    "filename": image["filename"],
-                                    "subfolder": image.get("subfolder", ""),
-                                    "type": "output",
-                                },
-                                timeout=120,
-                            )
-                            image_response.raise_for_status()
-
-                            destination = OUTPUT_DIR / f"{filename}.png"
-                            destination.write_bytes(image_response.content)
-
-                            print(f"Imagen guardada: {destination}")
-                            return destination
-
-            time.sleep(2)
-
-        raise TimeoutError(
-            f"ComfyUI no terminó en los {timeout} segundos disponibles."
-        )
+    warnings = [warning] if warning else []
+    return ImageResult(destination, warnings + session.warnings)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 
@@ -6,19 +7,18 @@ from mcp.server.fastmcp import FastMCP
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engine.kontext import generate as generate_kontext
-from engine.workflow_runner import run_workflow
-from engine.image_router import (
-    create_image as route_image,
-    resolve_workflow,
-)
-from engine.ollama_manager import get_loaded_models
+from engine import orchestrator
+from engine.image_router import create_image as route_image
+from engine.status import get_status
+from engine.validation import available_workflows
 
 mcp = FastMCP("ImageEngine")
 
 
+# Las herramientas largas se ejecutan en un hilo para no bloquear el
+# bucle de eventos de MCP. Una sesión cancelada termina su propia limpieza.
 @mcp.tool()
-def generate_image(
+async def generate_image(
     prompt: str,
     workflow: str = "sdxl_turbo",
     width: int = 1024,
@@ -28,19 +28,22 @@ def generate_image(
     """Generate a new image using a specific available workflow.
 
     Available workflows include sdxl_turbo and flux_dev.
+    Returns the image path, followed by lines starting with ADVERTENCIA
+    if the image was created but something needs attention.
     """
-    selected = resolve_workflow(workflow, "fast")
-
-    return run_workflow(
-        workflow_name=f"{selected}.json",
+    return await asyncio.to_thread(
+        route_image,
         prompt=prompt,
+        mode="generate",
+        workflow=workflow,
         width=width,
         height=height,
         negative_prompt=negative_prompt,
     )
 
+
 @mcp.tool()
-def edit_image(
+async def edit_image(
     image_path: str,
     prompt: str,
     additional_images: list[str] | None = None,
@@ -53,23 +56,26 @@ def edit_image(
     additional_images: Up to five additional reference images.
     width and height: Optional output dimensions. Zero preserves
     the primary reference dimensions.
+    Returns the image path, followed by lines starting with ADVERTENCIA
+    if the image was created but something needs attention.
     """
     references = [image_path]
 
     if additional_images:
         references.extend(additional_images)
 
-    return str(
-        generate_kontext(
-            prompt=prompt,
-            image_paths=references,
-            width=width,
-            height=height,
-        )
+    return await asyncio.to_thread(
+        route_image,
+        prompt=prompt,
+        mode="edit",
+        image_paths=references,
+        width=width,
+        height=height,
     )
 
+
 @mcp.tool()
-def create_image(
+async def create_image(
     prompt: str,
     mode: str = "auto",
     quality: str = "fast",
@@ -92,8 +98,11 @@ def create_image(
 
     image_paths: zero to six reference image paths.
     workflow: optionally override the automatic generation workflow.
+    Returns the image path, followed by lines starting with ADVERTENCIA
+    if the image was created but something needs attention.
     """
-    return route_image(
+    return await asyncio.to_thread(
+        route_image,
         prompt=prompt,
         mode=mode,
         quality=quality,
@@ -107,76 +116,37 @@ def create_image(
 
 @mcp.tool()
 def list_workflows() -> list:
-    """List available ImageEngine workflows."""
-    workflows_dir = ROOT / "workflows"
-
+    """List available ImageEngine generation workflows."""
     return [
-        {"name": path.stem, "file": path.name}
-        for path in sorted(workflows_dir.glob("*.json"))
+        {"name": name, "file": f"{name}.json"}
+        for name in available_workflows()
     ]
 
 
+@mcp.tool()
+async def get_engine_status() -> dict:
+    """Return the status of ImageEngine, ComfyUI and Ollama.
+
+    imageengine.status is ready, busy, degraded or recovery_required.
+    """
+    return await asyncio.to_thread(get_status)
+
 
 @mcp.tool()
-def get_engine_status() -> dict:
-    """Return the status of ImageEngine, ComfyUI and Ollama."""
-    import requests
-
-    # ComfyUI
-    try:
-        response = requests.get(
-            "http://127.0.0.1:8188/system_stats",
-            timeout=3,
-        )
-        response.raise_for_status()
-
-        comfy = {
-            "status": "running",
-            "gpu_devices": response.json().get("devices", []),
-        }
-
-    except requests.RequestException as error:
-        comfy = {
-            "status": "stopped",
-            "error": str(error),
-            "gpu_devices": [],
-        }
-
-    # Ollama
-    try:
-        response = requests.get(
-            "http://127.0.0.1:11434/api/version",
-            timeout=3,
-        )
-        response.raise_for_status()
-
-        models = get_loaded_models()
-
-        ollama = {
-            "status": "running",
-            "version": response.json().get("version"),
-            "loaded_models": models,
-        }
-
-    except requests.RequestException as error:
-        ollama = {
-            "status": "stopped",
-            "error": str(error),
-            "loaded_models": [],
-        }
-
-    return {
-        "comfyui": comfy,
-        "ollama": ollama,
-    }
-
-@mcp.tool()
-def ensure_comfyui() -> str:
+async def ensure_comfyui() -> str:
     """Start ComfyUI if it is not already running."""
-    from engine.comfyui_manager import start
-
-    start()
+    await asyncio.to_thread(orchestrator.ensure_comfyui)
     return "ComfyUI is ready at http://127.0.0.1:8188"
+
+
+@mcp.tool()
+async def recover_engine() -> dict:
+    """Resolve a pending session when the status is recovery_required.
+
+    Releases ComfyUI and restores the interrupted Ollama models.
+    Never loads Ollama while ComfyUI may still hold the GPU memory.
+    """
+    return await asyncio.to_thread(orchestrator.recover)
 
 
 if __name__ == "__main__":

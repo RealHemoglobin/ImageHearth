@@ -35,7 +35,7 @@ Parameters:
 - `workflow` (string, optional): Explicit generation workflow override.
 - `width` (integer, optional): Output width. Default: automatic.
 - `height` (integer, optional): Output height. Default: automatic.
-- `negative_prompt` (string, optional): Elements to avoid during generation.
+- `negative_prompt` (string, optional): Elements to avoid during generation. Only SDXL Turbo applies it; other backends return a warning.
 
 ### Automatic routing
 
@@ -69,10 +69,12 @@ Quality does not change the editing backend. Image editing always uses FLUX Kont
 For generation:
 - Default: 1024x1024.
 - Specify width and height when a different aspect ratio is required.
+- Limits: 64 to 4096 per side and 8,388,608 pixels in total.
 
 For editing:
 - Default: preserve the dimensions of the first reference image.
 - Explicit width and height override the output dimensions.
+- A reference above the limits is reduced, keeping its proportions, and the result includes a warning.
 
 ### Examples
 
@@ -144,14 +146,11 @@ Preserve all elements not explicitly requested to change.
 
 ### list_workflows
 
-List workflow JSON files available in ImageEngine.
+List the generation workflows available in ImageEngine.
 
 Use this tool to inspect the available workflow catalog.
 
-Important:
-- `flux_kontext_dev_basic` is an internal Kontext workflow template.
-- Do not use it as a conventional generation workflow.
-- Use `create_image` or `edit_image` for Kontext operations.
+The internal Kontext template is not listed and cannot be selected. Use `create_image` or `edit_image` for Kontext operations.
 
 ### get_engine_status
 
@@ -160,6 +159,11 @@ Check the current state of:
 - Ollama.
 - Loaded Ollama models.
 - GPU devices and VRAM information exposed by ComfyUI.
+- The overall `imageengine.status`:
+  - `ready`: operational.
+  - `busy`: another generation holds the engine.
+  - `degraded`: a dependency has a problem; see `imageengine.issues`.
+  - `recovery_required`: an earlier session left work pending; see `imageengine.session`.
 
 Use this tool when:
 - A generation fails.
@@ -171,6 +175,12 @@ Use this tool when:
 Start ComfyUI if it is not already running.
 
 Use when ComfyUI is stopped or unavailable.
+
+### recover_engine
+
+Resolve a pending session: release ComfyUI and restore the interrupted Ollama models. It never loads Ollama while ComfyUI may still hold GPU memory.
+
+Use only when `get_engine_status` reports `recovery_required`.
 
 ## Image creation guidelines
 
@@ -202,7 +212,9 @@ The orchestration layer:
 - Unloads Ollama models before image generation.
 - Executes ComfyUI workflows.
 - Releases ComfyUI models after generation.
-- Restores previously loaded Ollama models.
+- Restores previously loaded Ollama models with their original settings.
+- Records each session on disk so an interrupted one can be recovered.
+- If ComfyUI does not release the GPU memory, restarts it once when its queue is empty. If that fails, Ollama stays unloaded and the status becomes `recovery_required`.
 
 Agents MUST NOT:
 - Stop or restart ComfyUI during an ImageEngine operation.
@@ -218,9 +230,9 @@ Generated images are stored in:
 
     ~/AI/ImageEngine/output/
 
-The tools return the generated image path.
+The first line of the tool result is the generated image path. Any following line starting with `ADVERTENCIA:` is a warning: the image exists, but something needs attention. Do not retry the generation because of a warning.
 
-Always communicate the resulting path when relevant.
+Always communicate the resulting path when relevant, and relay any warnings.
 
 Never claim that an image was generated unless the tool returned successfully.
 
@@ -230,9 +242,11 @@ If an operation fails:
 
 1. Call `get_engine_status`.
 2. Check ComfyUI and Ollama status.
-3. If ComfyUI is stopped, use `ensure_comfyui`.
-4. Retry only when the failure appears recoverable.
-5. Report the actual error if the operation still fails.
+3. If the status is `recovery_required`, use `recover_engine`.
+4. If the status is `busy`, wait instead of retrying immediately.
+5. If ComfyUI is stopped, use `ensure_comfyui`.
+6. Retry only when the failure appears recoverable.
+7. Report the actual error if the operation still fails.
 
 Never silently switch to another image generation backend.
 

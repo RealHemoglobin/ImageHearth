@@ -1,40 +1,78 @@
 import json
 import random
-import time
 import uuid
-from pathlib import Path
 
-import requests
-
+from engine import comfyui_client, config
+from engine.log import get_logger
 from engine.orchestrator import generation_session
+from engine.result import ImageResult
+from engine.validation import validate_dimensions, validate_prompt
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOWS = ROOT / "workflows"
-OUTPUT = ROOT / "output"
+log = get_logger("workflow")
 
-API = "http://127.0.0.1:8188"
+
+def save_session_image(session, workflow, timeout, destination):
+    """Ejecuta el workflow en la sesión y guarda su imagen verificada."""
+    prompt_id = session.submit(workflow)
+    log.info("Generación iniciada: %s", prompt_id)
+
+    image = comfyui_client.wait_for_image(
+        prompt_id,
+        timeout,
+        on_poll=session.check_ollama,
+    )
+    session.prompt_finished()
+
+    comfyui_client.download_image(image, destination)
+    log.info("Imagen guardada: %s", destination)
+
+    try:
+        comfyui_client.remove_output_copy(image)
+    except OSError as error:
+        session.warn(f"No se pudo borrar la copia de ComfyUI: {error}")
+
+    return destination
+
+
+def negative_prompt_applies(workflow):
+    has_negative_node = False
+    uses_cfg = False
+
+    for node in workflow.values():
+        if not isinstance(node, dict):
+            continue
+
+        if node.get("class_type") == "CLIPTextEncode":
+            has_negative_node |= node.get("inputs", {}).get("text") == ""
+
+        if node.get("class_type") == "KSampler":
+            uses_cfg |= node.get("inputs", {}).get("cfg", 1) > 1
+
+    return has_negative_node and uses_cfg
 
 
 def run_workflow(
     workflow_name: str,
     prompt: str,
-    timeout: int = 1200,
+    timeout: int = config.WORKFLOW_TIMEOUT,
     negative_prompt: str = "",
     width: int = 1024,
     height: int = 1024,
 ):
-    if not prompt.strip():
-        raise ValueError("El prompt no puede estar vacío.")
+    validate_prompt(prompt)
+    validate_dimensions(width, height)
 
-    if width < 64 or height < 64:
-        raise ValueError("Las dimensiones mínimas son 64x64.")
-
-    workflow_file = WORKFLOWS / workflow_name
+    workflow_file = config.WORKFLOWS_DIR / workflow_name
 
     if not workflow_file.is_file():
         raise FileNotFoundError(workflow_file)
 
     workflow = json.loads(workflow_file.read_text())
+
+    warnings = []
+
+    if negative_prompt and not negative_prompt_applies(workflow):
+        warnings.append(f"{workflow_file.stem} ignora negative_prompt.")
 
     # Sustituir prompts.
     for node in workflow.values():
@@ -64,70 +102,20 @@ def run_workflow(
         if class_type == "KSampler":
             inputs["seed"] = random.randint(0, 2**64 - 1)
 
-    filename = f"imageengine/{uuid.uuid4().hex[:12]}"
+    image_id = uuid.uuid4().hex[:12]
 
     for node in workflow.values():
         if isinstance(node, dict) and node.get("class_type") == "SaveImage":
-            node["inputs"]["filename_prefix"] = filename
-
-    OUTPUT.mkdir(parents=True, exist_ok=True)
-
-    with generation_session():
-        response = requests.post(
-            f"{API}/prompt",
-            json={"prompt": workflow},
-            timeout=60,
-        )
-        response.raise_for_status()
-
-        result = response.json()
-
-        if "prompt_id" not in result:
-            raise RuntimeError(f"ComfyUI no aceptó el workflow: {result}")
-
-        prompt_id = result["prompt_id"]
-        print(f"Generación iniciada: {prompt_id}")
-
-        deadline = time.time() + timeout
-
-        while time.time() < deadline:
-            response = requests.get(
-                f"{API}/history/{prompt_id}",
-                timeout=15,
+            node["inputs"]["filename_prefix"] = (
+                f"{config.COMFY_SUBFOLDER}/{image_id}"
             )
-            response.raise_for_status()
 
-            history = response.json().get(prompt_id)
+    with generation_session() as session:
+        destination = save_session_image(
+            session,
+            workflow,
+            timeout,
+            config.OUTPUT_DIR / f"{image_id}.png",
+        )
 
-            if history:
-                status = history.get("status", {})
-
-                if status.get("status_str") == "error":
-                    raise RuntimeError(f"Error ComfyUI: {status}")
-
-                if status.get("completed"):
-                    for node in history.get("outputs", {}).values():
-                        for image in node.get("images", []):
-                            if image.get("type") != "output":
-                                continue
-
-                            result = requests.get(
-                                f"{API}/view",
-                                params={
-                                    "filename": image["filename"],
-                                    "subfolder": image.get("subfolder", ""),
-                                    "type": "output",
-                                },
-                                timeout=120,
-                            )
-                            result.raise_for_status()
-
-                            destination = OUTPUT / f"{uuid.uuid4().hex[:12]}.png"
-                            destination.write_bytes(result.content)
-                            return str(destination)
-
-                    raise RuntimeError("ComfyUI terminó sin producir imágenes.")
-
-            time.sleep(2)
-
-    raise TimeoutError(f"Workflow no terminado después de {timeout}s.")
+    return ImageResult(destination, warnings + session.warnings)
