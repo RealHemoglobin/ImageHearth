@@ -38,11 +38,12 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 **Objetivo:** cerrar lo que sería caro cambiar después.
 
 - [x] Decidir nombre, licencia y dueño del repositorio (ver [decisiones abiertas](#decisiones-abiertas)).
-- [ ] Añadir `LICENSE` y `THIRD_PARTY_NOTICES.md`.
-- [ ] Revisar las licencias de FLUX y SDXL Turbo.
-- [ ] Conseguir acceso a hardware Windows con NVIDIA y a un Mac con Apple Silicon, o probadores.
-- [ ] Fusionar `robustez` en `main` y crear CI en Linux con los tests actuales.
-- [ ] Definir el entorno de desarrollo, de forma que los tests no dependan del venv de ComfyUI.
+- [x] Añadir `LICENSE` y `THIRD_PARTY_NOTICES.md`.
+- [x] Revisar las licencias de FLUX y SDXL Turbo.
+- [x] Conseguir acceso a hardware Windows con NVIDIA. El Mac con Apple Silicon sigue pendiente para la fase 4.
+- [x] Fusionar `robustez` en `main`: sus commits ya estaban en `main`.
+- [ ] Crear CI en Linux con los tests actuales y dejarlo en verde en `main`.
+- [x] Definir el entorno de desarrollo, de forma que los tests no dependan del venv de ComfyUI.
 
 **Listo cuando:** el CI está en verde en `main` y no hay decisiones abiertas que bloqueen la fase 1.
 
@@ -51,7 +52,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 **Objetivo:** convertir el repositorio en un paquete instalable, sin cambiar su comportamiento.
 
 - [ ] Pasar a `src/imageengine_mcp/` y eliminar la carpeta `mcp/`, que choca con la dependencia.
-- [ ] Crear `pyproject.toml` con el comando `imageengine-mcp`.
+- [ ] Ampliar `pyproject.toml` con el comando `imageengine-mcp` y retirar `requirements.txt`, que se mantiene mientras el README lo use para instalar.
 - [ ] Incluir workflows, skill y nodo personalizado como datos de paquete, leídos con `importlib.resources`.
 - [ ] Reescribir `config.py`: `platformdirs`, `config.toml` y variables de entorno para ruta de ComfyUI, puerto, salida y Ollama.
 - [ ] Sacar del código `sys.path.insert` y los `__main__` por módulo; la CLI los sustituye.

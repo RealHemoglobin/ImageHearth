@@ -1,6 +1,7 @@
 import contextlib
 import io
 import threading
+from datetime import UTC
 from unittest import mock
 
 import requests
@@ -316,9 +317,11 @@ class Locking(EngineTestCase):
         started.wait(5)
 
         try:
-            with mock.patch.object(config, "LOCK_TIMEOUT", 0.05):
-                with self.assertRaisesRegex(TimeoutError, "ocupado"):
-                    generate()
+            with (
+                mock.patch.object(config, "LOCK_TIMEOUT", 0.05),
+                self.assertRaisesRegex(TimeoutError, "ocupado"),
+            ):
+                generate()
 
             self.assertEqual(get_status()["imageengine"]["status"], "busy")
         finally:
@@ -366,9 +369,9 @@ class OllamaManager(EngineTestCase):
         self.assertEqual(paths, ["/api/generate", "/api/embed"])
 
     def test_short_keep_alive_is_preserved(self):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        expires = datetime.now(timezone.utc) + timedelta(minutes=5)
+        expires = datetime.now(UTC) + timedelta(minutes=5)
         options = ollama_manager.restore_options(
             {"expires_at": expires.isoformat()}
         )

@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 
 from engine import config
@@ -15,7 +15,7 @@ run_id = contextvars.ContextVar("imageengine_run_id", default="")
 class JsonFormatter(logging.Formatter):
     def format(self, record):
         entry = {
-            "time": datetime.now(timezone.utc).isoformat(),
+            "time": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "pid": os.getpid(),
             "run_id": run_id.get(),

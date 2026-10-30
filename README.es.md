@@ -47,11 +47,9 @@ venv/bin/pip install -r requirements.txt
 
 ### 2. Instala ImageEngine
 
-Sustituye `OWNER` por el dueño del repositorio.
-
 ```bash
 cd ~/AI
-git clone https://github.com/OWNER/ImageEngine.git
+git clone https://github.com/RealHemoglobin/ImageHearth.git ImageEngine
 cd ImageEngine
 python3.13 -m venv .venv
 .venv/bin/pip install -r requirements.txt
@@ -155,22 +153,24 @@ El log de ComfyUI muestra `imageengine_status` como `IMPORT FAILED`. Es un [prob
 
 ## Licencias de los modelos
 
-Los modelos no forman parte de este proyecto y tienen sus propias condiciones. **Al descargarlos, las aceptas.** Este resumen no es asesoramiento legal.
+Los modelos no forman parte de este proyecto y tienen sus propias condiciones. **Al descargarlos, las aceptas.** Este resumen no es asesoramiento legal; los detalles están en [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 | Modelo | Licencia | En resumen |
 |---|---|---|
-| FLUX.1 Dev | [FLUX.1 [dev] Non-Commercial](https://huggingface.co/black-forest-labs/FLUX.1-dev/blob/main/LICENSE.md) | Uso no comercial del modelo |
-| FLUX.1 Kontext Dev | [FLUX.1 [dev] Non-Commercial](https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev/blob/main/LICENSE.md) | Uso no comercial del modelo |
+| FLUX.1 Dev | [FLUX.1 [dev] Non-Commercial](https://bfl.ai/legal/non-commercial-license-terms) | Uso no comercial del modelo |
+| FLUX.1 Kontext Dev | [FLUX.1 [dev] Non-Commercial](https://bfl.ai/legal/non-commercial-license-terms) | Uso no comercial del modelo |
 | SDXL Turbo | [Stability AI Community](https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md) | El uso comercial exige registro y tiene un límite de ingresos |
 
 ## Desarrollo
 
 ```bash
-.venv/bin/python -m unittest discover -s tests
+uv sync
+uv run ruff check .
+uv run pytest
 ```
 
-Los tests usan servidores simulados y no necesitan GPU. Consulta el [roadmap](specs/roadmap.md) para ver qué está previsto.
+Hace falta [uv](https://docs.astral.sh/uv/getting-started/installation/), que crea su propio entorno en `.venv`, separado del de ComfyUI. Los tests usan servidores simulados y no necesitan GPU. Consulta el [roadmap](specs/roadmap.md) para ver qué está previsto.
 
 ## Licencia
 
-Aún sin definir. Hasta que se añada una licencia, este código no se puede reutilizar.
+[MIT](LICENSE), salvo el nodo personalizado de ComfyUI en [`extras/comfyui_custom_nodes/imageengine_status/`](extras/comfyui_custom_nodes/imageengine_status/LICENSE), que es GPL-3.0. Los componentes y modelos de terceros figuran en [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

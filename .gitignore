@@ -5,3 +5,5 @@ engine.lock
 state/
 logs/
 output/
+.pytest_cache/
+.ruff_cache/

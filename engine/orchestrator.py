@@ -11,7 +11,8 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from engine import comfyui_client, comfyui_manager, config, ollama_manager, state
-from engine.log import get_logger, run_id as log_run_id
+from engine.log import get_logger
+from engine.log import run_id as log_run_id
 
 log = get_logger("orchestrator")
 

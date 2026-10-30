@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 
@@ -143,7 +143,7 @@ def _keep_alive(expires_at):
     except ValueError:
         return None
 
-    seconds = int((expires - datetime.now(timezone.utc)).total_seconds())
+    seconds = int((expires - datetime.now(UTC)).total_seconds())
 
     if seconds > ONE_YEAR:
         return -1

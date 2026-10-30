@@ -7,7 +7,6 @@ from engine.validation import (
 )
 from engine.workflow_runner import run_workflow
 
-
 DEFAULT_WIDTH = 1024
 DEFAULT_HEIGHT = 1024
 
