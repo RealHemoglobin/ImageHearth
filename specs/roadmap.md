@@ -6,12 +6,12 @@ Contexto: [misión](mission.md), [análisis del estado actual](analysis.md) y [s
 
 ```bash
 # macOS o Linux
-curl -LsSf https://raw.githubusercontent.com/OWNER/ImageEngine/main/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.sh | sh
 ```
 
 ```powershell
 # Windows
-irm https://raw.githubusercontent.com/OWNER/ImageEngine/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.ps1 | iex
 ```
 
 El comando instala uv y el paquete, detecta el hardware, propone un perfil, muestra licencias y espacio, instala ComfyUI y los modelos, conecta los agentes detectados y genera una imagen de prueba.
@@ -37,7 +37,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 **Objetivo:** cerrar lo que sería caro cambiar después.
 
-- [ ] Decidir nombre, licencia y dueño del repositorio (ver [decisiones abiertas](#decisiones-abiertas)).
+- [x] Decidir nombre, licencia y dueño del repositorio (ver [decisiones abiertas](#decisiones-abiertas)).
 - [ ] Añadir `LICENSE` y `THIRD_PARTY_NOTICES.md`.
 - [ ] Revisar las licencias de FLUX y SDXL Turbo.
 - [ ] Conseguir acceso a hardware Windows con NVIDIA y a un Mac con Apple Silicon, o probadores.
@@ -196,10 +196,13 @@ Por valorar según la demanda, sin compromiso: workflows personalizados, LoRAs, 
 
 | Decisión | Recomendación | Bloquea |
 |---|---|---|
-| Nombre público | Cambiarlo. `imageengine` ya está ocupado en PyPI, y ImageEngine es también una marca de un CDN de imágenes. `imageengine-mcp` está libre en PyPI, pero conserva el posible conflicto de marca | Fase 1 |
-| Licencia | MIT para el proyecto. Valorar GPL-3.0 para la carpeta del nodo, que importa código de ComfyUI | Publicar |
-| Usuario u organización de GitHub | Elegirlo y sustituir `OWNER` en README y scripts | Publicar |
-| Hardware de prueba | Al menos un Windows con NVIDIA y un Mac con 32 GB o más | Fases 2 y 4 |
+| Hardware de prueba | Linux y Windows con NVIDIA ya disponibles. Falta un Mac con 32 GB o más | Fase 4 |
+
+**Cerradas el 2026-10-31:**
+
+- **Nombre público:** ImageHearth. `imageengine` está ocupado en PyPI e ImageEngine es también una marca de un CDN de imágenes. El paquete y el comando pasan a `imagehearth_mcp` e `imagehearth-mcp` en la fase 1.
+- **Licencia:** MIT para el proyecto y GPL-3.0 para la carpeta del nodo, que importa código de ComfyUI.
+- **Dueño en GitHub:** cuenta personal `RealHemoglobin`, con el repositorio `RealHemoglobin/ImageHearth`.
 
 ## Siguiente paso
 
