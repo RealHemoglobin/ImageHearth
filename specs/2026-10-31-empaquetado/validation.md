@@ -79,10 +79,10 @@ No se exige cobertura mínima. `tech-stack.md` no define ninguna otra puerta de 
 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
-| Tests y `ruff` en local | Pendiente de implementación | |
-| Contenido del wheel | Pendiente de implementación | |
+| Tests y `ruff` en local | 56 tests y `ruff` en verde; `uv lock --check` correcto | 2026-10-31 |
+| Contenido del wheel | Contiene workflows, skill, nodo y ambas licencias; 0 entradas de `tests/` o `specs/` | 2026-10-31 |
 | Ejecución del CI en el PR | Pendiente de implementación | |
-| Usuario temporal de Linux | Pendiente de implementación | |
+| Usuario temporal de Linux | Simulado con un `HOME` vacío (sin crear un usuario real): instalación del wheel con `uv tool install`, 7 herramientas por stdio, error con la ruta buscada, datos solo en carpetas de `platformdirs`. Falta repetirlo con un usuario real | 2026-10-31 |
 | Migración de agentes y skill | Pendiente de implementación | |
 | Generación real con `fast`, `quality` y Kontext | Pendiente de implementación | |
 | Ejecución del CI en `main` | Pendiente de implementación | |

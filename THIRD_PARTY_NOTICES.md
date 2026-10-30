@@ -30,4 +30,4 @@ Notes:
 ## This project
 
 - Everything is under the [MIT license](LICENSE), except as stated below.
-- [`extras/comfyui_custom_nodes/imageengine_status/`](extras/comfyui_custom_nodes/imageengine_status/LICENSE) is under GPL-3.0 because it imports ComfyUI code.
+- [`src/imagehearth_mcp/data/comfyui_node/`](src/imagehearth_mcp/data/comfyui_node/LICENSE) is under GPL-3.0 because it imports ComfyUI code.

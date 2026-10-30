@@ -2,7 +2,7 @@ import json
 import os
 import time
 
-from engine import config
+from imagehearth_mcp.engine import config
 
 UNLOADING = "unloading"
 GENERATING = "generating"

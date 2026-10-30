@@ -1,18 +1,19 @@
 import fcntl
-import sys
 import time
 import uuid
 from contextlib import contextmanager
-from pathlib import Path
 
 import requests
 
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from engine import comfyui_client, comfyui_manager, config, ollama_manager, state
-from engine.log import get_logger
-from engine.log import run_id as log_run_id
+from imagehearth_mcp.engine import (
+    comfyui_client,
+    comfyui_manager,
+    config,
+    ollama_manager,
+    state,
+)
+from imagehearth_mcp.engine.log import get_logger
+from imagehearth_mcp.engine.log import run_id as log_run_id
 
 log = get_logger("orchestrator")
 
@@ -99,7 +100,7 @@ def _acquire_lock(lock, timeout):
         except BlockingIOError:
             if time.monotonic() >= deadline:
                 raise TimeoutError(
-                    "ImageEngine sigue ocupado con otra generación "
+                    "ImageHearth sigue ocupado con otra generación "
                     f"después de {timeout} segundos."
                 ) from None
 
@@ -378,7 +379,3 @@ def generation_session():
         finally:
             log_run_id.reset(token)
 
-
-if __name__ == "__main__":
-    with generation_session():
-        print("Sesión de prueba correcta.")

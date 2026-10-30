@@ -1,11 +1,11 @@
-from engine import config
-from engine.kontext import generate as edit_with_kontext
-from engine.validation import (
+from imagehearth_mcp.engine import config
+from imagehearth_mcp.engine.kontext import generate as edit_with_kontext
+from imagehearth_mcp.engine.validation import (
     resolve_workflow,
     validate_dimensions,
     validate_prompt,
 )
-from engine.workflow_runner import run_workflow
+from imagehearth_mcp.engine.workflow_runner import run_workflow
 
 DEFAULT_WIDTH = 1024
 DEFAULT_HEIGHT = 1024

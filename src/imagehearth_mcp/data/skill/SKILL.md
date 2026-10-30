@@ -1,13 +1,13 @@
 ---
-name: imageengine
-description: Generate, edit and compose images using the centralized ImageEngine MCP service. Use for all image creation and editing tasks.
+name: imagehearth
+description: Generate, edit and compose images using the centralized ImageHearth MCP service. Use for all image creation and editing tasks.
 ---
 
-# ImageEngine
+# ImageHearth
 
 ## Purpose
 
-ImageEngine is the centralized image generation and editing engine shared by all AI agents.
+ImageHearth is the centralized image generation and editing engine shared by all AI agents.
 
 It uses:
 - ComfyUI as the image generation backend.
@@ -18,7 +18,7 @@ It uses:
 - A centralized orchestration layer for GPU memory management.
 - MCP as the agent-independent interface.
 
-All agents MUST use ImageEngine MCP tools for image operations.
+All agents MUST use ImageHearth MCP tools for image operations.
 
 Never implement a separate ComfyUI integration.
 
@@ -146,7 +146,7 @@ Preserve all elements not explicitly requested to change.
 
 ### list_workflows
 
-List the generation workflows available in ImageEngine.
+List the generation workflows available in ImageHearth.
 
 Use this tool to inspect the available workflow catalog.
 
@@ -204,7 +204,7 @@ Use only when `get_engine_status` reports `recovery_required`.
 
 ## GPU memory management
 
-ImageEngine manages GPU memory centrally.
+ImageHearth manages GPU memory centrally.
 
 The orchestration layer:
 - Serializes generation sessions.
@@ -217,7 +217,7 @@ The orchestration layer:
 - If ComfyUI does not release the GPU memory, restarts it once when its queue is empty. If that fails, Ollama stays unloaded and the status becomes `recovery_required`.
 
 Agents MUST NOT:
-- Stop or restart ComfyUI during an ImageEngine operation.
+- Stop or restart ComfyUI during an ImageHearth operation.
 - Unload Ollama models manually.
 - Modify GPU memory management.
 - Launch separate ComfyUI instances.
@@ -228,7 +228,7 @@ Agents MUST NOT:
 
 Generated images are stored in:
 
-    ~/AI/ImageEngine/output/
+    ~/Pictures/ImageHearth/ (or the `output_dir` configured by the user)
 
 The first line of the tool result is the generated image path. Any following line starting with `ADVERTENCIA:` is a warning: the image exists, but something needs attention. Do not retry the generation because of a warning.
 
@@ -252,7 +252,7 @@ Never silently switch to another image generation backend.
 
 ## General rules
 
-- Use ImageEngine as the default image generation and editing backend.
+- Use ImageHearth as the default image generation and editing backend.
 - Prefer `create_image` for normal operations.
 - Do not invent workflow names or tool parameters.
 - Do not modify original images unless explicitly requested.

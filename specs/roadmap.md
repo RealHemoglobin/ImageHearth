@@ -51,11 +51,11 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 **Objetivo:** convertir el repositorio en un paquete instalable, sin cambiar su comportamiento.
 
-- [ ] Pasar a `src/imageengine_mcp/` y eliminar la carpeta `mcp/`, que choca con la dependencia.
-- [ ] Ampliar `pyproject.toml` con el comando `imageengine-mcp` y retirar `requirements.txt`, que se mantiene mientras el README lo use para instalar.
-- [ ] Incluir workflows, skill y nodo personalizado como datos de paquete, leídos con `importlib.resources`.
-- [ ] Reescribir `config.py`: `platformdirs`, `config.toml` y variables de entorno para ruta de ComfyUI, puerto, salida y Ollama.
-- [ ] Sacar del código `sys.path.insert` y los `__main__` por módulo; la CLI los sustituye.
+- [x] Pasar a `src/imageengine_mcp/` y eliminar la carpeta `mcp/`, que choca con la dependencia.
+- [x] Ampliar `pyproject.toml` con el comando `imageengine-mcp` y retirar `requirements.txt`, que se mantiene mientras el README lo use para instalar.
+- [x] Incluir workflows, skill y nodo personalizado como datos de paquete, leídos con `importlib.resources`.
+- [x] Reescribir `config.py`: `platformdirs`, `config.toml` y variables de entorno para ruta de ComfyUI, puerto, salida y Ollama.
+- [x] Sacar del código `sys.path.insert` y los `__main__` por módulo; la CLI los sustituye.
 - [ ] Migrar la instalación actual: mantener `~/AI/ComfyUI` por configuración y actualizar `~/.claude.json`, `~/.codex/config.toml` y el enlace de la skill.
 
 **Listo cuando:**

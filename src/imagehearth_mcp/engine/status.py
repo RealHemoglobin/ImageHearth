@@ -1,6 +1,12 @@
 import requests
 
-from engine import comfyui_manager, config, ollama_manager, orchestrator, state
+from imagehearth_mcp.engine import (
+    comfyui_manager,
+    config,
+    ollama_manager,
+    orchestrator,
+    state,
+)
 
 
 def _comfyui_status():

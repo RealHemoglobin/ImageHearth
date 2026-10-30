@@ -6,9 +6,10 @@
 Agente (Claude Code, Codex, Cursor, VS Code, Gemini CLI...)
    │ MCP por stdio
    ▼
-imageengine-mcp ─ paquete Python ligero, entorno propio gestionado por uv
+imagehearth-mcp ─ paquete Python ligero, entorno propio gestionado por uv
    ├─ server       herramientas e instrucciones MCP
    ├─ engine       núcleo actual: sesiones, recuperación, validación
+   ├─ data         workflows, skill y nodo de ComfyUI como datos de paquete
    ├─ platform     procesos, bloqueos y memoria de GPU por sistema
    ├─ provisioner  detección, instalación, manifiesto, doctor
    └─ cli          setup, doctor, connect, models, update, uninstall
@@ -25,14 +26,14 @@ El punto clave es que el **servidor MCP no depende de PyTorch**. Arranca en segu
 
 ## Rutas por defecto
 
-Se resuelven con `platformdirs`. Prioridad: variable de entorno, después `config.toml`, después valor por defecto.
+Se resuelven con `platformdirs` desde `src/imagehearth_mcp/` (paquete `imagehearth_mcp`, módulo `engine/config.py`). Prioridad: variable de entorno, después `config.toml`, después valor por defecto.
 
 | Dato | Linux | macOS | Windows |
 |---|---|---|---|
-| Configuración | `~/.config/imageengine/` | `~/Library/Application Support/imageengine/` | `%APPDATA%\imageengine\` |
-| ComfyUI, modelos, estado | `~/.local/share/imageengine/` | `~/Library/Application Support/imageengine/` | `%LOCALAPPDATA%\imageengine\` |
-| Logs | `~/.local/state/imageengine/` | `~/Library/Logs/imageengine/` | `%LOCALAPPDATA%\imageengine\Logs\` |
-| Imágenes | `~/Pictures/ImageEngine/` | `~/Pictures/ImageEngine/` | `%USERPROFILE%\Pictures\ImageEngine\` |
+| Configuración | `~/.config/imagehearth/` | `~/Library/Application Support/imagehearth/` | `%APPDATA%\imagehearth\` |
+| ComfyUI, modelos, estado | `~/.local/share/imagehearth/` | `~/Library/Application Support/imagehearth/` | `%LOCALAPPDATA%\imagehearth\` |
+| Logs | `~/.local/state/imagehearth/log/` | `~/Library/Logs/imagehearth/` | `%LOCALAPPDATA%\imagehearth\Logs\` |
+| Imágenes | `~/Pictures/ImageHearth/` | `~/Pictures/ImageHearth/` | `%USERPROFILE%\Pictures\ImageHearth\` |
 
 ## Decisiones
 

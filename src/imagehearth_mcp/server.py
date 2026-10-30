@@ -1,18 +1,13 @@
 import asyncio
-import sys
-from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+from imagehearth_mcp.engine import config, orchestrator
+from imagehearth_mcp.engine.image_router import create_image as route_image
+from imagehearth_mcp.engine.status import get_status
+from imagehearth_mcp.engine.validation import available_workflows
 
-from engine import orchestrator
-from engine.image_router import create_image as route_image
-from engine.status import get_status
-from engine.validation import available_workflows
-
-mcp = FastMCP("ImageEngine")
+mcp = FastMCP("imagehearth")
 
 
 # Las herramientas largas se ejecutan en un hilo para no bloquear el
@@ -116,7 +111,7 @@ async def create_image(
 
 @mcp.tool()
 def list_workflows() -> list:
-    """List available ImageEngine generation workflows."""
+    """List available ImageHearth generation workflows."""
     return [
         {"name": name, "file": f"{name}.json"}
         for name in available_workflows()
@@ -125,7 +120,7 @@ def list_workflows() -> list:
 
 @mcp.tool()
 async def get_engine_status() -> dict:
-    """Return the status of ImageEngine, ComfyUI and Ollama.
+    """Return the status of ImageHearth, ComfyUI and Ollama.
 
     imageengine.status is ready, busy, degraded or recovery_required.
     """
@@ -136,7 +131,7 @@ async def get_engine_status() -> dict:
 async def ensure_comfyui() -> str:
     """Start ComfyUI if it is not already running."""
     await asyncio.to_thread(orchestrator.ensure_comfyui)
-    return "ComfyUI is ready at http://127.0.0.1:8188"
+    return f"ComfyUI is ready at {config.COMFY_API}"
 
 
 @mcp.tool()
@@ -148,6 +143,3 @@ async def recover_engine() -> dict:
     """
     return await asyncio.to_thread(orchestrator.recover)
 
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
