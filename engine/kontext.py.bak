@@ -1,0 +1,113 @@
+import json
+import time
+import uuid
+from pathlib import Path
+
+import requests
+
+from engine.orchestrator import generation_session
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+COMFY_DIR = Path.home() / "AI" / "ComfyUI"
+WORKFLOW_FILE = BASE_DIR / "workflows" / "flux_kontext_dev_basic.json"
+OUTPUT_DIR = BASE_DIR / "output"
+
+API = "http://127.0.0.1:8188"
+
+
+def upload_image(image_path):
+    image_path = Path(image_path).expanduser().resolve()
+
+    if not image_path.is_file():
+        raise FileNotFoundError(image_path)
+
+    with image_path.open("rb") as image:
+        response = requests.post(
+            f"{API}/upload/image",
+            files={"image": (image_path.name, image)},
+            data={"overwrite": "true"},
+            timeout=120,
+        )
+
+    response.raise_for_status()
+    return response.json()["name"]
+
+
+def generate(prompt, image_path, timeout=900):
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    with generation_session():
+        uploaded_name = upload_image(image_path)
+
+        workflow = json.loads(WORKFLOW_FILE.read_text())
+
+        workflow["190"]["inputs"]["image"] = uploaded_name
+        workflow["192:6"]["inputs"]["text"] = prompt
+
+        filename = f"kontext_{uuid.uuid4().hex[:10]}"
+        workflow["136"]["inputs"]["filename_prefix"] = filename
+
+        response = requests.post(
+            f"{API}/prompt",
+            json={"prompt": workflow},
+            timeout=60,
+        )
+        response.raise_for_status()
+
+        prompt_id = response.json()["prompt_id"]
+        print(f"Generación iniciada: {prompt_id}")
+
+        deadline = time.time() + timeout
+
+        while time.time() < deadline:
+            history_response = requests.get(
+                f"{API}/history/{prompt_id}",
+                timeout=15,
+            )
+            history_response.raise_for_status()
+
+            history = history_response.json().get(prompt_id)
+
+            if history:
+                status = history.get("status", {})
+
+                if status.get("status_str") == "error" or status.get("completed") is False:
+                    if status.get("status_str") == "error":
+                        raise RuntimeError(f"Error en ComfyUI: {status}")
+
+                outputs = history.get("outputs", {})
+                for node in outputs.values():
+                    for image in node.get("images", []):
+                        if image.get("type") != "output":
+                            continue
+
+                        image_response = requests.get(
+                            f"{API}/view",
+                            params={
+                                "filename": image["filename"],
+                                "subfolder": image.get("subfolder", ""),
+                                "type": "output",
+                            },
+                            timeout=120,
+                        )
+                        image_response.raise_for_status()
+
+                        destination = OUTPUT_DIR / f"{filename}.png"
+                        destination.write_bytes(image_response.content)
+                        print(f"Imagen guardada: {destination}")
+                        return destination
+
+            time.sleep(2)
+
+        raise TimeoutError(f"ComfyUI no terminó en {timeout} segundos.")
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generación FLUX Kontext")
+    parser.add_argument("image", help="Imagen de referencia")
+    parser.add_argument("prompt", help="Instrucciones de edición")
+    args = parser.parse_args()
+
+    generate(args.prompt, args.image)
