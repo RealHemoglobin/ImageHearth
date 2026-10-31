@@ -20,7 +20,7 @@ from imagehearth_mcp.engine import config
 # Antes de importar módulos con logger: las pruebas no escriben en logs/.
 _LOGS = Path(tempfile.mkdtemp(prefix="imagehearth-test-logs-"))
 config.LOG_DIR = _LOGS
-config.ENGINE_LOG_FILE = _LOGS / "imagehearth.log"
+config.ENGINE_LOG_DIR = _LOGS
 
 from imagehearth_mcp.engine.log import get_logger
 
@@ -103,7 +103,7 @@ class FakeOllama(FakeServer):
             return 200, {}
 
         if self.fail_restore:
-            return 500, {"error": "fallo"}
+            return 500, {"error": "failure"}
 
         self.events.append(f"load {data['model']}")
         self.loaded[data["model"]] = {
@@ -127,15 +127,22 @@ class FakeComfy(FakeServer):
         self.reject = None
         self.on_prompt = None
         self.status_route = True
+        self.vram_free = None
+        self.node_version = config.STATUS_NODE_VERSION
         super().__init__()
 
     def get(self, path, query):
         if path == "/system_stats":
-            return 200, {"devices": []}
-        if path == "/imageengine/status":
+            if self.vram_free is None:
+                return 200, {"devices": []}
+            return 200, {
+                "devices": [{"type": "cuda", "vram_free": self.vram_free * 1024 * 1024}]
+            }
+        if path == "/imagehearth/status":
             if not self.status_route:
                 return 404, {}
             return 200, {
+                "version": self.node_version,
                 "models_loaded": self.models_loaded,
                 "loaded_models": [{"class": "x"}] * self.models_loaded,
             }
@@ -292,7 +299,8 @@ class EngineTestCase(unittest.TestCase):
             "COMFY_API": f"http://127.0.0.1:{self.comfy.port}",
             "OLLAMA_API": f"http://127.0.0.1:{self.ollama.port}",
             "OUTPUT_DIR": self.tmp / "output",
-            "LOCK_FILE": self.tmp / "imagehearth_mcp.engine.lock",
+            "LOCK_FILE": self.tmp / "engine.lock",
+            "PID_FILE": self.tmp / "state" / "comfyui.pid",
             "STATE_FILE": self.tmp / "state" / "session.json",
             "POLL_INTERVAL": 0.01,
             "OLLAMA_CHECK_INTERVAL": 0.0,
@@ -308,7 +316,7 @@ class EngineTestCase(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
         gpu = mock.patch(
-            "imagehearth_mcp.engine.comfyui_manager.gpu_free_mib",
+            "imagehearth_mcp.engine.gpu._from_nvidia_smi",
             return_value=20000,
         )
         self.gpu_free = gpu.start()

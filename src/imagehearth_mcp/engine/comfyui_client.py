@@ -10,6 +10,7 @@ from PIL import Image
 
 from imagehearth_mcp.engine import config
 from imagehearth_mcp.engine.log import get_logger
+from imagehearth_mcp.platform import files
 
 log = get_logger("comfyui")
 
@@ -22,13 +23,13 @@ def submit(workflow):
     )
 
     if response.status_code == 400:
-        raise RuntimeError(f"ComfyUI rechazó el workflow: {_rejection(response)}")
+        raise RuntimeError(f"ComfyUI rejected the workflow: {_rejection(response)}")
 
     response.raise_for_status()
     result = response.json()
 
     if "prompt_id" not in result:
-        raise RuntimeError(f"ComfyUI no aceptó el workflow: {result}")
+        raise RuntimeError(f"ComfyUI did not accept the workflow: {result}")
 
     return result["prompt_id"]
 
@@ -50,7 +51,7 @@ def wait_for_image(prompt_id, timeout, on_poll=None):
             status = history.get("status", {})
 
             if status.get("status_str") == "error":
-                raise RuntimeError(f"Error en ComfyUI: {_execution_error(status)}")
+                raise RuntimeError(f"ComfyUI error: {_execution_error(status)}")
 
             if status.get("completed"):
                 for node in history.get("outputs", {}).values():
@@ -58,14 +59,14 @@ def wait_for_image(prompt_id, timeout, on_poll=None):
                         if image.get("type") == "output":
                             return image
 
-                raise RuntimeError("ComfyUI terminó sin producir imágenes.")
+                raise RuntimeError("ComfyUI finished without producing images.")
 
         if on_poll:
             on_poll()
 
         time.sleep(config.POLL_INTERVAL)
 
-    raise TimeoutError(f"ComfyUI no terminó en los {timeout} segundos disponibles.")
+    raise TimeoutError(f"ComfyUI did not finish within the {timeout} seconds available.")
 
 
 def download_image(image, destination):
@@ -86,7 +87,7 @@ def download_image(image, destination):
             picture.verify()
     except Exception as error:
         raise RuntimeError(
-            f"ComfyUI devolvió una imagen no válida: {error}"
+            f"ComfyUI returned an invalid image: {error}"
         ) from error
 
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -94,7 +95,7 @@ def download_image(image, destination):
 
     try:
         temporary.write_bytes(response.content)
-        os.replace(temporary, destination)
+        files.replace(temporary, destination)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -150,7 +151,7 @@ def cancel(prompt_id):
         ).raise_for_status()
 
     if prompt_id in queue["running"]:
-        log.warning("Interrumpiendo el trabajo %s", prompt_id)
+        log.warning("Interrupting job %s", prompt_id)
         requests.post(
             f"{config.COMFY_API}/interrupt",
             json={"prompt_id": prompt_id},
@@ -170,8 +171,39 @@ def cancel(prompt_id):
     return False
 
 
+class StatusNodeMissing(RuntimeError):
+    """El nodo imagehearth_status no está instalado o es una versión antigua."""
+
+
+def status_node():
+    """Datos del nodo imagehearth_status; StatusNodeMissing si no sirve."""
+    response = requests.get(
+        f"{config.COMFY_API}{config.STATUS_ROUTE}",
+        timeout=10,
+    )
+
+    if response.status_code == 404:
+        raise StatusNodeMissing(
+            f"The {config.STATUS_NODE} node is not installed in ComfyUI."
+        )
+
+    response.raise_for_status()
+    data = response.json()
+
+    if data.get("version", 0) < config.STATUS_NODE_VERSION:
+        raise StatusNodeMissing(
+            f"The {config.STATUS_NODE} node in ComfyUI is outdated "
+            f"(version {data.get('version')}, expected {config.STATUS_NODE_VERSION})."
+        )
+
+    return data
+
+
 def free_models(timeout=None):
-    """Pide liberar la VRAM y espera a que ComfyUI lo confirme."""
+    """Pide liberar la VRAM y espera a que ComfyUI lo confirme.
+
+    Lanza StatusNodeMissing si no hay nodo con el que confirmarlo.
+    """
     timeout = config.FREE_TIMEOUT if timeout is None else timeout
 
     response = requests.post(
@@ -184,22 +216,16 @@ def free_models(timeout=None):
     deadline = time.monotonic() + timeout
 
     while time.monotonic() < deadline:
-        status = requests.get(
-            f"{config.COMFY_API}/imageengine/status",
-            timeout=10,
-        )
-        status.raise_for_status()
-
-        data = status.json()
+        data = status_node()
         models = data.get("loaded_models", [])
 
         if data.get("models_loaded") == 0 and not models:
             return
 
-        log.info("Esperando a que ComfyUI libere modelos: %s", models)
+        log.info("Waiting for ComfyUI to release models: %s", models)
         time.sleep(config.POLL_INTERVAL)
 
-    raise RuntimeError("ComfyUI no ha confirmado la descarga de todos sus modelos.")
+    raise RuntimeError("ComfyUI did not confirm that all its models were unloaded.")
 
 
 def _rejection(response):
@@ -208,12 +234,12 @@ def _rejection(response):
     except ValueError:
         return response.text[:500]
 
-    details = [data.get("error", {}).get("message", "Solicitud no válida")]
+    details = [data.get("error", {}).get("message", "Invalid request")]
 
     for node_id, node in data.get("node_errors", {}).items():
         for error in node.get("errors", []):
             details.append(
-                f"nodo {node_id} ({node.get('class_type')}): "
+                f"node {node_id} ({node.get('class_type')}): "
                 f"{error.get('message')} {error.get('details', '')}".strip()
             )
 
@@ -225,7 +251,7 @@ def _execution_error(status):
         if isinstance(message, list) and message[0] == "execution_error":
             detail = message[1]
             return (
-                f"nodo {detail.get('node_id')} ({detail.get('node_type')}): "
+                f"node {detail.get('node_id')} ({detail.get('node_type')}): "
                 f"{detail.get('exception_message', '').strip()}"
             )
 

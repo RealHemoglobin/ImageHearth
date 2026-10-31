@@ -95,7 +95,7 @@ class ReleaseFailures(EngineTestCase):
             result = generate()
 
         mocked.assert_called_once()
-        self.assertIn("ComfyUI se reinició", str(result))
+        self.assertIn("ComfyUI was restarted", str(result))
         self.assertIn("modelo", self.ollama.loaded)
         self.assertIsNone(state.read())
 
@@ -186,28 +186,28 @@ class GenerationFailures(EngineTestCase):
 
     def test_rejection_includes_node_errors(self):
         self.comfy.reject = {
-            "error": {"message": "Prompt no válido"},
+            "error": {"message": "Invalid prompt"},
             "node_errors": {
                 "5": {
                     "class_type": "KSampler",
-                    "errors": [{"message": "Falta modelo", "details": "x.safetensors"}],
+                    "errors": [{"message": "Missing model", "details": "x.safetensors"}],
                 }
             },
         }
 
-        with self.assertRaisesRegex(RuntimeError, "Falta modelo x.safetensors"):
+        with self.assertRaisesRegex(RuntimeError, "Missing model x.safetensors"):
             generate()
 
     def test_completed_without_image_fails_immediately(self):
         self.comfy.behavior = "empty"
 
-        with self.assertRaisesRegex(RuntimeError, "sin producir"):
+        with self.assertRaisesRegex(RuntimeError, "without producing"):
             generate(timeout=60)
 
     def test_corrupt_image_is_not_saved(self):
         self.comfy.behavior = "corrupt"
 
-        with self.assertRaisesRegex(RuntimeError, "no válida"):
+        with self.assertRaisesRegex(RuntimeError, "invalid image"):
             generate()
 
         self.assertEqual(self.outputs(), [])
@@ -222,7 +222,7 @@ class GenerationFailures(EngineTestCase):
 
         message = str(caught.exception)
         self.assertIn("Out of memory", message)
-        self.assertIn("No se pudieron restaurar", message)
+        self.assertIn("Could not restore", message)
 
 
 class OllamaRaces(EngineTestCase):
@@ -239,7 +239,7 @@ class OllamaRaces(EngineTestCase):
         self.comfy.on_prompt = lambda: seen.append(set(self.ollama.loaded))
 
         with mock.patch(
-            "imagehearth_mcp.engine.orchestrator.ollama_manager.unload_all",
+            "imagehearth_mcp.engine.ollama_manager.unload_all",
             side_effect=unload_then_reload,
         ):
             result = generate()
@@ -261,7 +261,7 @@ class OllamaRaces(EngineTestCase):
         self.comfy.get_history = slow_history
         result = generate()
 
-        self.assertIn("durante la generación", str(result))
+        self.assertIn("during generation", str(result))
         self.assertIn("intruso", self.ollama.loaded)
         self.assertNotIn("unload intruso", self.ollama.events)
 
@@ -292,7 +292,7 @@ class PersistedState(EngineTestCase):
 
         result = generate()
 
-        self.assertIn("No se pudieron restaurar", str(result))
+        self.assertIn("Could not restore", str(result))
         self.assertEqual(state.read()["models"][0]["name"], "modelo")
 
     def test_unreadable_state_is_not_clean(self):
@@ -319,7 +319,7 @@ class Locking(EngineTestCase):
         try:
             with (
                 mock.patch.object(config, "LOCK_TIMEOUT", 0.05),
-                self.assertRaisesRegex(TimeoutError, "ocupado"),
+                self.assertRaisesRegex(TimeoutError, "busy"),
             ):
                 generate()
 
@@ -389,4 +389,99 @@ class Status(EngineTestCase):
         status = get_status()["imageengine"]
 
         self.assertEqual(status["status"], "degraded")
-        self.assertIn("imageengine_status", status["issues"][0])
+        self.assertIn("imagehearth_status", status["issues"][0])
+
+
+class OptionalOllama(EngineTestCase):
+    def test_generates_when_ollama_is_not_running(self):
+        self.ollama.stop()
+
+        result = generate()
+
+        self.assertTrue(result.path.is_file())
+        self.assertEqual(result.warnings, [])
+        self.assertIsNone(state.read())
+
+    def test_not_running_is_not_degraded(self):
+        self.ollama.stop()
+
+        status = get_status()
+
+        self.assertEqual(status["imageengine"]["status"], "ready")
+        self.assertEqual(status["ollama"]["status"], "stopped")
+
+    def test_off_never_touches_ollama(self):
+        self.ollama.add("modelo")
+
+        with mock.patch.object(config, "OLLAMA_MODE", "off"):
+            result = generate()
+            status = get_status()
+
+        self.assertEqual(self.ollama.events, [])
+        self.assertIn("modelo", self.ollama.loaded)
+        self.assertEqual(result.warnings, [])
+        self.assertEqual(status["ollama"]["status"], "disabled")
+        self.assertEqual(status["imageengine"]["status"], "ready")
+
+    def test_ollama_dying_with_models_unloaded_keeps_protection(self):
+        self.ollama.add("modelo")
+        self.comfy.on_prompt = self.ollama.stop
+
+        result = generate()
+
+        self.assertTrue(result.path.is_file())
+        self.assertIn("recovery_required", str(result))
+        self.assertEqual(state.read()["models"][0]["name"], "modelo")
+        self.assertEqual(
+            get_status()["imageengine"]["status"], "recovery_required"
+        )
+
+
+class MissingStatusNode(EngineTestCase):
+    def setUp(self):
+        super().setUp()
+        self.comfy.status_route = False
+
+    def test_generates_warns_once_and_does_not_need_recovery(self):
+        self.ollama.add("modelo")
+
+        result = generate()
+
+        self.assertTrue(result.path.is_file())
+        self.assertEqual(sum("imagehearth_status" in w for w in result.warnings), 1)
+        self.assertNotIn("recovery_required", str(result))
+        self.assertIn("modelo", self.ollama.loaded)
+        self.assertIsNone(state.read())
+
+    def test_never_restarts_comfyui(self):
+        with mock.patch("imagehearth_mcp.engine.comfyui_manager.restart") as restart:
+            generate()
+
+        restart.assert_not_called()
+
+    def test_memory_still_held_enters_the_normal_failure_path(self):
+        self.ollama.add("modelo", size_vram=4096 * 1024 * 1024)
+        self.gpu_free.return_value = 100
+
+        result = generate()
+
+        self.assertIn("recovery_required", str(result))
+        self.assertNotIn("modelo", self.ollama.loaded)
+
+    def test_unknown_memory_warns_but_continues(self):
+        self.gpu_free.side_effect = OSError
+        self.ollama.add("modelo")
+
+        result = generate()
+
+        self.assertIn("modelo", self.ollama.loaded)
+        self.assertTrue(any("free GPU memory" in w for w in result.warnings))
+
+    def test_outdated_node_counts_as_missing(self):
+        self.comfy.status_route = True
+        self.comfy.node_version = 0
+
+        result = generate()
+
+        self.assertTrue(any("outdated" in w for w in result.warnings))
+        self.assertNotIn("recovery_required", str(result))

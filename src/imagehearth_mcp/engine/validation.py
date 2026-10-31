@@ -5,26 +5,26 @@ from imagehearth_mcp.engine import config
 
 def validate_prompt(prompt):
     if not isinstance(prompt, str) or not prompt.strip():
-        raise ValueError("El prompt no puede estar vacío.")
+        raise ValueError("The prompt cannot be empty.")
 
 
 def validate_dimensions(width, height, allow_zero=False):
     for name, value in (("width", width), ("height", height)):
         if not isinstance(value, int) or isinstance(value, bool):
-            raise ValueError(f"{name} debe ser un número entero.")
+            raise ValueError(f"{name} must be an integer.")
 
         if allow_zero and value == 0:
             continue
 
         if value < config.MIN_DIMENSION or value > config.MAX_DIMENSION:
             raise ValueError(
-                f"{name} debe estar entre {config.MIN_DIMENSION} "
-                f"y {config.MAX_DIMENSION}."
+                f"{name} must be between {config.MIN_DIMENSION} "
+                f"and {config.MAX_DIMENSION}."
             )
 
     if width * height > config.MAX_PIXELS:
         raise ValueError(
-            f"{width}x{height} supera el máximo de {config.MAX_PIXELS} píxeles."
+            f"{width}x{height} exceeds the maximum of {config.MAX_PIXELS} pixels."
         )
 
 
@@ -49,10 +49,10 @@ def available_workflows():
 def resolve_workflow(workflow, quality):
     if workflow:
         if not isinstance(workflow, str):
-            raise ValueError("workflow debe ser un nombre de workflow.")
+            raise ValueError("workflow must be a workflow name.")
 
         if not re.fullmatch(r"[A-Za-z0-9_-]+", workflow):
-            raise ValueError("Nombre de workflow no válido.")
+            raise ValueError("Invalid workflow name.")
 
         selected = workflow
     else:
@@ -60,8 +60,8 @@ def resolve_workflow(workflow, quality):
 
     if selected not in available_workflows():
         raise ValueError(
-            f"Workflow '{selected}' no disponible. "
-            f"Workflows existentes: {available_workflows()}"
+            f"Workflow '{selected}' is not available. "
+            f"Existing workflows: {available_workflows()}"
         )
 
     return selected

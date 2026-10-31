@@ -9,7 +9,7 @@ APP_NAME = "imagehearth"
 
 
 class ConfigError(RuntimeError):
-    """Configuración inválida: el mensaje nombra el archivo o la variable."""
+    """Invalid configuration: the message names the file or variable."""
 
 
 def _int_env(name, default):
@@ -21,7 +21,7 @@ def _int_env(name, default):
     try:
         return int(value)
     except ValueError:
-        raise ConfigError(f"{name} debe ser un número entero, no {value!r}.") from None
+        raise ConfigError(f"{name} must be an integer, not {value!r}.") from None
 
 
 def _load_file(path):
@@ -31,11 +31,11 @@ def _load_file(path):
     except FileNotFoundError:
         return {}
     except (OSError, tomllib.TOMLDecodeError) as error:
-        raise ConfigError(f"Configuración no válida en {path}: {error}") from error
+        raise ConfigError(f"Invalid configuration in {path}: {error}") from error
 
 
 def _lookup(values, key, env):
-    """Variable de entorno, después config.toml. Devuelve (valor, origen)."""
+    """Environment variable first, then config.toml. Returns (value, source)."""
     value = os.environ.get(env)
 
     if value is not None:
@@ -44,7 +44,7 @@ def _lookup(values, key, env):
     value = values.get(key)
 
     if value is not None:
-        return value, f"{key} en {CONFIG_FILE}"
+        return value, f"{key} in {CONFIG_FILE}"
 
     return None, None
 
@@ -56,7 +56,7 @@ def _path_setting(values, key, env, default):
         return default
 
     if not isinstance(value, str) or not value.strip():
-        raise ConfigError(f"{source} debe ser una ruta.")
+        raise ConfigError(f"{source} must be a path.")
 
     return Path(value).expanduser()
 
@@ -75,9 +75,21 @@ def _port_setting(values, key, env, default):
         port = 0
 
     if not 0 < port < 65536:
-        raise ConfigError(f"{source} debe ser un puerto entre 1 y 65535.")
+        raise ConfigError(f"{source} must be a port between 1 and 65535.")
 
     return port
+
+
+def _choice_setting(values, key, env, choices, default):
+    value, source = _lookup(values, key, env)
+
+    if value is None:
+        return default
+
+    if value not in choices:
+        raise ConfigError(f"{source} must be one of {', '.join(choices)}.")
+
+    return value
 
 
 def _url_setting(values, key, env, default):
@@ -87,7 +99,7 @@ def _url_setting(values, key, env, default):
         return default
 
     if not isinstance(value, str) or not value.startswith(("http://", "https://")):
-        raise ConfigError(f"{source} debe ser una URL http(s).")
+        raise ConfigError(f"{source} must be an http(s) URL.")
 
     return value.rstrip("/")
 
@@ -119,10 +131,15 @@ OLLAMA_API = _url_setting(
     _values, "ollama_url", "IMAGEHEARTH_OLLAMA_URL", "http://127.0.0.1:11434"
 )
 
+OLLAMA_MODE = _choice_setting(
+    _values, "ollama_mode", "IMAGEHEARTH_OLLAMA_MODE", ("auto", "off"), "auto"
+)
+
 LOCK_FILE = DATA_DIR / "engine.lock"
 STATE_FILE = DATA_DIR / "state" / "session.json"
+PID_FILE = DATA_DIR / "state" / "comfyui.pid"
 COMFY_LOG_FILE = LOG_DIR / "comfyui.log"
-ENGINE_LOG_FILE = LOG_DIR / "imagehearth.log"
+ENGINE_LOG_DIR = LOG_DIR
 
 # Subcarpeta de ComfyUI reservada para ImageHearth.
 COMFY_SUBFOLDER = "imagehearth"
@@ -163,5 +180,9 @@ MAX_REFERENCES = 6
 INTERNAL_WORKFLOWS = {"flux_kontext_dev_basic"}
 
 COMFY_LOG_MAX_BYTES = 10 * 1024 * 1024
-ENGINE_LOG_MAX_BYTES = 5 * 1024 * 1024
-ENGINE_LOG_BACKUPS = 3
+LOG_RETENTION_DAYS = 14
+
+# Nodo de ComfyUI que informa de los modelos cargados.
+STATUS_NODE = "imagehearth_status"
+STATUS_ROUTE = "/imagehearth/status"
+STATUS_NODE_VERSION = 1

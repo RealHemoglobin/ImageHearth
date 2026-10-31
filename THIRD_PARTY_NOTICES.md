@@ -30,4 +30,4 @@ Notes:
 ## This project
 
 - Everything is under the [MIT license](LICENSE), except as stated below.
-- [`src/imagehearth_mcp/data/comfyui_node/`](src/imagehearth_mcp/data/comfyui_node/LICENSE) is under GPL-3.0 because it imports ComfyUI code.
+- [`src/imagehearth_mcp/data/imagehearth_status/`](src/imagehearth_mcp/data/imagehearth_status/LICENSE) is under GPL-3.0 because it imports ComfyUI code.

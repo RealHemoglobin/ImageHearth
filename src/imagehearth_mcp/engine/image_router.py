@@ -43,16 +43,16 @@ def create_image(
     validate_prompt(prompt)
 
     if mode not in ("auto", "generate", "edit"):
-        raise ValueError("mode debe ser auto, generate o edit.")
+        raise ValueError("mode must be auto, generate or edit.")
 
     if quality not in ("fast", "high"):
-        raise ValueError("quality debe ser fast o high.")
+        raise ValueError("quality must be fast or high.")
 
     references = list(image_paths or [])
 
     if len(references) > config.MAX_REFERENCES:
         raise ValueError(
-            f"Se permiten como máximo {config.MAX_REFERENCES} referencias."
+            f"At most {config.MAX_REFERENCES} references are allowed."
         )
 
     if mode == "auto":
@@ -60,7 +60,7 @@ def create_image(
 
     if mode == "edit":
         if not references:
-            raise ValueError("El modo edit necesita referencias.")
+            raise ValueError("Edit mode needs reference images.")
 
         validate_dimensions(width, height, allow_zero=True)
 
@@ -72,14 +72,14 @@ def create_image(
         )
 
         if negative_prompt:
-            result.warnings.insert(0, "FLUX Kontext ignora negative_prompt.")
+            result.warnings.insert(0, "FLUX Kontext ignores negative_prompt.")
 
         return str(result)
 
     if references:
         raise ValueError(
-            "El modo generate no admite referencias. "
-            "Utiliza mode=edit o mode=auto."
+            "Generate mode does not accept reference images. "
+            "Use mode=edit or mode=auto."
         )
 
     validate_dimensions(width or DEFAULT_WIDTH, height or DEFAULT_HEIGHT)

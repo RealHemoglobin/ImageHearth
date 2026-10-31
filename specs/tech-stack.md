@@ -10,16 +10,16 @@ imagehearth-mcp ─ paquete Python ligero, entorno propio gestionado por uv
    ├─ server       herramientas e instrucciones MCP
    ├─ engine       núcleo actual: sesiones, recuperación, validación
    ├─ data         workflows, skill y nodo de ComfyUI como datos de paquete
-   ├─ platform     procesos, bloqueos y memoria de GPU por sistema
+   ├─ platform     procesos (psutil), bloqueos (filelock), rutas del venv y arranque desacoplado por sistema
    ├─ provisioner  detección, instalación, manifiesto, doctor
    └─ cli          setup, doctor, connect, models, update, uninstall
    │ HTTP local
    ▼
 ComfyUI ─ entorno propio con PyTorch, gestionado o existente
-   └─ nodo imageengine_status
+   └─ nodo imagehearth_status (ruta /imagehearth/status, versionada)
    │ opcional
    ▼
-Ollama ─ solo si ya está presente
+Ollama ─ opcional (ollama_mode = auto | off), detrás de la interfaz MemoryProvider
 ```
 
 El punto clave es que el **servidor MCP no depende de PyTorch**. Arranca en segundos en cualquier sistema, aunque ComfyUI no esté instalado, y puede explicar qué falta en lugar de fallar.

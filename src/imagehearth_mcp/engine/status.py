@@ -1,9 +1,11 @@
 import requests
 
 from imagehearth_mcp.engine import (
+    comfyui_client,
     comfyui_manager,
     config,
-    ollama_manager,
+    gpu,
+    memory,
     orchestrator,
     state,
 )
@@ -16,6 +18,7 @@ def _comfyui_status():
 
         return {
             "status": "running",
+            "managed": comfyui_manager.managed_pid() is not None,
             "gpu_devices": response.json().get("devices", []),
         }
 
@@ -28,6 +31,9 @@ def _comfyui_status():
 
 
 def _ollama_status():
+    if config.OLLAMA_MODE == "off":
+        return {"status": "disabled", "loaded_models": []}
+
     try:
         response = requests.get(f"{config.OLLAMA_API}/api/version", timeout=3)
         response.raise_for_status()
@@ -35,10 +41,10 @@ def _ollama_status():
         return {
             "status": "running",
             "version": response.json().get("version"),
-            "loaded_models": ollama_manager.get_loaded_models(),
+            "loaded_models": memory.get_provider().loaded(),
         }
 
-    except requests.RequestException as error:
+    except (requests.RequestException, memory.ProviderUnavailable) as error:
         return {
             "status": "stopped",
             "error": str(error),
@@ -46,14 +52,13 @@ def _ollama_status():
         }
 
 
-def _status_route_issue():
+def _status_node_issue():
     try:
-        requests.get(
-            f"{config.COMFY_API}/imageengine/status",
-            timeout=3,
-        ).raise_for_status()
+        comfyui_client.status_node()
+    except comfyui_client.StatusNodeMissing as error:
+        return str(error)
     except requests.RequestException as error:
-        return f"Falta el nodo imageengine_status en ComfyUI: {error}"
+        return f"Could not query the {config.STATUS_NODE} node: {error}"
 
     return None
 
@@ -65,17 +70,15 @@ def get_status():
     pending = state.read()
     issues = []
 
-    if ollama["status"] != "running":
-        issues.append("Ollama no responde.")
-
+    # Ollama es opcional: que no responda no es un problema.
     if comfy["status"] == "running":
-        route_issue = _status_route_issue()
+        route_issue = _status_node_issue()
 
         if route_issue:
             issues.append(route_issue)
 
     elif comfyui_manager.port_is_open() or comfyui_manager.find_processes():
-        issues.append("ComfyUI tiene un proceso activo, pero no responde.")
+        issues.append("ComfyUI has an active process, but it does not respond.")
 
     if busy:
         overall = "busy"
@@ -88,7 +91,7 @@ def get_status():
 
     engine = {
         "status": overall,
-        "gpu_free_mib": comfyui_manager.gpu_free_mib(),
+        "gpu_free_mib": gpu.free_mib(),
         "issues": issues,
     }
 

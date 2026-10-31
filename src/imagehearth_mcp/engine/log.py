@@ -1,11 +1,10 @@
 import contextvars
-import fcntl
 import json
 import logging
 import os
 import sys
+import time
 from datetime import UTC, datetime
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from imagehearth_mcp.engine import config
@@ -30,30 +29,27 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(entry, ensure_ascii=False)
 
 
-class SharedRotatingFileHandler(RotatingFileHandler):
-    """Rotación segura entre los procesos MCP de cada agente."""
+class LazyFileHandler(logging.FileHandler):
+    """Crea la carpeta y el archivo al escribir, no al importar."""
+
+    def __init__(self, path):
+        super().__init__(path, encoding="utf-8", delay=True)
 
     def emit(self, record):
-        # La carpeta se crea al escribir, no al importar.
         Path(self.baseFilename).parent.mkdir(parents=True, exist_ok=True)
+        super().emit(record)
 
-        with open(f"{self.baseFilename}.lock", "w") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            self._reopen_if_rotated()
-            super().emit(record)
 
-    def _reopen_if_rotated(self):
-        if self.stream is None:
-            return
+def cleanup_old_logs(directory, max_age_days):
+    """Borra los logs de procesos antiguos; nunca falla."""
+    cutoff = time.time() - max_age_days * 86400
 
+    for path in directory.glob("imagehearth-*.log"):
         try:
-            current = os.stat(self.baseFilename).st_ino
-        except FileNotFoundError:
-            current = None
-
-        if current != os.fstat(self.stream.fileno()).st_ino:
-            self.stream.close()
-            self.stream = None
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            pass
 
 
 def get_logger(name):
@@ -68,12 +64,10 @@ def get_logger(name):
         console.setFormatter(logging.Formatter("%(message)s"))
         root.addHandler(console)
 
-        file_handler = SharedRotatingFileHandler(
-            config.ENGINE_LOG_FILE,
-            maxBytes=config.ENGINE_LOG_MAX_BYTES,
-            backupCount=config.ENGINE_LOG_BACKUPS,
-            encoding="utf-8",
-            delay=True,
+        # Un archivo por proceso: sin rotación ni bloqueos compartidos.
+        cleanup_old_logs(config.ENGINE_LOG_DIR, config.LOG_RETENTION_DAYS)
+        file_handler = LazyFileHandler(
+            config.ENGINE_LOG_DIR / f"imagehearth-{os.getpid()}.log"
         )
         file_handler.setFormatter(JsonFormatter())
         root.addHandler(file_handler)

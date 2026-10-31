@@ -68,19 +68,19 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 **Objetivo:** eliminar cada bloqueo de las secciones B y C del [análisis](analysis.md).
 
-- [ ] Crear `platform/`: procesos con `psutil`, bloqueos con `filelock`, rutas del venv y arranque desacoplado por sistema.
-- [ ] Sustituir la rotación compartida de logs.
-- [ ] Declarar `encoding="utf-8"` en toda lectura y escritura de texto.
-- [ ] Reintentar `os.replace` ante bloqueos transitorios en Windows.
-- [ ] Abstraer la memoria de GPU: `/system_stats` y después `nvidia-smi`.
-- [ ] **Hacer Ollama opcional:** `auto` u `off`. Si no responde en `auto`, no hay nada que descargar ni restaurar, y el estado no pasa a `degraded`.
-- [ ] **Diseñar la liberación de memoria como interfaz de proveedores** (`MemoryProvider`: listar lo cargado, descargar y restaurar), con Ollama como primera implementación. Es la base para la fase 5; no se implementan otros servidores aquí.
-- [ ] Distinguir "Ollama no está" de "Ollama falló con modelos cargados": en el segundo caso se conserva la protección actual.
-- [ ] **Corregir el nodo:** devolver un `ComfyExtension` válido o registrar la ruta con otro mecanismo, y añadir una versión al endpoint.
-- [ ] **Si falta el nodo:** usar como alternativa la memoria libre de `/system_stats`, avisar y no entrar en bucle de `recovery_required`.
-- [ ] Registrar con PID la instancia gestionada y no reiniciar ni matar nunca una ajena.
-- [ ] Traducir mensajes a inglés y renombrar `ADVERTENCIA` a `WARNING`, junto con la skill.
-- [ ] Ejecutar `scripts/check.sh` (con una versión para PowerShell) en las máquinas Windows y macOS, y añadir la prueba de contrato con `/object_info`.
+- [x] Crear `platform/`: procesos con `psutil`, bloqueos con `filelock`, rutas del venv y arranque desacoplado por sistema.
+- [x] Sustituir la rotación compartida de logs.
+- [x] Declarar `encoding="utf-8"` en toda lectura y escritura de texto.
+- [x] Reintentar `os.replace` ante bloqueos transitorios en Windows.
+- [x] Abstraer la memoria de GPU: `/system_stats` y después `nvidia-smi`.
+- [x] **Hacer Ollama opcional:** `auto` u `off`. Si no responde en `auto`, no hay nada que descargar ni restaurar, y el estado no pasa a `degraded`.
+- [x] **Diseñar la liberación de memoria como interfaz de proveedores** (`MemoryProvider`: listar lo cargado, descargar y restaurar), con Ollama como primera implementación. Es la base para la fase 5; no se implementan otros servidores aquí.
+- [x] Distinguir "Ollama no está" de "Ollama falló con modelos cargados": en el segundo caso se conserva la protección actual.
+- [x] **Corregir el nodo:** devolver un `ComfyExtension` válido o registrar la ruta con otro mecanismo, y añadir una versión al endpoint.
+- [x] **Si falta el nodo:** usar como alternativa la memoria libre de `/system_stats`, avisar y no entrar en bucle de `recovery_required`.
+- [x] Registrar con PID la instancia gestionada y no reiniciar ni matar nunca una ajena.
+- [x] Traducir mensajes a inglés y renombrar `ADVERTENCIA` a `WARNING`, junto con la skill.
+- [ ] Ejecutar `scripts/check.sh` (con una versión para PowerShell) en las máquinas Windows y macOS, y añadir la prueba de contrato con `/object_info`. Hecho: `check.ps1`, `contract.sh` y `contract.ps1`, y verificado en Linux. Pendiente: ejecutarlos en Windows y macOS.
 
 **Listo cuando:**
 - Los tests pasan en los tres sistemas.

@@ -14,7 +14,7 @@ log = get_logger("workflow")
 def save_session_image(session, workflow, timeout, destination):
     """Ejecuta el workflow en la sesión y guarda su imagen verificada."""
     prompt_id = session.submit(workflow)
-    log.info("Generación iniciada: %s", prompt_id)
+    log.info("Generation started: %s", prompt_id)
 
     image = comfyui_client.wait_for_image(
         prompt_id,
@@ -24,12 +24,12 @@ def save_session_image(session, workflow, timeout, destination):
     session.prompt_finished()
 
     comfyui_client.download_image(image, destination)
-    log.info("Imagen guardada: %s", destination)
+    log.info("Image saved: %s", destination)
 
     try:
         comfyui_client.remove_output_copy(image)
     except OSError as error:
-        session.warn(f"No se pudo borrar la copia de ComfyUI: {error}")
+        session.warn(f"Could not delete the ComfyUI copy: {error}")
 
     return destination
 
@@ -67,12 +67,12 @@ def run_workflow(
     if not workflow_file.is_file():
         raise FileNotFoundError(workflow_file)
 
-    workflow = json.loads(workflow_file.read_text())
+    workflow = json.loads(workflow_file.read_text(encoding="utf-8"))
 
     warnings = []
 
     if negative_prompt and not negative_prompt_applies(workflow):
-        warnings.append(f"{workflow_file.stem} ignora negative_prompt.")
+        warnings.append(f"{workflow_file.stem} ignores negative_prompt.")
 
     # Sustituir prompts.
     for node in workflow.values():

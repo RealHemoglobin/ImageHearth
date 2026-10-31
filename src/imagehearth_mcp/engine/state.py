@@ -3,6 +3,7 @@ import os
 import time
 
 from imagehearth_mcp.engine import config
+from imagehearth_mcp.platform import files
 
 UNLOADING = "unloading"
 GENERATING = "generating"
@@ -13,7 +14,7 @@ RECOVERY_REQUIRED = "recovery_required"
 
 def read():
     try:
-        return json.loads(config.STATE_FILE.read_text())
+        return json.loads(config.STATE_FILE.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
     except (OSError, ValueError) as error:
@@ -23,7 +24,7 @@ def read():
             "run_id": "",
             "models": [],
             "prompt_id": None,
-            "reason": f"Estado de sesión ilegible: {error}",
+            "reason": f"Unreadable session state: {error}",
         }
 
 
@@ -33,12 +34,12 @@ def write(**fields):
     config.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary = config.STATE_FILE.with_suffix(f".{os.getpid()}.tmp")
 
-    with temporary.open("w") as file:
+    with temporary.open("w", encoding="utf-8") as file:
         json.dump(data, file)
         file.flush()
         os.fsync(file.fileno())
 
-    os.replace(temporary, config.STATE_FILE)
+    files.replace(temporary, config.STATE_FILE)
     return data
 
 

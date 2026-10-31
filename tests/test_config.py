@@ -15,6 +15,7 @@ ENV_KEYS = (
     "IMAGEHEARTH_COMFY_PORT",
     "IMAGEHEARTH_OUTPUT_DIR",
     "IMAGEHEARTH_OLLAMA_URL",
+    "IMAGEHEARTH_OLLAMA_MODE",
 )
 
 
@@ -30,7 +31,7 @@ class ConfigLoading(unittest.TestCase):
         path = self.tmp / "config.toml"
 
         if toml is not None:
-            path.write_text(toml)
+            path.write_text(toml, encoding="utf-8")
 
         clean = {k: v for k, v in os.environ.items() if k not in ENV_KEYS}
         clean["IMAGEHEARTH_CONFIG_FILE"] = str(path)
@@ -60,6 +61,21 @@ class ConfigLoading(unittest.TestCase):
         )
         self.assertEqual(loaded.COMFY_PORT, 9100)
         self.assertEqual(loaded.OUTPUT_DIR, Path("/from/env"))
+
+    def test_ollama_mode(self):
+        self.assertEqual(self.load().OLLAMA_MODE, "auto")
+        self.assertEqual(self.load('ollama_mode = "off"\n').OLLAMA_MODE, "off")
+        self.assertEqual(
+            self.load('ollama_mode = "off"\n', IMAGEHEARTH_OLLAMA_MODE="auto").OLLAMA_MODE,
+            "auto",
+        )
+
+    def test_invalid_ollama_mode_names_its_source(self):
+        with self.assertRaisesRegex(RuntimeError, "IMAGEHEARTH_OLLAMA_MODE"):
+            self.load(IMAGEHEARTH_OLLAMA_MODE="maybe")
+
+        with self.assertRaisesRegex(RuntimeError, "ollama_mode"):
+            self.load('ollama_mode = "on"\n')
 
     def test_ollama_url(self):
         loaded = self.load('ollama_url = "http://host:1234/"\n')
@@ -113,8 +129,8 @@ class PackageData(unittest.TestCase):
     def test_skill_and_node_resolve_from_the_package(self):
         data = config.data_files()
         self.assertIn("name: imagehearth", (data / "skill" / "SKILL.md").read_text())
-        self.assertTrue((data / "comfyui_node" / "__init__.py").is_file())
-        self.assertTrue((data / "comfyui_node" / "LICENSE").is_file())
+        self.assertTrue((data / "imagehearth_status" / "__init__.py").is_file())
+        self.assertTrue((data / "imagehearth_status" / "LICENSE").is_file())
 
     def test_skill_has_no_personal_paths(self):
         text = (config.data_files() / "skill" / "SKILL.md").read_text()

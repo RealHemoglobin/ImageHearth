@@ -9,5 +9,5 @@ class ImageResult:
 
     def __str__(self):
         lines = [str(self.path)]
-        lines.extend(f"ADVERTENCIA: {warning}" for warning in self.warnings)
+        lines.extend(f"WARNING: {warning}" for warning in self.warnings)
         return "\n".join(lines)

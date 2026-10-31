@@ -5,6 +5,7 @@ import requests
 
 from imagehearth_mcp.engine import config
 from imagehearth_mcp.engine.log import get_logger
+from imagehearth_mcp.engine.memory import MemoryProvider, ProviderUnavailable
 
 log = get_logger("ollama")
 
@@ -46,25 +47,25 @@ def unload_all(models, timeout=None):
     deadline = time.monotonic() + timeout
 
     for model in models:
-        log.info("Descargando modelo Ollama: %s", model["name"])
+        log.info("Unloading Ollama model: %s", model["name"])
         unload_model(model["name"], timeout=_remaining(deadline))
 
     while True:
         remaining = get_loaded_models()
 
         if not remaining:
-            log.info("Todos los modelos de Ollama están descargados.")
+            log.info("All Ollama models are unloaded.")
             return
 
         if time.monotonic() >= deadline:
             raise TimeoutError(
-                "Ollama no liberó todos los modelos en "
-                f"{timeout}s. Siguen activos: "
+                "Ollama did not release all models within "
+                f"{timeout}s. Still active: "
                 f"{[model['name'] for model in remaining]}"
             )
 
         log.info(
-            "Esperando descarga de Ollama: %s",
+            "Waiting for Ollama to unload: %s",
             [model["name"] for model in remaining],
         )
         time.sleep(config.POLL_INTERVAL)
@@ -96,23 +97,23 @@ def restore_models(models, timeout=None):
             if name in _active_names():
                 continue
 
-            log.info("Restaurando modelo Ollama: %s", name)
+            log.info("Restoring Ollama model: %s", name)
             _load_request(name, restore_options(model), _remaining(deadline))
 
             while name not in _active_names():
                 if time.monotonic() >= deadline:
-                    log.error("Plazo agotado restaurando %s", name)
+                    log.error("Timed out restoring %s", name)
                     break
                 time.sleep(config.POLL_INTERVAL)
 
         except (requests.RequestException, TimeoutError) as error:
-            log.error("Error restaurando %s: %s", name, error)
+            log.error("Error restoring %s: %s", name, error)
 
     # La comprobación final detecta modelos expulsados por otro posterior.
     try:
         active = _active_names()
     except requests.RequestException as error:
-        log.error("No se pudo comprobar la restauración: %s", error)
+        log.error("Could not verify the restoration: %s", error)
         active = set()
 
     restored = [m["name"] for m in models if m["name"] in active]
@@ -129,7 +130,7 @@ def _remaining(deadline):
     remaining = deadline - time.monotonic()
 
     if remaining <= 0:
-        raise TimeoutError("Plazo global de Ollama agotado.")
+        raise TimeoutError("Global Ollama deadline exceeded.")
 
     return remaining
 
@@ -153,3 +154,19 @@ def _keep_alive(expires_at):
 
     return f"{max(seconds, MIN_KEEP_ALIVE)}s"
 
+
+
+class OllamaProvider(MemoryProvider):
+    name = "ollama"
+
+    def loaded(self):
+        try:
+            return get_loaded_models()
+        except requests.RequestException as error:
+            raise ProviderUnavailable(f"Ollama does not respond: {error}") from error
+
+    def unload(self, models):
+        unload_all(models)
+
+    def restore(self, models):
+        return restore_models(models)

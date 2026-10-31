@@ -4,12 +4,14 @@ version = "0.1.0.dev0"
 description = "MCP server that lets AI agents generate and edit images locally through ComfyUI"
 readme = "README.md"
 license = "MIT AND GPL-3.0-only"
-license-files = ["LICENSE", "src/imagehearth_mcp/data/comfyui_node/LICENSE"]
+license-files = ["LICENSE", "src/imagehearth_mcp/data/imagehearth_status/LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
+    "filelock>=4.2.5",
     "mcp>=1.30,<2",
     "pillow>=13,<14",
     "platformdirs>=4,<5",
+    "psutil>=7.2.2",
     "requests>=2.34,<3",
 ]
 
@@ -35,6 +37,12 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py313"
 
+[tool.ruff.lint]
+# Windows no usa UTF-8 por defecto: open() sin encoding es un fallo.
+extend-select = ["PLW1514"]
+preview = true
+explicit-preview-rules = true
+
 [tool.ruff.lint.per-file-ignores]
 # Restaurar Ollama es limpieza final: cualquier fallo se convierte en aviso
 # para no perder la imagen ya generada.
@@ -42,4 +50,4 @@ target-version = "py313"
 # Los llamadores capturan ValueError; pasar a TypeError cambiaría el comportamiento.
 "src/imagehearth_mcp/engine/validation.py" = ["TRY004"]
 # Se conserva el orden con el que ComfyUI carga el nodo: importa sus módulos internos.
-"src/imagehearth_mcp/data/comfyui_node/__init__.py" = ["I001"]
+"src/imagehearth_mcp/data/imagehearth_status/__init__.py" = ["I001"]

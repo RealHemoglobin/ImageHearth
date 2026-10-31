@@ -1,17 +1,17 @@
 import json
-import logging
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from PIL import Image
 
 from imagehearth_mcp.engine import config, kontext
 from imagehearth_mcp.engine.image_router import create_image
-from imagehearth_mcp.engine.log import SharedRotatingFileHandler
+from imagehearth_mcp.engine.log import cleanup_old_logs
 from imagehearth_mcp.engine.validation import (
     fit_to_limits,
     resolve_workflow,
@@ -100,15 +100,15 @@ class KontextReferences(EngineTestCase):
 
 class Validation(EngineTestCase):
     def test_internal_workflow_is_blocked(self):
-        with self.assertRaisesRegex(ValueError, "no disponible"):
+        with self.assertRaisesRegex(ValueError, "not available"):
             resolve_workflow("flux_kontext_dev_basic", "fast")
 
     def test_path_traversal_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "no válido"):
+        with self.assertRaisesRegex(ValueError, "Invalid"):
             resolve_workflow("../secreto", "fast")
 
     def test_total_pixels_limit(self):
-        with self.assertRaisesRegex(ValueError, "píxeles"):
+        with self.assertRaisesRegex(ValueError, "pixels"):
             validate_dimensions(4096, 4096)
 
     def test_oversized_dimension_in_runner(self):
@@ -123,32 +123,63 @@ class Validation(EngineTestCase):
     def test_negative_prompt_ignored_warns_on_flux(self):
         result = create_image("gato", workflow="flux_dev", negative_prompt="perro")
 
-        self.assertIn("ADVERTENCIA: flux_dev ignora negative_prompt", result)
+        self.assertIn("WARNING: flux_dev ignores negative_prompt", result)
 
     def test_negative_prompt_applied_on_sdxl(self):
         result = create_image("gato", negative_prompt="perro")
 
-        self.assertNotIn("ADVERTENCIA", result)
+        self.assertNotIn("WARNING", result)
         self.assertEqual(self.comfy.workflows[0]["3"]["inputs"]["text"], "perro")
 
 
 class Logging(EngineTestCase):
-    def test_rotation_shared_between_handlers(self):
-        path = self.tmp / "shared.log"
-        first = SharedRotatingFileHandler(path, maxBytes=200, backupCount=2)
-        second = SharedRotatingFileHandler(path, maxBytes=200, backupCount=2)
-        self.addCleanup(first.close)
-        self.addCleanup(second.close)
+    SCRIPT = (
+        "from imagehearth_mcp.engine.log import get_logger\n"
+        "log = get_logger('t')\n"
+        "for i in range(200):\n"
+        "    log.info('línea %s', i)\n"
+    )
 
-        for index in range(40):
-            record = logging.LogRecord(
-                "t", logging.INFO, "f", 1, f"linea {index:04}", None, None
+    def test_two_processes_write_their_own_file(self):
+        home = self.tmp / "home"
+        env = {**os.environ, "XDG_STATE_HOME": str(home), "HOME": str(home)}
+        processes = [
+            subprocess.Popen(
+                [sys.executable, "-c", self.SCRIPT],
+                env=env,
+                stderr=subprocess.DEVNULL,
             )
-            (first if index % 2 else second).emit(record)
+            for _ in range(2)
+        ]
 
-        self.assertTrue((self.tmp / "shared.log.1").exists())
-        self.assertFalse((self.tmp / "shared.log.3").exists())
-        self.assertIn("linea 0039", path.read_text())
+        for process in processes:
+            self.assertEqual(process.wait(timeout=60), 0)
+
+        files = sorted(home.rglob("imagehearth-*.log"))
+        self.assertEqual(len(files), 2)
+
+        for file in files:
+            lines = file.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 200)
+            self.assertEqual(json.loads(lines[-1])["message"], "línea 199")
+
+    def test_old_logs_are_removed_on_startup(self):
+        old = self.tmp / "imagehearth-1.log"
+        recent = self.tmp / "imagehearth-2.log"
+        other = self.tmp / "comfyui.log"
+
+        for path in (old, recent, other):
+            path.write_text("x", encoding="utf-8")
+
+        stale = time.time() - 30 * 86400
+        os.utime(old, (stale, stale))
+        os.utime(other, (stale, stale))
+
+        cleanup_old_logs(self.tmp, 14)
+
+        self.assertFalse(old.exists())
+        self.assertTrue(recent.exists())
+        self.assertTrue(other.exists())
 
 
 class McpProtocol(EngineTestCase):

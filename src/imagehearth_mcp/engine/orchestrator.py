@@ -1,4 +1,3 @@
-import fcntl
 import time
 import uuid
 from contextlib import contextmanager
@@ -9,11 +8,13 @@ from imagehearth_mcp.engine import (
     comfyui_client,
     comfyui_manager,
     config,
-    ollama_manager,
+    gpu,
+    memory,
     state,
 )
 from imagehearth_mcp.engine.log import get_logger
 from imagehearth_mcp.engine.log import run_id as log_run_id
+from imagehearth_mcp.platform import locks
 
 log = get_logger("orchestrator")
 
@@ -21,7 +22,16 @@ MIB = 1024 * 1024
 
 
 class RecoveryRequired(RuntimeError):
-    """ComfyUI retiene la VRAM y no se puede cargar Ollama con seguridad."""
+    """ComfyUI holds the VRAM and it is not safe to reload the models."""
+
+
+def _loaded_models():
+    """Modelos cargados en el proveedor; sin proveedor activo no hay ninguno."""
+    try:
+        return memory.get_provider().loaded()
+    except memory.ProviderUnavailable as error:
+        log.info("No memory provider available: %s", error)
+        return []
 
 
 class Session:
@@ -45,15 +55,15 @@ class Session:
 
     def submit(self, workflow):
         # Otro agente ha podido recargar un modelo desde el inicio de la sesión.
-        loaded = ollama_manager.get_loaded_models()
+        loaded = _loaded_models()
 
         if loaded:
             log.warning(
-                "Modelos Ollama recargados: %s",
+                "Ollama models reloaded: %s",
                 [model["name"] for model in loaded],
             )
             self.add_models(loaded)
-            ollama_manager.unload_all(loaded)
+            memory.get_provider().unload(loaded)
 
         self.prompt_id = comfyui_client.submit(workflow)
         state.write(phase=state.GENERATING, prompt_id=self.prompt_id)
@@ -73,9 +83,9 @@ class Session:
         self._next_ollama_check = now + config.OLLAMA_CHECK_INTERVAL
 
         try:
-            loaded = ollama_manager.get_loaded_models()
-        except requests.RequestException as error:
-            log.warning("No se pudo consultar Ollama: %s", error)
+            loaded = memory.get_provider().loaded()
+        except memory.ProviderUnavailable as error:
+            log.warning("Could not query Ollama: %s", error)
             return
 
         new = [m for m in loaded if m["name"] not in self._warned_models]
@@ -84,52 +94,33 @@ class Session:
             self._warned_models.update(m["name"] for m in new)
             self.add_models(new)
             self.warn(
-                "Se cargó un modelo Ollama durante la generación: "
+                "An Ollama model was loaded during generation: "
                 f"{[m['name'] for m in new]}"
             )
 
 
-def _acquire_lock(lock, timeout):
-    deadline = time.monotonic() + timeout
-    announced = False
-
-    while True:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return
-        except BlockingIOError:
-            if time.monotonic() >= deadline:
-                raise TimeoutError(
-                    "ImageHearth sigue ocupado con otra generación "
-                    f"después de {timeout} segundos."
-                ) from None
-
-        if not announced:
-            log.info("Esperando turno de generación...")
-            announced = True
-
-        time.sleep(0.2)
-
-
 @contextmanager
 def _engine_lock(timeout):
-    config.LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        lock = locks.acquire(
+            config.LOCK_FILE,
+            timeout,
+            on_wait=lambda: log.info("Waiting for a generation turn..."),
+        )
+    except TimeoutError:
+        raise TimeoutError(
+            "ImageHearth is still busy with another generation "
+            f"after {timeout} seconds."
+        ) from None
 
-    # Cerrar el fichero libera el flock, incluso tras una excepción.
-    with config.LOCK_FILE.open("a") as lock:
-        _acquire_lock(lock, timeout)
+    try:
         yield
+    finally:
+        lock.release()
 
 
 def is_busy():
-    config.LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-    with config.LOCK_FILE.open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return False
-        except BlockingIOError:
-            return True
+    return locks.is_locked(config.LOCK_FILE)
 
 
 def _foreign_jobs(own_prompt_id):
@@ -141,29 +132,76 @@ def _foreign_jobs(own_prompt_id):
     ]
 
 
+def _required_mib(models):
+    return sum(model.get("size_vram", 0) for model in models) // MIB
+
+
 def _confirm_dead_comfyui(models, warnings):
     """Un proceso muerto no retiene VRAM; la memoria libre lo corrobora."""
-    required = sum(model.get("size_vram", 0) for model in models) // MIB
-    free = comfyui_manager.gpu_free_mib()
+    required = _required_mib(models)
+    free = gpu.free_mib()
 
     if free is None:
         warnings.append(
-            "No se pudo consultar la VRAM con nvidia-smi; "
-            "se confía en que ComfyUI no tiene procesos activos."
+            "Could not query free GPU memory; assuming ComfyUI has no "
+            "active processes."
         )
         return
 
     if free < required:
         raise RecoveryRequired(
-            f"ComfyUI está detenido, pero solo hay {free} MiB libres "
-            f"y Ollama necesita {required} MiB."
+            f"ComfyUI is stopped, but only {free} MiB are free "
+            f"and the models need {required} MiB."
         )
+
+
+def _confirm_memory_freed(models, warnings):
+    """Sin nodo de estado, la memoria libre confirma que ComfyUI soltó los modelos."""
+    required = _required_mib(models)
+    deadline = time.monotonic() + config.FREE_TIMEOUT
+
+    while True:
+        free = gpu.free_mib()
+
+        if free is None:
+            warnings.append(
+                "Could not query free GPU memory; ComfyUI's release "
+                "could not be verified."
+            )
+            return
+
+        if free >= required:
+            return
+
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                f"Only {free} MiB of GPU memory are free after asking "
+                f"ComfyUI to release its models; {required} MiB are needed."
+            )
+
+        time.sleep(config.POLL_INTERVAL)
+
+
+def _free_comfyui(models, warnings):
+    """Pide a ComfyUI que libere la VRAM y confirma que lo ha hecho."""
+    try:
+        comfyui_client.free_models()
+    except comfyui_client.StatusNodeMissing as error:
+        message = (
+            f"{error} Free GPU memory is checked through /system_stats "
+            "instead; install the node for a more reliable check."
+        )
+
+        if message not in warnings:
+            warnings.append(message)
+
+        _confirm_memory_freed(models, warnings)
 
 
 def release_comfyui(models, prompt_id, warnings):
     """Libera ComfyUI o lanza RecoveryRequired si no es seguro continuar."""
     if comfyui_manager.is_dead():
-        log.info("ComfyUI está detenido; no retiene VRAM.")
+        log.info("ComfyUI is stopped; it holds no VRAM.")
         _confirm_dead_comfyui(models, warnings)
         return
 
@@ -171,18 +209,18 @@ def release_comfyui(models, prompt_id, warnings):
 
     try:
         if prompt_id and not comfyui_client.cancel(prompt_id):
-            warnings.append(f"ComfyUI no canceló el trabajo {prompt_id}.")
+            warnings.append(f"ComfyUI did not cancel job {prompt_id}.")
     except requests.RequestException as error:
         last_error = error
 
     for attempt in range(config.FREE_ATTEMPTS):
         try:
-            comfyui_client.free_models()
-            log.info("Liberación de ComfyUI completada.")
+            _free_comfyui(models, warnings)
+            log.info("ComfyUI release completed.")
             return
         except (requests.RequestException, RuntimeError) as error:
             last_error = error
-            log.warning("Intento %s de liberar ComfyUI: %s", attempt + 1, error)
+            log.warning("Attempt %s to release ComfyUI: %s", attempt + 1, error)
 
     if comfyui_manager.is_dead():
         _confirm_dead_comfyui(models, warnings)
@@ -192,61 +230,61 @@ def release_comfyui(models, prompt_id, warnings):
         foreign = _foreign_jobs(prompt_id)
     except requests.RequestException as error:
         raise RecoveryRequired(
-            "ComfyUI no libera la VRAM y no responde para comprobar su cola: "
-            f"{error}"
+            "ComfyUI does not release the VRAM and does not respond to "
+            f"check its queue: {error}"
         ) from last_error
 
     if foreign:
         raise RecoveryRequired(
-            "ComfyUI no libera la VRAM y no se reinicia porque tiene "
-            f"trabajos en cola: {foreign}"
+            "ComfyUI does not release the VRAM and will not be restarted "
+            f"because it has queued jobs: {foreign}"
         ) from last_error
 
-    log.warning("Reiniciando ComfyUI para recuperar la VRAM.")
+    log.warning("Restarting ComfyUI to recover the VRAM.")
 
     try:
         comfyui_manager.restart()
-        comfyui_client.free_models()
+        _free_comfyui(models, warnings)
     except (OSError, requests.RequestException, RuntimeError) as error:
         raise RecoveryRequired(
-            f"ComfyUI no libera la VRAM y el reinicio falló: {error}"
+            f"ComfyUI does not release the VRAM and the restart failed: {error}"
         ) from error
 
-    warnings.append("ComfyUI se reinició para recuperar la VRAM.")
+    warnings.append("ComfyUI was restarted to recover the VRAM.")
 
 
 def _remove_inputs(run_id, warnings):
     try:
         comfyui_client.remove_run_inputs(run_id)
     except OSError as error:
-        warnings.append(f"No se pudieron borrar las referencias temporales: {error}")
+        warnings.append(f"Could not delete the temporary references: {error}")
 
 
 def _restore(models, warnings):
-    """Restaura Ollama; devuelve los modelos que no han vuelto."""
+    """Restaura los modelos; devuelve los que no han vuelto."""
     if not models:
         return []
 
     state.write(phase=state.RESTORING)
 
     try:
-        result = ollama_manager.restore_models(models)
+        result = memory.get_provider().restore(models)
     except Exception as error:
-        warnings.append(f"Error restaurando Ollama: {error}")
+        warnings.append(f"Error restoring Ollama: {error}")
         return models
 
-    log.info("Resultado de restauración: %s", result)
+    log.info("Restoration result: %s", result)
     failed = set(result["failed"])
     return [model for model in models if model["name"] in failed]
 
 
 def _mark_recovery(session, reason):
-    session.warn(f"{reason} Estado: recovery_required.")
+    session.warn(f"{reason} State: recovery_required.")
 
     try:
         state.write(phase=state.RECOVERY_REQUIRED, reason=reason)
     except OSError as error:
-        session.warn(f"No se pudo guardar el estado de la sesión: {error}")
+        session.warn(f"Could not save the session state: {error}")
 
 
 def _finish(session):
@@ -262,7 +300,7 @@ def _finish(session):
         if failed:
             state.write(models=failed)
             names = [model["name"] for model in failed]
-            _mark_recovery(session, f"No se pudieron restaurar: {names}.")
+            _mark_recovery(session, f"Could not restore: {names}.")
         else:
             state.clear()
 
@@ -270,8 +308,8 @@ def _finish(session):
         _mark_recovery(session, str(error))
 
     except Exception as error:
-        log.exception("Fallo inesperado al cerrar la sesión")
-        _mark_recovery(session, f"Fallo al cerrar la sesión: {error}.")
+        log.exception("Unexpected failure while closing the session")
+        _mark_recovery(session, f"Failed to close the session: {error}.")
 
 
 def _reconcile():
@@ -281,7 +319,7 @@ def _reconcile():
     if not pending:
         return []
 
-    log.warning("Recuperando sesión pendiente: %s", pending.get("phase"))
+    log.warning("Recovering pending session: %s", pending.get("phase"))
     models = pending.get("models", [])
     warnings = []
 
@@ -310,7 +348,7 @@ def recover():
 
         if failed:
             names = [model["name"] for model in failed]
-            reason = f"No se pudieron restaurar: {names}"
+            reason = f"Could not restore: {names}"
             state.write(phase=state.RECOVERY_REQUIRED, models=failed, reason=reason)
             raise RecoveryRequired(reason)
 
@@ -349,12 +387,12 @@ def generation_session():
             try:
                 comfyui_manager.start()
 
-                loaded = ollama_manager.get_loaded_models()
-                log.info("Modelos Ollama: %s", [m["name"] for m in loaded])
+                loaded = _loaded_models()
+                log.info("Ollama models: %s", [m["name"] for m in loaded])
 
                 if loaded:
                     session.add_models(loaded)
-                    ollama_manager.unload_all(loaded)
+                    memory.get_provider().unload(loaded)
 
                 session.generation_started = True
                 yield session
@@ -364,7 +402,7 @@ def generation_session():
 
                 if session.warnings:
                     raise RuntimeError(
-                        f"{error} | Además: {'; '.join(session.warnings)}"
+                        f"{error} | Also: {'; '.join(session.warnings)}"
                     ) from error
 
                 raise

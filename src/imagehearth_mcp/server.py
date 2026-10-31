@@ -23,7 +23,7 @@ async def generate_image(
     """Generate a new image using a specific available workflow.
 
     Available workflows include sdxl_turbo and flux_dev.
-    Returns the image path, followed by lines starting with ADVERTENCIA
+    Returns the image path, followed by lines starting with WARNING
     if the image was created but something needs attention.
     """
     return await asyncio.to_thread(
@@ -51,7 +51,7 @@ async def edit_image(
     additional_images: Up to five additional reference images.
     width and height: Optional output dimensions. Zero preserves
     the primary reference dimensions.
-    Returns the image path, followed by lines starting with ADVERTENCIA
+    Returns the image path, followed by lines starting with WARNING
     if the image was created but something needs attention.
     """
     references = [image_path]
@@ -93,7 +93,7 @@ async def create_image(
 
     image_paths: zero to six reference image paths.
     workflow: optionally override the automatic generation workflow.
-    Returns the image path, followed by lines starting with ADVERTENCIA
+    Returns the image path, followed by lines starting with WARNING
     if the image was created but something needs attention.
     """
     return await asyncio.to_thread(
@@ -122,6 +122,7 @@ def list_workflows() -> list:
 async def get_engine_status() -> dict:
     """Return the status of ImageHearth, ComfyUI and Ollama.
 
+    Ollama is optional; its status is running, stopped or disabled.
     imageengine.status is ready, busy, degraded or recovery_required.
     """
     return await asyncio.to_thread(get_status)

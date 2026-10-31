@@ -45,11 +45,11 @@ def normalize_image_paths(image_path=None, image_paths=None):
             unique.append(Path(resolved))
 
     if not unique:
-        raise ValueError("Debes proporcionar al menos una imagen.")
+        raise ValueError("Provide at least one image.")
 
     if len(unique) > config.MAX_REFERENCES:
         raise ValueError(
-            f"Kontext admite como máximo {config.MAX_REFERENCES} imágenes."
+            f"Kontext accepts at most {config.MAX_REFERENCES} images."
         )
 
     for path in unique:
@@ -60,7 +60,7 @@ def normalize_image_paths(image_path=None, image_paths=None):
             with Image.open(path) as image:
                 image.verify()
         except Exception as error:
-            raise ValueError(f"Imagen no válida: {path}: {error}") from error
+            raise ValueError(f"Invalid image: {path}: {error}") from error
 
     return unique
 
@@ -98,8 +98,8 @@ def output_dimensions(first_image, width=0, height=0):
 
         if (width, height) != inherited:
             warning = (
-                f"La referencia de {inherited[0]}x{inherited[1]} "
-                f"se ha reducido a {width}x{height}."
+                f"The {inherited[0]}x{inherited[1]} reference "
+                f"was reduced to {width}x{height}."
             )
 
     # EmptySD3LatentImage requiere dimensiones múltiplos de 16.
@@ -110,7 +110,7 @@ def output_dimensions(first_image, width=0, height=0):
 
 
 def build_workflow(uploaded_images, prompt, width, height, filename):
-    workflow = json.loads(WORKFLOW_FILE.read_text())
+    workflow = json.loads(WORKFLOW_FILE.read_text(encoding="utf-8"))
 
     required_nodes = [
         "192:6",
@@ -126,7 +126,7 @@ def build_workflow(uploaded_images, prompt, width, height, filename):
 
     for node_id in required_nodes:
         if node_id not in workflow:
-            raise RuntimeError(f"Falta el nodo requerido {node_id} en Kontext.")
+            raise RuntimeError(f"Required node {node_id} is missing from the Kontext workflow.")
 
     # Eliminar el antiguo camino basado en ImageStitch y VAEEncode único.
     for node_id in ("190", "192:146", "192:42", "192:124", "192:177"):
@@ -228,8 +228,8 @@ def generate(
             filename=f"{config.COMFY_SUBFOLDER}/{image_id}",
         )
 
-        log.info("Referencias independientes: %s", len(paths))
-        log.info("Dimensiones de salida: %sx%s", width, height)
+        log.info("Independent references: %s", len(paths))
+        log.info("Output dimensions: %sx%s", width, height)
 
         destination = save_session_image(
             session,

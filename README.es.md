@@ -22,13 +22,15 @@ Si también usas [Ollama](https://ollama.com), ImageHearth libera sus modelos de
 
 | | |
 |---|---|
-| **Sistema** | Linux |
+| **Sistema** | Linux. Windows 10/11 con NVIDIA: el código es portable pero aún no está verificado (ver la nota). macOS todavía no es compatible |
 | **GPU** | NVIDIA. Solo se ha probado en una RTX 4090 de 24 GB; con menos memoria, los modelos FLUX pueden ir lentos o fallar |
 | **Disco** | Unos 45 GB para todo (36,5 GB de modelos). Solo con SDXL Turbo, unos 15 GB |
-| **Software** | Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), driver de NVIDIA actualizado y [Ollama](https://ollama.com/download) |
+| **Software** | Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), driver de NVIDIA actualizado y, opcionalmente, [Ollama](https://ollama.com/download) |
 
 > [!NOTE]
-> Por ahora, Ollama debe estar instalado y en marcha aunque no lo uses. [Este requisito desaparecerá](specs/roadmap.md#fase-2-portabilidad-del-núcleo).
+> Ollama es opcional. Si no está en marcha, ImageHearth lo ignora y el estado sigue siendo `ready`. Con `ollama_mode = "off"` no lo toca nunca.
+>
+> En Windows instalas ComfyUI a mano (su venv usa `Scripts\python.exe`) y ejecutas `scripts\check.ps1` para verificar el repositorio. Este camino aún no está validado en una máquina real: considéralo experimental.
 
 ## Instalación
 
@@ -52,7 +54,7 @@ cd ~/AI
 git clone https://github.com/RealHemoglobin/ImageHearth.git
 cd ImageHearth
 uv tool install ./
-cp -r src/imagehearth_mcp/data/comfyui_node ~/AI/ComfyUI/custom_nodes/imageengine_status
+cp -r src/imagehearth_mcp/data/imagehearth_status ~/AI/ComfyUI/custom_nodes/imagehearth_status
 ```
 
 ### 3. Configura (opcional)
@@ -64,9 +66,10 @@ comfy_dir = "~/AI/ComfyUI"      # dónde está instalado ComfyUI
 comfy_port = 8188               # puerto en el que escucha ComfyUI
 output_dir = "~/Pictures/ImageHearth"
 ollama_url = "http://127.0.0.1:11434"
+ollama_mode = "auto"            # "auto" usa Ollama si responde; "off" no lo toca nunca
 ```
 
-Cada clave también se puede definir con una variable de entorno: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR` e `IMAGEHEARTH_OLLAMA_URL`. Las variables tienen prioridad sobre el archivo, y el archivo sobre los valores por defecto.
+Cada clave también se puede definir con una variable de entorno: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL` e `IMAGEHEARTH_OLLAMA_MODE`. Las variables tienen prioridad sobre el archivo, y el archivo sobre los valores por defecto.
 
 ### 4. Descarga los modelos
 
@@ -150,7 +153,7 @@ Pide a tu agente que *"compruebe el estado de ImageHearth"*. El resultado te dic
 |---|---|---|
 | `ready` | Todo funciona | Nada |
 | `busy` | Se está generando otra imagen | Esperar |
-| `degraded` | Falta algo | Lee `issues`. Normalmente Ollama no está en marcha o falta el nodo del paso 2 |
+| `degraded` | Falta algo | Lee `issues`. Normalmente falta el nodo del paso 2 o está desactualizado. Sin él la generación funciona, pero la memoria de la GPU se comprueba con menos fiabilidad |
 | `recovery_required` | Se interrumpió una sesión anterior | Pide a tu agente que *"recupere el motor"* |
 
 | Problema | Solución |
@@ -160,7 +163,7 @@ Pide a tu agente que *"compruebe el estado de ImageHearth"*. El resultado te dic
 | ComfyUI no arranca | Lee `~/.local/state/imagehearth/log/comfyui.log` |
 | El puerto 8188 está ocupado | Cierra lo que lo esté usando, o define otro `comfy_port` |
 
-El log de ComfyUI muestra `imageengine_status` como `IMPORT FAILED`. Es un [problema conocido](specs/analysis.md) e inofensivo: el nodo funciona.
+ImageHearth solo reinicia o detiene un ComfyUI que haya lanzado él mismo (guarda su PID en la carpeta de datos). Si ejecutas ComfyUI en el mismo puerto, lo usa pero nunca lo reinicia.
 
 ## Licencias de los modelos
 
@@ -184,4 +187,4 @@ Hace falta [uv](https://docs.astral.sh/uv/getting-started/installation/), que cr
 
 ## Licencia
 
-[MIT](LICENSE), salvo el nodo personalizado de ComfyUI en [`src/imagehearth_mcp/data/comfyui_node/`](src/imagehearth_mcp/data/comfyui_node/LICENSE), que es GPL-3.0. Los componentes y modelos de terceros figuran en [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE), salvo el nodo personalizado de ComfyUI en [`src/imagehearth_mcp/data/imagehearth_status/`](src/imagehearth_mcp/data/imagehearth_status/LICENSE), que es GPL-3.0. Los componentes y modelos de terceros figuran en [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

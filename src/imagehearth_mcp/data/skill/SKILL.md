@@ -208,13 +208,13 @@ ImageHearth manages GPU memory centrally.
 
 The orchestration layer:
 - Serializes generation sessions.
-- Detects loaded Ollama models.
+- Detects loaded Ollama models. Ollama is optional: without it, or with `ollama_mode = "off"`, this step is skipped and the status is not `degraded`.
 - Unloads Ollama models before image generation.
 - Executes ComfyUI workflows.
 - Releases ComfyUI models after generation.
 - Restores previously loaded Ollama models with their original settings.
 - Records each session on disk so an interrupted one can be recovered.
-- If ComfyUI does not release the GPU memory, restarts it once when its queue is empty. If that fails, Ollama stays unloaded and the status becomes `recovery_required`.
+- If ComfyUI does not release the GPU memory, restarts it once when its queue is empty (only if ImageHearth started that ComfyUI; a ComfyUI started by someone else is never restarted). If that fails, Ollama stays unloaded and the status becomes `recovery_required`.
 
 Agents MUST NOT:
 - Stop or restart ComfyUI during an ImageHearth operation.
@@ -230,7 +230,7 @@ Generated images are stored in:
 
     ~/Pictures/ImageHearth/ (or the `output_dir` configured by the user)
 
-The first line of the tool result is the generated image path. Any following line starting with `ADVERTENCIA:` is a warning: the image exists, but something needs attention. Do not retry the generation because of a warning.
+The first line of the tool result is the generated image path. Any following line starting with `WARNING:` is a warning: the image exists, but something needs attention. Do not retry the generation because of a warning.
 
 Always communicate the resulting path when relevant, and relay any warnings.
 
