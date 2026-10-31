@@ -74,6 +74,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - [ ] Reintentar `os.replace` ante bloqueos transitorios en Windows.
 - [ ] Abstraer la memoria de GPU: `/system_stats` y después `nvidia-smi`.
 - [ ] **Hacer Ollama opcional:** `auto` u `off`. Si no responde en `auto`, no hay nada que descargar ni restaurar, y el estado no pasa a `degraded`.
+- [ ] **Diseñar la liberación de memoria como interfaz de proveedores** (`MemoryProvider`: listar lo cargado, descargar y restaurar), con Ollama como primera implementación. Es la base para la fase 5; no se implementan otros servidores aquí.
 - [ ] Distinguir "Ollama no está" de "Ollama falló con modelos cargados": en el segundo caso se conserva la protección actual.
 - [ ] **Corregir el nodo:** devolver un `ComfyExtension` válido o registrar la ruta con otro mecanismo, y añadir una versión al endpoint.
 - [ ] **Si falta el nodo:** usar como alternativa la memoria libre de `/system_stats`, avisar y no entrar en bucle de `recovery_required`.
@@ -94,7 +95,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 **Spike inicial (máximo 2 días):** comparar el instalador propio con `comfy-cli` en Linux y Windows, y validar la decisión de [tech-stack](tech-stack.md).
 
-- [ ] **Detección:** sistema, arquitectura, GPU, driver, VRAM, RAM, disco, ComfyUI existente (incluido Desktop), Ollama.
+- [ ] **Detección:** sistema, arquitectura, GPU, driver, VRAM, RAM, disco, ComfyUI existente (incluido Desktop), Ollama, LM Studio, llama.cpp y vLLM.
 - [ ] **Manifiesto** `models.toml`: repositorio, revisión fijada, ruta, tamaño, SHA-256, licencia y workflows que habilita. Partir de la tabla verificada del análisis.
 - [ ] **ComfyUI:** descargar una versión fijada, crear el entorno con uv y Python gestionado, instalar el PyTorch adecuado e instalar el nodo.
 - [ ] **Modo adjunto:** usar un ComfyUI existente, instalar el nodo con permiso y configurar URL y rutas.
@@ -103,6 +104,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - [ ] **Comprobaciones previas:** disco insuficiente, driver ausente, GPU sin soporte o puerto ocupado; cada una con un mensaje accionable.
 - [ ] **`doctor`:** comprobar cada capa, con salida legible y `--json`.
 - [ ] **`update` y `uninstall`:** registrar en un manifiesto qué se instaló; no borrar nunca nada ajeno ni, sin confirmación, los modelos.
+- [ ] **Mostrar el resumen de lo que se va a descargar antes de hacerlo y permitir elegir el perfil**, para que quien ya usa modelos locales pueda empezar solo con `fast` y poco disco.
 - [ ] Prueba de humo final con una imagen pequeña.
 
 **Listo cuando:**
@@ -133,20 +135,31 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 ## Fase 5: Integración con agentes
 
-**Objetivo:** funcionar igual en cualquier agente, tenga o no skills.
+**Objetivo:** funcionar igual en cualquier agente, tenga o no skills, y que un usuario con modelos locales pueda instalarlo con facilidad y compaginarlo con ellos en la misma GPU.
+
+**Principio:** el servidor MCP estándar por stdio es el producto. Cada agente o editor es solo una forma de conectarlo, y el soporte de uno nuevo no debe exigir cambios en el motor.
 
 - [ ] `connect <agente>` y `connect --detect`, usando la CLI oficial si existe o editando su configuración con copia de seguridad.
-- [ ] Soporte inicial: Claude Code, Claude Desktop, Codex, Cursor, VS Code y Gemini CLI. Verificar cada comando contra su documentación.
-- [ ] Pasar lo esencial de la skill a `FastMCP(instructions=...)`. Dejar la skill como complemento e instalarla donde el agente la admita.
+- [ ] **`connect --print <agente>`:** imprime el fragmento de configuración (JSON, TOML o YAML) sin tocar nada, para cualquier cliente que no esté soportado, y una página `docs/agents.md` con el fragmento de cada uno.
+- [ ] Soporte inicial de agentes: Claude Code, Claude Desktop, Codex, Gemini CLI, **opencode y Hermes**. Verificar cada formato contra su documentación y probarlo con un modelo local real.
+- [ ] Soporte inicial de editores: Cursor, VS Code e **IntelliJ y otros JetBrains**. Verificar cada configuración contra su documentación.
+- [ ] **pi:** comprobar si admite MCP. Si no, valorar un adaptador pequeño (extensión o llamada a la CLI) o documentar que no está soportado.
+- [ ] **Pasar lo esencial de la skill a `FastMCP(instructions=...)`, de forma obligatoria:** los agentes con modelos locales no cargan skills. Las descripciones de cada herramienta deben bastar por sí solas. Dejar la skill como complemento e instalarla donde el agente la admita.
+- [ ] **Probar con modelos locales pequeños** (por ejemplo 7B–14B con Ollama o llama.cpp) en opencode y Hermes: elegir la herramienta correcta, pasar parámetros válidos y relatar el resultado. Documentar el tamaño mínimo que funciona.
 - [ ] Hacer que el servidor arranque sin ComfyUI y que cada herramienta explique qué falta.
 - [ ] Añadir `setup_status` y `setup_start`. El segundo exige perfil y aceptación explícita, lanza un proceso que sobrevive a la desconexión e informa de su progreso. Las instrucciones obligan al agente a preguntar antes, porque descarga decenas de GB.
 - [ ] Publicar `llms-install.md` para pedirle la instalación al agente.
 - [ ] Emitir progreso con `ctx.report_progress` durante la generación.
 - [ ] **Medir el plazo real de cada cliente.** Solo si alguno corta las generaciones, añadir `start_image_job` y `get_job`.
 - [ ] Devolver la ruta y, de forma opcional, la imagen como contenido MCP, manteniendo la ruta en la primera línea.
-- [ ] Revisar las herramientas sobrantes: `create_image` cubre a `generate_image` y `edit_image`.
+- [ ] **Reducir las herramientas expuestas:** `create_image` cubre a `generate_image` y `edit_image`. Menos herramientas y parámetros más simples ayudan a los modelos pequeños. Mantener los nombres antiguos como alias solo si se mide que cuestan poco.
+- [ ] **Compaginar con modelos locales en la misma GPU:** implementar `MemoryProvider` para llama.cpp (`llama-server`), LM Studio y vLLM, además de Ollama. Si el servidor no permite descargar el modelo, avisar con un mensaje accionable en lugar de fallar por falta de memoria. Documentar la VRAM necesaria para tener un modelo de lenguaje y la generación a la vez.
+- [ ] Opción `memory_mode` en `config.toml`: `auto`, `off` o `manual`. En `manual`, el motor no toca los modelos del usuario y solo comprueba la memoria libre antes de generar.
 
-**Listo cuando:** en cada agente soportado se puede conectar, generar con `fast`, generar con `quality` y editar con Kontext, partiendo de una configuración vacía.
+**Listo cuando:**
+- En cada agente y editor soportado se puede conectar, generar con `fast`, generar con `quality` y editar con Kontext, partiendo de una configuración vacía.
+- Con al menos un modelo local de lenguaje (opencode u Hermes) se genera y se edita una imagen sin ayuda, con el modelo de lenguaje cargado y devolviendo su memoria al terminar.
+- Un cliente sin soporte propio se conecta con `connect --print` y la documentación.
 
 ## Fase 6: Beta pública
 
@@ -176,7 +189,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 ## Después de la v1
 
-Por valorar según la demanda, sin compromiso: workflows personalizados, LoRAs, upscaling, otros modelos, conexión a un ComfyUI en otra máquina y compartir memoria con LM Studio.
+Por valorar según la demanda, sin compromiso: workflows personalizados, LoRAs, upscaling, otros modelos, conexión a un ComfyUI en otra máquina y más agentes y editores según se pida.
 
 ---
 
@@ -191,6 +204,9 @@ Por valorar según la demanda, sin compromiso: workflows personalizados, LoRAs, 
 | Mantener la matriz de PyTorch | Medio | Limitar el nivel 1 a NVIDIA y fijar versiones |
 | Malentendidos sobre licencias no comerciales | Medio | Consentimiento explícito y aviso en README e instalador |
 | Instaladores `curl \| sh` y descargas grandes generan desconfianza | Medio | Scripts cortos, alternativa manual con `uv tool install` y resumen antes de actuar |
+| Los modelos locales pequeños usan mal las herramientas | Alto | Instrucciones en el servidor, menos herramientas y pruebas con modelos locales reales en la fase 5 |
+| Un modelo local y la generación compiten por la VRAM | Alto | `MemoryProvider` para varios servidores, modo `manual` y documentación de requisitos |
+| Cada agente cambia su formato de configuración | Medio | `connect --print`, documentación por agente y revisión antes de cada versión |
 | Bloqueo de la GPU por las pruebas | Bajo | Separar pruebas simuladas y pruebas reales etiquetadas |
 
 ## Decisiones abiertas

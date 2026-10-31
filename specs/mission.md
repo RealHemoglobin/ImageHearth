@@ -8,7 +8,8 @@ Una persona sin conocimientos de Python ni de ComfyUI debe poder pasar de "no te
 
 - con **un solo comando**, o pidiéndoselo a su agente;
 - en **Linux, macOS o Windows**;
-- con **cualquier agente compatible con MCP**;
+- con **cualquier agente o editor compatible con MCP**, incluidos los que usan modelos de lenguaje locales (opencode, Hermes, pi), Codex, Claude, Cursor, VS Code e IntelliJ;
+- **compaginándolo con sus modelos locales** en la misma GPU, sin que tenga que liberar memoria a mano;
 - sabiendo **antes de descargar** cuánto ocupa, qué licencias acepta y qué rendimiento esperar de su hardware.
 
 ## Criterios de éxito de la v1
@@ -24,4 +25,4 @@ Una persona sin conocimientos de Python ni de ComfyUI debe poder pasar de "no te
 - Servicio alojado o generación remota.
 - Interfaz gráfica propia: los agentes y la CLI son la interfaz.
 - Redistribuir pesos de modelos: siempre se descargan desde su origen.
-- Instalar Ollama: es una integración opcional y solo se gestiona si ya existe.
+- Instalar Ollama, LM Studio, llama.cpp o vLLM: son integraciones opcionales y solo se gestionan si ya existen.
