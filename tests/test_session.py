@@ -45,6 +45,19 @@ class SuccessfulSession(EngineTestCase):
 
         self.assertEqual(seen, [{}])
 
+    def test_unloads_ollama_before_starting_comfy(self):
+        self.ollama.add("modelo")
+        seen = []
+
+        def start():
+            seen.append(dict(self.ollama.loaded))
+
+        with mock.patch("imagehearth_mcp.engine.comfyui_manager.start", start):
+            generate()
+
+        self.assertEqual(seen, [{}])
+        self.assertIn("modelo", self.ollama.loaded)
+
     def test_removes_only_its_copy_from_comfy_output(self):
         other = self.comfy_dir / "output" / "imagehearth" / "antigua.png"
         other.parent.mkdir(parents=True)

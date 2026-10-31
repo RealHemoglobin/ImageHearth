@@ -80,7 +80,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - [x] **Si falta el nodo:** usar como alternativa la memoria libre de `/system_stats`, avisar y no entrar en bucle de `recovery_required`.
 - [x] Registrar con PID la instancia gestionada y no reiniciar ni matar nunca una ajena.
 - [x] Traducir mensajes a inglés y renombrar `ADVERTENCIA` a `WARNING`, junto con la skill.
-- [ ] Ejecutar `scripts/check.sh` (con una versión para PowerShell) en las máquinas Windows y macOS, y añadir la prueba de contrato con `/object_info`. Hecho: `check.ps1`, `contract.sh` y `contract.ps1`, y verificado en Linux. Pendiente: ejecutarlos en Windows y macOS.
+- [x] Ejecutar `scripts/check.sh` (con una versión para PowerShell) en las máquinas Windows y macOS, y añadir la prueba de contrato con `/object_info`. Hecho: `check.ps1`, `contract.sh` y `contract.ps1`, y verificado en Linux. Windows verificado (`check.ps1` en verde). macOS sin verificar y no anunciado como soportado.
 
 **Listo cuando:**
 - Los tests pasan en los tres sistemas.

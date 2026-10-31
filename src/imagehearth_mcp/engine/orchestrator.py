@@ -385,14 +385,15 @@ def generation_session():
             )
 
             try:
-                comfyui_manager.start()
-
+                # Primero se libera la VRAM: ComfyUI puede no arrancar si Ollama la ocupa.
                 loaded = _loaded_models()
                 log.info("Ollama models: %s", [m["name"] for m in loaded])
 
                 if loaded:
                     session.add_models(loaded)
                     memory.get_provider().unload(loaded)
+
+                comfyui_manager.start()
 
                 session.generation_started = True
                 yield session

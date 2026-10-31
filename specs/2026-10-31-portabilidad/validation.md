@@ -53,16 +53,16 @@ No se exige cobertura mínima. La puerta de calidad obligatoria de [tech-stack](
 
 ### Linux con RTX 4090
 
-- [ ] `ollama_mode = "off"`: generación con `fast` y con `quality`, sin tocar Ollama; el estado no es `degraded`.
-- [ ] `ollama_mode = "auto"` con el servicio Ollama detenido: generación correcta, sin avisos de fallo y sin `degraded`.
-- [ ] `auto` con Ollama activo y un modelo cargado: se descarga para generar y se restaura al terminar.
-- [ ] Ollama cae con modelos cargados a mitad de sesión: se conserva la protección y el mensaje es claro.
+- [x] `ollama_mode = "off"`: generación con `fast` y con `quality`, sin tocar Ollama; el estado no es `degraded`.
+- [x] `ollama_mode = "auto"` con el servicio Ollama detenido: generación correcta, sin avisos de fallo y sin `degraded`.
+- [x] `auto` con Ollama activo y un modelo cargado: se descarga para generar y se restaura al terminar.
+- [x] Ollama cae con modelos cargados a mitad de sesión: se conserva la protección y el mensaje es claro.
 - [x] ComfyUI arranca sin `IMPORT FAILED` con el nodo `imagehearth_status`, y el endpoint devuelve su versión.
 - [x] Sin el nodo en `custom_nodes`: la generación funciona con `/system_stats`, hay un aviso y no aparece `recovery_required`.
-- [ ] Con un ComfyUI ajeno en el puerto: el motor avisa y no lo reinicia ni lo mata.
+- [x] Con un ComfyUI ajeno en el puerto: el motor avisa y no lo reinicia ni lo mata.
 - [x] Matar ComfyUI a mitad de sesión: la recuperación reinicia solo la instancia registrada y la siguiente generación funciona.
 - [x] Los logs son un archivo por proceso y la limpieza por antigüedad elimina los viejos.
-- [ ] Edición con Kontext tras la migración del nodo.
+- [x] Edición con Kontext tras la migración del nodo.
 
 ### Windows con NVIDIA (no bloquea el merge)
 
@@ -75,7 +75,7 @@ Si no se hace antes de fusionar, se registra en la evidencia como pendiente y la
 
 ### macOS
 
-- [ ] No se verifica en esta fase y no se anuncia como soportado: anotarlo en la evidencia.
+- [x] No se verifica en esta fase y no se anuncia como soportado: anotarlo en la evidencia.
 
 ## Lista para fusionar
 
@@ -85,7 +85,7 @@ Si no se hace antes de fusionar, se registra en la evidencia como pendiente y la
 - [x] Todos los mensajes, la skill y los tests están en inglés con `WARNING`.
 - [x] README (ambos), `tech-stack.md` y `THIRD_PARTY_NOTICES.md` actualizados.
 - [x] Instalación local migrada: paquete reinstalado y nodo antiguo sustituido.
-- [ ] Roadmap actualizado con las tareas de la fase 2 verificadas.
+- [x] Roadmap actualizado con las tareas de la fase 2 verificadas.
 - [ ] Cambios revisados por el usuario, que realiza el commit.
 - [x] Windows: resultado documentado en la evidencia (hecho o pendiente).
 
@@ -95,13 +95,13 @@ Si no se hace antes de fusionar, se registra en la evidencia como pendiente y la
 |---|---|---|
 | `scripts/check.sh` en Linux | Verde: ruff y 91 tests, también contra el wheel | 2026-10-31 |
 | Prueba de contrato `/object_info` en Linux | Verde: 17 tipos de nodo | 2026-10-31 |
-| Generación sin Ollama (`off` y servicio detenido) | Solo tests con servidor simulado (`off`, Ollama detenido y Ollama que cae). Real: generación con Ollama activo y sin modelos cargados. Falta la prueba real con `ollama_mode = "off"` y con el servicio detenido | 2026-10-31 |
-| Ollama con modelo cargado y restauración | Solo tests simulados; sin probar con un modelo real (no hay modelos de Ollama a mano) | 2026-10-31 |
+| Generación sin Ollama (`off` y servicio detenido) | Real en Linux con RTX 4090: `off` (`fast` y `quality`) y `auto` con Ollama detenido, sin avisos ni `degraded` | 2026-10-31 |
+| Ollama con modelo cargado y restauración | Real (Ollama en Docker, vía API): se descarga antes de arrancar ComfyUI y se restaura al terminar. Corregido el orden de `generation_session()` (antes ComfyUI arrancaba con la VRAM ocupada) y añadido test de regresión. Ollama que cae a mitad de sesión: protección conservada y mensaje claro | 2026-10-31 |
 | Nodo `imagehearth_status` sin `IMPORT FAILED` | Real: ComfyUI lo carga y `/imagehearth/status` devuelve `version: 1` | 2026-10-31 |
 | Generación sin el nodo (alternativa `/system_stats`) | Real: genera, un aviso, estado `degraded` por el nodo y sin `recovery_required` | 2026-10-31 |
-| Instancia ajena de ComfyUI intacta | Solo tests (no se mata ni se reinicia); sin prueba real | 2026-10-31 |
+| Instancia ajena de ComfyUI intacta | Real: el motor avisa y no la reinicia ni la mata | 2026-10-31 |
 | Recuperación tras matar el proceso en Linux | Real: `kill -9` a ComfyUI y la siguiente generación lo relanza y registra el nuevo PID | 2026-10-31 |
-| Edición con Kontext tras la migración | Pendiente de prueba real | |
-| `scripts\check.ps1` en Windows | Verde: ruff y 92 tests, también contra el wheel. `scripts/check.sh` en Linux falta por repetir con estos cambios en los tests | 2026-10-31 |
+| Edición con Kontext tras la migración | Real: correcta | 2026-10-31 |
+| `scripts\check.ps1` en Windows | Verde: ruff y 92 tests, también contra el wheel. `scripts/check.sh` en Linux repetido después: verde con 92 tests | 2026-10-31 |
 | Generación real, recuperación y logs en Windows | Correctos, según confirma el usuario (RTX 4090 y ComfyUI instalado a mano) | 2026-10-31 |
 | macOS | Sin verificar, no anunciado | |
