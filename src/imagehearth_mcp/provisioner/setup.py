@@ -21,7 +21,11 @@ from imagehearth_mcp.provisioner.manifest import format_size
 
 ATTACHED = "attached"
 MANAGED = preflight.MANAGED
-PROFILE_ORDER = ("fast", "quality", "full")
+PROFILE_ORDER = ("fast", "quality", "full", "mac-fast", "mac-quality", "mac-full")
+UNTESTED_MACOS = (
+    "macOS is prepared but has never been run on a real Mac: ComfyUI, ComfyUI-GGUF, "
+    "FLUX and Kontext may not work on MPS."
+)
 
 
 def is_interactive(args):
@@ -36,11 +40,10 @@ def propose_profile(detection, catalog):
     """El mayor perfil que caben en la memoria de la GPU y en el disco."""
     gpu = detection.primary_gpu
     vram = gpu.vram_mib if gpu else 0
-    proposed = "fast"
+    profiles = catalog.profiles_for(detection.system)
+    proposed = next(iter(profiles), "fast")
 
-    for name in PROFILE_ORDER:
-        profile = catalog.profiles[name]
-
+    for name, profile in profiles.items():
         if vram >= profile.min_vram_mib and detection.disk_free_bytes > profile.bytes:
             proposed = name
 
@@ -48,29 +51,37 @@ def propose_profile(detection, catalog):
 
 
 def choose_profile(args, detection, catalog, interactive):
+    profiles = catalog.profiles_for(detection.system)
+    names = ", ".join(profiles)
+
     if args.profile:
-        return catalog.profiles[args.profile]
+        if args.profile not in profiles:
+            raise ProvisionError(
+                f"The {args.profile} profile is not for {detection.system}. "
+                f"Choose one of: {names}."
+            )
+
+        return profiles[args.profile]
 
     proposed = propose_profile(detection, catalog)
 
     if not interactive:
         raise ProvisionError(
-            "Non-interactive mode needs a profile: add --profile fast, quality or "
-            f"full (this machine suits {proposed})."
+            f"Non-interactive mode needs a profile: add --profile with one of {names} "
+            f"(this machine suits {proposed})."
         )
 
     print("\nProfiles:")
 
-    for name in PROFILE_ORDER:
-        profile = catalog.profiles[name]
+    for name, profile in profiles.items():
         print(f"  {name:8} {format_size(profile.bytes):>8}  {profile.description}")
 
     answer = input(f"Profile [{proposed}]: ").strip().lower() or proposed
 
-    if answer not in catalog.profiles:
+    if answer not in profiles:
         raise ProvisionError(f"Unknown profile {answer!r}.")
 
-    return catalog.profiles[answer]
+    return profiles[answer]
 
 
 def choose_mode(args, detection, records, interactive):
@@ -126,7 +137,7 @@ def choose_mode(args, detection, records, interactive):
     return ATTACHED, Path(install.path), port
 
 
-def show_summary(catalog, profile, mode, comfy_dir, models_dir, pending):
+def show_summary(catalog, profile, mode, comfy_dir, models_dir, pending, torch=None):
     print(f"\nProfile: {profile.name} ({profile.description})")
     print(f"ComfyUI: {mode}, {comfy_dir}")
     print(f"Models:  {models_dir}")
@@ -135,8 +146,11 @@ def show_summary(catalog, profile, mode, comfy_dir, models_dir, pending):
     if mode == MANAGED and not (Path(comfy_dir) / "venv").exists():
         print(
             f"  ComfyUI {catalog.comfyui.version} and Python environment  "
-            f"{format_size(catalog.comfyui.install_bytes)}"
+            f"{format_size(catalog.install_bytes(torch))}"
         )
+
+    for node in profile.nodes:
+        print(f"  {node.folder} (custom node)")
 
     for item in models.inspect(profile.models, models_dir):
         status = "" if item.state != models.PRESENT else "  (already present)"
@@ -172,7 +186,7 @@ def run_preflight(detection, profile, torch, mode, comfy_dir, models_dir, port, 
         pending_install = 0
 
         if not (Path(comfy_dir) / "venv").exists():
-            pending_install = catalog.comfyui.install_bytes
+            pending_install = catalog.install_bytes(torch)
 
         needs[comfy_dir] = pending_install
 
@@ -192,6 +206,33 @@ def run_preflight(detection, profile, torch, mode, comfy_dir, models_dir, port, 
 
     if errors:
         raise ProvisionError("\n".join(errors))
+
+
+def require_experimental(args, detection):
+    """macOS solo entra con permiso explícito, antes de preguntar o descargar nada."""
+    if detection.system == "darwin" and not args.experimental:
+        raise ProvisionError(
+            f"{UNTESTED_MACOS} Nothing was downloaded. To try it anyway, run setup "
+            "again with --experimental, and please report how it goes."
+        )
+
+    if detection.system == "darwin":
+        print(f"WARNING: {UNTESTED_MACOS}")
+
+
+def install_nodes(args, profile, comfy_dir, records, mode, interactive):
+    """Los nodos que necesita el perfil. En un ComfyUI ajeno hace falta permiso."""
+    for node in profile.nodes:
+        allowed = mode == MANAGED or args.install_node
+
+        if not allowed and interactive:
+            allowed = ask(f"Install {node.folder}, which this profile needs, in {comfy_dir}?")
+
+        if not comfyui.install_custom_node(node, comfy_dir, records, allowed):
+            raise ProvisionError(
+                f"The {profile.name} profile needs {node.folder}, which was not "
+                "installed. Add --install-node to allow it."
+            )
 
 
 def install_attached(args, comfy_dir, records, interactive):
@@ -252,19 +293,19 @@ def _setup(args):
         f"PyTorch: {detection.platform.index} (tier {detection.platform.tier})"
     )
 
+    require_experimental(args, detection)
+
     mode, comfy_dir, default_port = choose_mode(args, detection, records, interactive)
     profile = choose_profile(args, detection, catalog, interactive)
     port = args.port or default_port
     models_dir = Path(args.models_dir).expanduser().resolve() if args.models_dir else None
-    models_dir = models_dir or (
-        Path(records.models_dir) if records.models_dir else Path(comfy_dir) / "models"
-    )
+    models_dir = models_dir or models.resolve_dir(records, comfy_dir)
     pending = models.pending_bytes(profile.models, models_dir)
+    torch = catalog.pytorch.get(detection.platform.index)
 
-    show_summary(catalog, profile, mode, comfy_dir, models_dir, pending)
+    show_summary(catalog, profile, mode, comfy_dir, models_dir, pending, torch)
     require_acceptance(args, interactive)
 
-    torch = catalog.pytorch.get(detection.platform.index)
     run_preflight(detection, profile, torch, mode, comfy_dir, models_dir, port, pending, catalog)
 
     records.mode = mode
@@ -276,6 +317,8 @@ def _setup(args):
         comfyui.install_managed(catalog.comfyui, torch, comfy_dir, records)
     else:
         install_attached(args, comfy_dir, records, interactive)
+
+    install_nodes(args, profile, comfy_dir, records, mode, interactive)
 
     if args.models_dir:
         block = comfyui.write_extra_model_paths(comfy_dir, models_dir, records)

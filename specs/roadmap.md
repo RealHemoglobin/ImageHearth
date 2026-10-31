@@ -120,12 +120,12 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 **Objetivo:** el hardware decide qué se ofrece y nada se anuncia sin haberlo probado.
 
-- [ ] Hacer dinámico el catálogo: `list_workflows`, `quality` y los errores se basan en lo instalado. Un error dice qué perfil instalar.
-- [ ] Separar en `build_workflow` el cargador de modelo de los identificadores de nodo fijos.
-- [ ] Medir VRAM y tiempo reales por perfil y documentarlos.
-- [ ] Elegir cuantización y codificador T5 para Mac, sin medir.
-- [ ] Crear workflows y manifiesto para Mac, con hashes fijados, y dejar `setup` y `doctor` preparados tras `--experimental`.
-- [ ] Sin Mac: ejecutar los workflows GGUF en NVIDIA y cubrir lo propio de macOS con tests simulados.
+- [x] Hacer dinámico el catálogo: `list_workflows`, `quality` y los errores se basan en lo instalado. Un error dice qué perfil instalar.
+- [x] Separar en `build_workflow` el cargador de modelo de los identificadores de nodo fijos.
+- [ ] Medir VRAM y tiempo reales por perfil y documentarlos. Hecho en Linux con la RTX 4090; falta Windows.
+- [x] Elegir cuantización y codificador T5 para Mac, sin medir.
+- [x] Crear workflows y manifiesto para Mac, con hashes fijados, y dejar `setup` y `doctor` preparados tras `--experimental`.
+- [x] Sin Mac: ejecutar los workflows GGUF en NVIDIA y cubrir lo propio de macOS con tests simulados.
 - [ ] **Cuando haya un Mac (no bloquea):** comprobar que ComfyUI, `ComfyUI-GGUF`, FLUX y Kontext funcionan en MPS.
 - [ ] Añadir perfil GGUF para NVIDIA con poca VRAM si las mediciones lo justifican.
 - [ ] Buscar un origen más estable para FLUX Dev.

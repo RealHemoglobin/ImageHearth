@@ -24,6 +24,8 @@ LAYERS = (
     ("did not respond", "ComfyUI"),
     ("Port ", "port"),
     ("safetensors", "models"),
+    (".gguf", "models"),
+    ("is not installed", "models"),
     ("out of memory", "GPU"),
     ("CUDA", "GPU"),
 )

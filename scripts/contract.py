@@ -1,19 +1,26 @@
 """Prueba de contrato: ComfyUI en CPU expone todos los nodos que usan los workflows.
 
 No descarga modelos ni usa la GPU. Arranca una instancia propia en un puerto
-libre, así que no toca la que esté en uso.
+libre, así que no toca la que esté en uso. Los nodos fijados en el manifiesto, como
+ComfyUI-GGUF, se instalan en una carpeta temporal: el ComfyUI local no cambia.
 """
 
 import json
+import os
+import shutil
 import socket
 import subprocess
 import sys
+import tarfile
+import tempfile
 import time
+from pathlib import Path
 
 import requests
 
 from imagehearth_mcp.engine import config
 from imagehearth_mcp.platform import paths, processes, spawn
+from imagehearth_mcp.provisioner import comfyui, manifest
 
 START_TIMEOUT = 180
 
@@ -37,17 +44,68 @@ def workflow_nodes():
     return nodes
 
 
+def install_nodes(base_dir):
+    """Nodos fijados y sus dependencias en `base_dir`. Devuelve la ruta de paquetes."""
+    packages = base_dir / "packages"
+
+    for pin in manifest.load().nodes.values():
+        archive = base_dir / f"{pin.name}.tar.gz"
+        comfyui._download_archive(pin, archive)
+        extracted = base_dir / "extracted"
+
+        with tarfile.open(archive) as tar:
+            tar.extractall(extracted, filter="data")
+
+        top = next(extracted.iterdir())
+        destination = base_dir / "custom_nodes" / pin.folder
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(top), str(destination))
+        subprocess.run(
+            [
+                "uv",
+                "pip",
+                "install",
+                "--quiet",
+                "--python",
+                str(paths.find_venv_python(config.COMFY_DIR)),
+                "--target",
+                str(packages),
+                *pin.packages,
+            ],
+            check=True,
+        )
+
+    return packages
+
+
 def main():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
+        check_contract(Path(folder))
+
+
+def check_contract(base_dir):
     python = paths.venv_python(config.COMFY_DIR / "venv")
 
     if not python.exists() or not (config.COMFY_DIR / "main.py").exists():
         sys.exit(f"ComfyUI not found in {config.COMFY_DIR} (set IMAGEHEARTH_COMFY_DIR).")
 
+    packages = install_nodes(base_dir)
     port = free_port()
     base = f"http://127.0.0.1:{port}"
     process = subprocess.Popen(
-        [str(python), "main.py", "--cpu", "--listen", "127.0.0.1", "--port", str(port)],
+        [
+            str(python),
+            "main.py",
+            "--cpu",
+            "--listen",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--base-directory",
+            str(base_dir),
+        ],
         cwd=config.COMFY_DIR,
+        env={**os.environ, "PYTHONPATH": str(packages)},
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

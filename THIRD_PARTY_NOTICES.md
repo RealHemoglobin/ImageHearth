@@ -9,6 +9,8 @@ Last reviewed: 2026-10-31. This is a summary, **not legal advice**: the linked l
 | Component | License | Commercial use | Reviewed |
 |---|---|---|---|
 | FLUX.1 Dev | [FLUX [dev] Non-Commercial License v2.0](https://bfl.ai/legal/non-commercial-license-terms) | **No** for the model, without a separate license from Black Forest Labs. See the note on outputs | 2026-10-31 |
+| FLUX.1 Dev and Kontext Dev in GGUF, `mac-*` profiles only | Same as the models they derive from, as declared by `city96/FLUX.1-dev-gguf` and `QuantStack/FLUX.1-Kontext-dev-GGUF` | Same as FLUX.1 Dev | 2026-10-31 |
+| T5-XXL in GGUF, `mac-*` profiles only | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0), as declared by `city96/t5-v1_1-xxl-encoder-gguf` | Yes | 2026-10-31 |
 | FLUX.1 Kontext Dev | [FLUX [dev] Non-Commercial License v2.0](https://bfl.ai/legal/non-commercial-license-terms), which names this model | Same as FLUX.1 Dev | 2026-10-31 |
 | T5-XXL, CLIP-L and the FLUX VAE | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0), as declared by `comfyanonymous/flux_text_encoders` and `Comfy-Org/Lumina-Image-2` | Yes | 2026-10-31 |
 | SDXL Turbo | [Stability AI Community License](https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md) (updated 2024-07-05) | **Yes, with limits:** requires registering with Stability AI, and an enterprise license above USD 1M in annual revenue | 2026-10-31 |
@@ -24,9 +26,11 @@ Notes:
 | Component | License | How it's used | Commercial use | Reviewed |
 |---|---|---|---|---|
 | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) | [GPL-3.0](https://github.com/Comfy-Org/ComfyUI/blob/master/LICENSE) | Separate program, reached over local HTTP. Not distributed here | Yes | 2026-10-31 |
+| [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) | [Apache-2.0](https://github.com/city96/ComfyUI-GGUF/blob/main/LICENSE) | ComfyUI node downloaded by setup for the `mac-*` profiles, with its `gguf`, `sentencepiece` and `protobuf` dependencies. Not distributed here | Yes | 2026-10-31 |
 | [huggingface_hub](https://github.com/huggingface/huggingface_hub) | [Apache-2.0](https://github.com/huggingface/huggingface_hub/blob/main/LICENSE) | Direct dependency | Yes | 2026-10-31 |
 | [mcp](https://github.com/modelcontextprotocol/python-sdk) | [MIT](https://github.com/modelcontextprotocol/python-sdk/blob/main/LICENSE) | Direct dependency | Yes | 2026-10-31 |
 | [Pillow](https://github.com/python-pillow/Pillow) | [MIT-CMU](https://github.com/python-pillow/Pillow/blob/main/LICENSE) | Direct dependency | Yes | 2026-10-31 |
+| [PyYAML](https://github.com/yaml/pyyaml) | [MIT](https://github.com/yaml/pyyaml/blob/main/LICENSE) | Direct dependency | Yes | 2026-10-31 |
 | [Requests](https://github.com/psf/requests) | [Apache-2.0](https://github.com/psf/requests/blob/main/LICENSE) | Direct dependency | Yes | 2026-10-31 |
 
 ## This project

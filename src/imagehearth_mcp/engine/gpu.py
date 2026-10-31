@@ -1,4 +1,5 @@
 import subprocess
+import sys
 
 import requests
 
@@ -34,7 +35,13 @@ def _from_nvidia_smi():
 
 def free_mib():
     """Memoria libre de la GPU: /system_stats, después nvidia-smi, o None."""
-    for source in (_from_comfyui, _from_nvidia_smi):
+    # En macOS no hay nvidia-smi: la memoria unificada solo la da ComfyUI.
+    sources = (_from_comfyui,)
+
+    if sys.platform != "darwin":
+        sources = (_from_comfyui, _from_nvidia_smi)
+
+    for source in sources:
         try:
             value = source()
         except (requests.RequestException, OSError, subprocess.SubprocessError):

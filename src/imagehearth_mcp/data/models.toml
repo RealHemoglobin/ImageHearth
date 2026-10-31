@@ -35,6 +35,21 @@ python = "3.13"
 index = "https://download.pytorch.org/whl/cpu"
 packages = ["torch==2.15.0+cpu", "torchvision==0.29.2+cpu", "torchaudio==2.11.1+cpu"]
 
+# Sin índice propio: la versión estable de PyPI ya incluye MPS. Sin probar en un Mac.
+[pytorch.metal]
+python = "3.13"
+index = "https://pypi.org/simple"
+packages = ["torch==2.14.1", "torchvision==0.29.1", "torchaudio==2.11.0"]
+# Estimación a partir de los wheels de macOS en PyPI: sin medir en un Mac.
+install_bytes = 2500000000
+
+[nodes.comfyui-gguf]
+folder = "ComfyUI-GGUF"
+url = "https://github.com/city96/ComfyUI-GGUF/archive/6ea2651e7df66d7585f6ffee804b20e92fb38b8a.tar.gz"
+sha256 = "688126d5c2b8c4ff061f56b23c3c6791ac01dc366e98d41ef1aaef374c36f283"
+license = "apache-2"
+packages = ["gguf==0.19.0", "sentencepiece==0.2.2", "protobuf==7.36.2"]
+
 [licenses.comfyui]
 name = "GPL-3.0"
 url = "https://github.com/Comfy-Org/ComfyUI/blob/master/LICENSE"
@@ -108,7 +123,7 @@ dest = "text_encoders/clip_l.safetensors"
 bytes = 246144152
 sha256 = "660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd"
 license = "apache-2"
-workflows = ["flux_dev", "flux_kontext_dev_basic"]
+workflows = ["flux_dev", "flux_kontext_dev_basic", "flux_dev_gguf", "flux_kontext_dev_gguf"]
 
 [[models]]
 name = "flux_vae"
@@ -119,19 +134,77 @@ dest = "vae/ae.safetensors"
 bytes = 335304388
 sha256 = "afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38"
 license = "apache-2"
-workflows = ["flux_dev", "flux_kontext_dev_basic"]
+workflows = ["flux_dev", "flux_kontext_dev_basic", "flux_dev_gguf", "flux_kontext_dev_gguf"]
+
+# El repositorio de FLUX Dev no publica Q5_K_M: Q5_K_S es lo más cercano.
+[[models]]
+name = "flux_dev_gguf"
+repo = "city96/FLUX.1-dev-gguf"
+revision = "3c60ac659f4b1f2ab3ca8bd4488272069b36a148"
+filename = "flux1-dev-Q5_K_S.gguf"
+dest = "diffusion_models/flux1-dev-Q5_K_S.gguf"
+bytes = 8285267232
+sha256 = "aa76146ca0f1b09c67e0c3fcef18be3a375837ecd5aaa021d3e9ebc558bd68f9"
+license = "flux-dev-non-commercial"
+workflows = ["flux_dev_gguf"]
+
+[[models]]
+name = "flux_kontext_gguf"
+repo = "QuantStack/FLUX.1-Kontext-dev-GGUF"
+revision = "2d083027732f81e5548620b57ac47da22d30aa5a"
+filename = "flux1-kontext-dev-Q5_K_M.gguf"
+dest = "diffusion_models/flux1-kontext-dev-Q5_K_M.gguf"
+bytes = 8419501344
+sha256 = "7f7b98b1d496176cb0b0c8b12edb35cc6a1a467a9809d7372242a117484ad422"
+license = "flux-dev-non-commercial"
+workflows = ["flux_kontext_dev_gguf"]
+
+[[models]]
+name = "t5xxl_gguf"
+repo = "city96/t5-v1_1-xxl-encoder-gguf"
+revision = "005a6ea51a7d0b84d677b3e633bb52a8c85a83d9"
+filename = "t5-v1_1-xxl-encoder-Q5_K_M.gguf"
+dest = "text_encoders/t5-v1_1-xxl-encoder-Q5_K_M.gguf"
+bytes = 3386856640
+sha256 = "b51cbb10b1a7aac6dd1c3b62f0ed908bfd06e0b42d2f3577d43e061361f51dae"
+license = "apache-2"
+workflows = ["flux_dev_gguf", "flux_kontext_dev_gguf"]
 
 [profiles.fast]
 description = "Quick generation with SDXL Turbo"
+platforms = ["linux", "windows"]
 min_vram_mib = 8000
 models = ["sdxl_turbo"]
 
 [profiles.quality]
 description = "fast + high-quality generation with FLUX Dev"
+platforms = ["linux", "windows"]
 min_vram_mib = 16000
 models = ["sdxl_turbo", "flux_dev", "t5xxl", "clip_l", "flux_vae"]
 
 [profiles.full]
 description = "quality + image editing with FLUX Kontext"
+platforms = ["linux", "windows"]
 min_vram_mib = 16000
 models = ["sdxl_turbo", "flux_dev", "t5xxl", "clip_l", "flux_vae", "flux_kontext"]
+
+# Preparados sin probar: la memoria es unificada y los mínimos, orientativos.
+[profiles.mac-fast]
+description = "Quick generation with SDXL Turbo (untested)"
+platforms = ["darwin"]
+min_vram_mib = 16000
+models = ["sdxl_turbo"]
+
+[profiles.mac-quality]
+description = "mac-fast + high-quality generation with FLUX Dev GGUF (untested)"
+platforms = ["darwin"]
+min_vram_mib = 32000
+models = ["sdxl_turbo", "flux_dev_gguf", "t5xxl_gguf", "clip_l", "flux_vae"]
+nodes = ["comfyui-gguf"]
+
+[profiles.mac-full]
+description = "mac-quality + image editing with FLUX Kontext GGUF (untested)"
+platforms = ["darwin"]
+min_vram_mib = 32000
+models = ["sdxl_turbo", "flux_dev_gguf", "t5xxl_gguf", "clip_l", "flux_vae", "flux_kontext_gguf"]
+nodes = ["comfyui-gguf"]

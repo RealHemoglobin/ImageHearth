@@ -91,6 +91,12 @@ def _update(args):
 
         comfyui.install_managed(catalog.comfyui, torch, comfy_dir, records)
 
+    for node in profile.nodes:
+        # Sin permiso para un ComfyUI ajeno: solo se actualiza el nodo propio.
+        comfyui.install_custom_node(
+            node, comfy_dir, records, allowed=records.mode != ATTACHED
+        )
+
     models.ensure_models(profile.models, models_dir, records)
     print(f"Up to date: ComfyUI {records.comfyui_version or 'attached'}, profile {profile.name}.")
     return 0

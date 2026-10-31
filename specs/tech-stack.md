@@ -89,14 +89,18 @@ Fecha: 2026-10-31. Decisión: **instalador propio**. Solo se ha ejecutado en Lin
 
 ## Perfiles de modelos
 
-Tamaños medidos. La VRAM es orientativa y debe medirse en la fase 4: solo hay datos de una RTX 4090.
+Tamaños medidos. La VRAM mínima sigue siendo orientativa: los picos son de una RTX 4090 de 24 GB (`scripts/measure_profiles.py`, 1024x1024, Linux, 2026-10-31), donde ComfyUI usa la memoria que encuentra. Falta medir en Windows.
 
-| Perfil | Capacidades | Descarga | VRAM orientativa |
-|---|---|---|---|
-| `fast` | Generación rápida con SDXL Turbo | 6,9 GB | Desde 8 GB |
-| `quality` | `fast` + FLUX Dev | 24,6 GB | Desde 16 GB |
-| `full` | `quality` + edición con Kontext | 36,5 GB | Desde 16 GB |
-| `mac-*` | Equivalentes en GGUF `Q5_K_M`, sin probar | Por fijar en el manifiesto | Sin medir |
+| Perfil | Capacidades | Descarga | VRAM orientativa | Pico medido | Tiempo por imagen |
+|---|---|---|---|---|---|
+| `fast` | Generación rápida con SDXL Turbo | 6,9 GB | Desde 8 GB | 7,0 GB | 1,0 s |
+| `quality` | `fast` + FLUX Dev | 24,6 GB | Desde 16 GB | 17,8 GB | 10,4 s |
+| `full` | `quality` + edición con Kontext | 36,5 GB | Desde 16 GB | 19,3 GB | 18,6 s |
+| `mac-fast` | SDXL Turbo, sin probar | 6,9 GB | Sin medir en MPS | — | — |
+| `mac-quality` | `mac-fast` + FLUX Dev GGUF `Q5_K_S`, sin probar | 19,2 GB | Sin medir en MPS | 14,4 GB en NVIDIA | 23,8 s en NVIDIA |
+| `mac-full` | `mac-quality` + Kontext GGUF `Q5_K_M`, sin probar | 27,6 GB | Sin medir en MPS | 12,9 GB en NVIDIA | 30,1 s en NVIDIA |
+
+`city96/FLUX.1-dev-gguf` no publica `Q5_K_M`: FLUX Dev usa `Q5_K_S`, la más cercana. Kontext y T5 usan `Q5_K_M`.
 
 ## Herramientas de desarrollo
 

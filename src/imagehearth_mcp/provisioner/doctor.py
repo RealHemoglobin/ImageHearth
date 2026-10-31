@@ -5,7 +5,6 @@ import re
 import subprocess
 from dataclasses import asdict, dataclass, field
 from importlib.metadata import PackageNotFoundError, version
-from pathlib import Path
 
 import requests
 
@@ -22,6 +21,7 @@ LAYERS = (
     "comfyui",
     "environment",
     "node",
+    "custom_nodes",
     "models",
     "gpu",
     "port",
@@ -111,7 +111,10 @@ def check_environment(config, run):
             "environment", FAIL, f"Python not found: {python}", RERUN_SETUP
         )
 
-    code = "import torch; print(torch.__version__, torch.cuda.is_available())"
+    code = (
+        "import torch; print(torch.__version__, torch.cuda.is_available(), "
+        "torch.backends.mps.is_available())"
+    )
 
     try:
         result = run(
@@ -133,12 +136,16 @@ def check_environment(config, run):
             RERUN_SETUP,
         )
 
-    torch_version, _, cuda = result.stdout.strip().partition(" ")
+    torch_version, *flags = result.stdout.strip().split()
     return Check(
         "environment",
         OK,
         f"PyTorch {torch_version}",
-        details={"torch": torch_version, "cuda_available": cuda == "True"},
+        details={
+            "torch": torch_version,
+            "cuda_available": flags[:1] == ["True"],
+            "mps_available": flags[1:2] == ["True"],
+        },
     )
 
 
@@ -180,18 +187,62 @@ def check_node(config, session):
     return Check("node", OK, f"Installed and loaded, version {installed}.")
 
 
-def check_models(config, records, catalog, verify_hashes):
+def check_custom_nodes(config, records, catalog):
+    """Nodos que pide el perfil instalado, como ComfyUI-GGUF en los perfiles mac-*."""
+    from imagehearth_mcp.provisioner import comfyui
+
+    profile = catalog.profiles.get(records.profile)
+    nodes = profile.nodes if profile else ()
+
+    if not nodes:
+        return Check("custom_nodes", SKIP, "The installed profile needs none.")
+
+    missing = [
+        node.folder
+        for node in nodes
+        if not (config.COMFY_DIR / "custom_nodes" / node.folder).is_dir()
+    ]
+
+    if missing:
+        return Check(
+            "custom_nodes",
+            FAIL,
+            f"Missing: {', '.join(missing)}.",
+            f"Run `imagehearth-mcp setup --profile {profile.name} --install-node`.",
+        )
+
+    outdated = [
+        node.folder
+        for node in nodes
+        if records.is_owned(config.COMFY_DIR / "custom_nodes" / node.folder)
+        and not comfyui.custom_node_is_current(node, config.COMFY_DIR)
+    ]
+
+    if outdated:
+        return Check(
+            "custom_nodes",
+            WARN,
+            f"Not the pinned version: {', '.join(outdated)}.",
+            "Run `imagehearth-mcp update`.",
+        )
+
+    return Check(
+        "custom_nodes", OK, f"Installed: {', '.join(node.folder for node in nodes)}."
+    )
+
+
+def check_models(config, records, catalog, verify_hashes, system):
     from imagehearth_mcp.provisioner import models
 
-    models_dir = (
-        Path(records.models_dir) if records.models_dir else config.COMFY_DIR / "models"
-    )
-    expected = records.profile or "fast"
+    models_dir = models.resolve_dir(records, config.COMFY_DIR)
+    profiles = catalog.profiles_for(system)
+    extra_paths = models.extra_search_paths(config.COMFY_DIR)
+    expected = records.profile or next(iter(profiles), "fast")
     problems = {}
     complete = {}
 
-    for name, profile in catalog.profiles.items():
-        states = models.inspect(profile.models, models_dir)
+    for name, profile in profiles.items():
+        states = models.inspect(profile.models, models_dir, extra_paths)
         bad = [item for item in states if item.state != models.PRESENT]
 
         if verify_hashes:
@@ -317,10 +368,14 @@ def collect(verify_hashes=False, session=requests, run=subprocess.run, detection
             checks["environment"] = check_environment(config, run)
             checks["node"] = check_node(config, session)
 
-            if catalog is not None:
-                checks["models"] = check_models(config, records, catalog, verify_hashes)
-
         detection = detection or detect.detect(extra_paths=[config.COMFY_DIR])
+
+        if checks["comfyui"].status == OK and catalog is not None:
+            checks["custom_nodes"] = check_custom_nodes(config, records, catalog)
+            checks["models"] = check_models(
+                config, records, catalog, verify_hashes, detection.system
+            )
+
         checks["gpu"] = check_gpu(detection)
         checks["port"] = check_port(config, session)
         checks["ollama"] = check_ollama(config, session)

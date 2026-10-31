@@ -45,42 +45,42 @@ Los tests simulan la carpeta de modelos y no descargan nada. La puerta de calida
 
 ### Catálogo (Linux, con carpetas aisladas)
 
-- [ ] Solo `fast`: `list_workflows` devuelve `sdxl_turbo` y la generación `fast` funciona.
-- [ ] Solo `fast`: `create_image` con `quality=high` da el error accionable y no se arranca ComfyUI.
-- [ ] Solo `fast`: `edit_image` da el error accionable e indica `full`.
-- [ ] Con `quality` y `full`: aparecen y funcionan los workflows correspondientes, sin reiniciar el servidor.
-- [ ] Modelo truncado a propósito: su workflow deja de ofrecerse.
-- [ ] `doctor` y el catálogo coinciden en qué perfil está completo.
+- [x] Solo `fast`: `list_workflows` devuelve `sdxl_turbo` y la generación `fast` funciona.
+- [x] Solo `fast`: `create_image` con `quality=high` da el error accionable y no se arranca ComfyUI.
+- [x] Solo `fast`: `edit_image` da el error accionable e indica `full`.
+- [x] Con `quality` y `full`: aparecen y funcionan los workflows correspondientes, sin reiniciar el servidor.
+- [x] Modelo truncado a propósito: su workflow deja de ofrecerse.
+- [x] `doctor` y el catálogo coinciden en qué perfil está completo.
 
 ### Instalación de desarrollo y modo adjunto
 
-- [ ] La instalación de desarrollo sigue ofreciendo y generando con sus tres capacidades.
-- [ ] Un ComfyUI adjunto ofrece lo que tiene. Si hay modelos en `extra_model_paths.yaml`, anotar el resultado en la evidencia.
+- [x] La instalación de desarrollo sigue ofreciendo y generando con sus tres capacidades.
+- [x] Un ComfyUI adjunto ofrece lo que tiene. Si hay modelos en `extra_model_paths.yaml`, anotar el resultado en la evidencia.
 
 ### Separación del cargador
 
-- [ ] Edición real con Kontext con una referencia y con varias, en la RTX 4090.
+- [x] Edición real con Kontext con una referencia y con varias, en la RTX 4090.
 
 ### Mediciones
 
-- [ ] `scripts/measure_profiles.py` completo en la RTX 4090 con Linux.
+- [x] `scripts/measure_profiles.py` completo en la RTX 4090 con Linux.
 - [ ] `scripts/measure_profiles.py` completo en el equipo NVIDIA con Windows, y catálogo comprobado allí.
-- [ ] Sin modelos de lenguaje cargados durante las mediciones.
+- [x] Sin modelos de lenguaje cargados durante las mediciones.
 
 ### macOS preparado (sin Mac)
 
-- [ ] `flux_dev_gguf` genera una imagen en la RTX 4090 con los archivos `Q5_K_M` reales.
-- [ ] `flux_kontext_dev_gguf` edita una imagen en la RTX 4090 con los archivos `Q5_K_M` reales.
-- [ ] Los archivos descargados coinciden con el SHA-256 de `models.toml`.
-- [ ] Los perfiles `mac-*` no aparecen en Linux ni en Windows, y los perfiles existentes no cambian.
+- [x] `flux_dev_gguf` genera una imagen en la RTX 4090 con los archivos `Q5_K_M` reales.
+- [x] `flux_kontext_dev_gguf` edita una imagen en la RTX 4090 con los archivos `Q5_K_M` reales.
+- [x] Los archivos descargados coinciden con el SHA-256 de `models.toml`.
+- [x] Los perfiles `mac-*` no aparecen en Linux ni en Windows, y los perfiles existentes no cambian.
 - [x] No se ejecuta en un Mac: MPS, PyTorch en Metal y memoria unificada quedan sin verificar, y no se anuncia como soportado.
 
 ## Lista para fusionar
 
 - [ ] `scripts/check.sh` en verde en Linux y `scripts\check.ps1` en verde en Windows.
-- [ ] Prueba de contrato `/object_info` en verde.
+- [x] Prueba de contrato `/object_info` en verde.
 - [ ] Validaciones manuales completadas.
-- [ ] Las 7 herramientas conservan nombres y parámetros, revisado en el diff.
+- [x] Las 7 herramientas conservan nombres y parámetros, revisado en el diff.
 - [ ] Ambos README y `tech-stack.md` actualizados con las mediciones.
 - [ ] `models.toml` con los GGUF y `ComfyUI-GGUF` fijados, y `THIRD_PARTY_NOTICES.md` actualizado.
 - [ ] README (ambos) y `tech-stack.md` dicen que macOS está preparado y sin probar.
@@ -91,14 +91,14 @@ Los tests simulan la carpeta de modelos y no descargan nada. La puerta de calida
 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
-| `scripts/check.sh` en Linux | | |
+| `scripts/check.sh` en Linux | Verde, 261 tests | 2026-10-31 |
 | `scripts\check.ps1` en Windows | | |
-| Prueba de contrato `/object_info` | | |
-| Catálogo con cada perfil | | |
-| Modelos en `extra_model_paths.yaml` | | |
-| Edición real tras la separación del cargador | | |
-| Medición en RTX 4090 (Linux) | | |
+| Prueba de contrato `/object_info` | Verde en Linux, 19 tipos de nodo, con ComfyUI-GGUF | 2026-10-31 |
+| Catálogo con cada perfil | Prueba manual del usuario en Linux, con un ComfyUI adjunto aislado: `fast`, `quality` y `full` generan con cada perfil, y los errores indican el perfil. Modelo truncado y ComfyUI sin arrancar en los errores, comprobados aparte con carpetas aisladas | 2026-10-31 |
+| Modelos en `extra_model_paths.yaml` | El supuesto falló: ComfyUI veía Kontext y el catálogo no. Catálogo y `doctor` leen ya ese archivo. Corrección cubierta con tests; falta repetir la edición real con el modelo en esa ruta | 2026-10-31 |
+| Edición real tras la separación del cargador | Correcta con 1 y 2 referencias en la RTX 4090 | 2026-10-31 |
+| Medición en RTX 4090 (Linux) | Completa; ver README. El arranque en frío no vacía la caché de disco | 2026-10-31 |
 | Medición en equipo Windows (anotar GPU y VRAM) | | |
-| Workflows GGUF en RTX 4090 | | |
-| Flujo de `setup` con macOS simulado | | |
+| Workflows GGUF en RTX 4090 | Ambos correctos con archivos reales, SHA-256 coincidente. Pico 14,4 y 12,9 GB; 23,8 y 30,1 s | 2026-10-31 |
+| Flujo de `setup` con macOS simulado | Tests en verde (`tests/test_catalog.py`) | 2026-10-31 |
 | macOS real | Sin verificar, no anunciado | |

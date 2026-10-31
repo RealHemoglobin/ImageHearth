@@ -6,7 +6,11 @@ from imagehearth_mcp.engine import comfyui_client, config
 from imagehearth_mcp.engine.log import get_logger
 from imagehearth_mcp.engine.orchestrator import generation_session
 from imagehearth_mcp.engine.result import ImageResult
-from imagehearth_mcp.engine.validation import validate_dimensions, validate_prompt
+from imagehearth_mcp.engine.validation import (
+    require_installed,
+    validate_dimensions,
+    validate_prompt,
+)
 
 log = get_logger("workflow")
 
@@ -51,29 +55,8 @@ def negative_prompt_applies(workflow):
     return has_negative_node and uses_cfg
 
 
-def run_workflow(
-    workflow_name: str,
-    prompt: str,
-    timeout: int = config.WORKFLOW_TIMEOUT,
-    negative_prompt: str = "",
-    width: int = 1024,
-    height: int = 1024,
-):
-    validate_prompt(prompt)
-    validate_dimensions(width, height)
-
-    workflow_file = config.WORKFLOWS_DIR / workflow_name
-
-    if not workflow_file.is_file():
-        raise FileNotFoundError(workflow_file)
-
-    workflow = json.loads(workflow_file.read_text(encoding="utf-8"))
-
-    warnings = []
-
-    if negative_prompt and not negative_prompt_applies(workflow):
-        warnings.append(f"{workflow_file.stem} ignores negative_prompt.")
-
+def prepare_workflow(workflow, prompt, negative_prompt, width, height, filename):
+    """Rellena una plantilla ya cargada y la devuelve."""
     # Sustituir prompts.
     for node in workflow.values():
         if not isinstance(node, dict):
@@ -102,13 +85,47 @@ def run_workflow(
         if class_type == "KSampler":
             inputs["seed"] = random.randint(0, 2**64 - 1)
 
-    image_id = uuid.uuid4().hex[:12]
-
     for node in workflow.values():
         if isinstance(node, dict) and node.get("class_type") == "SaveImage":
-            node["inputs"]["filename_prefix"] = (
-                f"{config.COMFY_SUBFOLDER}/{image_id}"
-            )
+            node["inputs"]["filename_prefix"] = filename
+
+    return workflow
+
+
+def run_workflow(
+    workflow_name: str,
+    prompt: str,
+    timeout: int = config.WORKFLOW_TIMEOUT,
+    negative_prompt: str = "",
+    width: int = 1024,
+    height: int = 1024,
+):
+    validate_prompt(prompt)
+    validate_dimensions(width, height)
+
+    workflow_file = config.WORKFLOWS_DIR / workflow_name
+
+    if not workflow_file.is_file():
+        raise FileNotFoundError(workflow_file)
+
+    require_installed(workflow_file.stem)
+
+    image_id = uuid.uuid4().hex[:12]
+    workflow = json.loads(workflow_file.read_text(encoding="utf-8"))
+    warnings = []
+
+    # Antes de rellenarla: se reconoce el nodo negativo por su texto vacío.
+    if negative_prompt and not negative_prompt_applies(workflow):
+        warnings.append(f"{workflow_file.stem} ignores negative_prompt.")
+
+    prepare_workflow(
+        workflow,
+        prompt,
+        negative_prompt,
+        width,
+        height,
+        f"{config.COMFY_SUBFOLDER}/{image_id}",
+    )
 
     with generation_session() as session:
         destination = save_session_image(

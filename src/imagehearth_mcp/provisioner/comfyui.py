@@ -15,6 +15,7 @@ from imagehearth_mcp.platform import paths
 from imagehearth_mcp.provisioner import ProvisionError
 
 NODE_FILES = ("__init__.py", "LICENSE")
+NODE_PIN_FILE = ".imagehearth-pin"
 MODEL_FOLDERS = ("checkpoints", "diffusion_models", "text_encoders", "vae")
 PARTIAL_SUFFIX = ".partial"
 EXTRA_PATHS_FILE = "extra_model_paths.yaml"
@@ -56,6 +57,7 @@ def _run_uv(command, run):
 
 
 def _download_archive(pin, destination):
+    """Descarga el archivo fijado de ComfyUI o de un nodo y comprueba su SHA-256."""
     digest = hashlib.sha256()
 
     try:
@@ -68,14 +70,14 @@ def _download_archive(pin, destination):
                     digest.update(chunk)
     except requests.RequestException as error:
         raise ProvisionError(
-            f"Can't download ComfyUI from {pin.url}: {error}. Check your connection "
+            f"Can't download {pin.url}: {error}. Check your connection "
             "and run setup again."
         ) from error
 
     if digest.hexdigest() != pin.sha256:
         destination.unlink()
         raise ProvisionError(
-            f"The ComfyUI archive from {pin.url} does not match the expected SHA-256. "
+            f"The archive from {pin.url} does not match the expected SHA-256. "
             "Run setup again; if it keeps failing, report it to ImageHearth."
         )
 
@@ -204,6 +206,82 @@ def install_node(comfy_dir, records, allowed=True):
     for name in NODE_FILES:
         shutil.copy2(source / name, destination / name)
 
+    return True
+
+
+def custom_node_is_current(pin, comfy_dir):
+    marker = Path(comfy_dir) / "custom_nodes" / pin.folder / NODE_PIN_FILE
+
+    try:
+        return marker.read_text(encoding="utf-8").strip() == pin.sha256
+    except OSError:
+        return False
+
+
+def install_custom_node(
+    pin,
+    comfy_dir,
+    records,
+    allowed=True,
+    *,
+    run=subprocess.run,
+    fetch=_download_archive,
+    which=shutil.which,
+):
+    """Instala un nodo fijado y sus dependencias. Uno ajeno nunca se sustituye.
+
+    Devuelve False si el nodo no ha quedado disponible.
+    """
+    comfy_dir = Path(comfy_dir)
+    destination = comfy_dir / "custom_nodes" / pin.folder
+    owned = records.is_owned(destination)
+
+    if destination.exists() and not owned:
+        records.note_preexisting("node", destination)
+        print(f"Using the {pin.folder} already in {destination}; it won't be changed.")
+        return True
+
+    if not allowed and not owned:
+        return False
+
+    python = paths.find_venv_python(comfy_dir)
+
+    if not python.exists():
+        print(f"WARNING: {pin.folder} needs a Python environment and {python} is missing.")
+        return False
+
+    if not custom_node_is_current(pin, comfy_dir):
+        print(f"Installing {pin.folder}...")
+        partial = destination.with_name(destination.name + PARTIAL_SUFFIX)
+        shutil.rmtree(partial, ignore_errors=True)
+        records.claim_verified("staging", partial)
+        partial.mkdir(parents=True)
+
+        try:
+            archive = partial / "node.tar.gz"
+            fetch(pin, archive)
+
+            with tarfile.open(archive) as tar:
+                tar.extractall(partial / "source", filter="data")
+
+            top = next((partial / "source").iterdir())
+            (top / NODE_PIN_FILE).write_text(pin.sha256, encoding="utf-8")
+            records.claim("node", destination)
+            shutil.rmtree(destination, ignore_errors=True)
+            shutil.move(str(top), str(destination))
+        except (OSError, tarfile.TarError, StopIteration) as error:
+            raise ProvisionError(
+                f"Can't install {pin.folder} in {destination}: {error}. Run setup again."
+            ) from error
+        finally:
+            shutil.rmtree(partial, ignore_errors=True)
+            records.forget(partial)
+            records.save()
+
+    _run_uv(
+        [find_uv(which), "pip", "install", "--python", str(python), *pin.packages],
+        run,
+    )
     return True
 
 

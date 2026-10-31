@@ -49,7 +49,7 @@ Además:
 | Nivel de macOS | Nivel 3: experimental y sin probar. Solo sube a nivel 2 cuando se pruebe con hardware real |
 | Entrada en macOS | `setup` exige `--experimental` y explica que no se ha probado, antes de descargar nada |
 | Perfiles de Mac | `mac-fast` (SDXL Turbo, el mismo archivo), `mac-quality` (FLUX Dev GGUF) y `mac-full` (más Kontext GGUF). `setup` solo ofrece los de la plataforma detectada |
-| Cuantización | `Q5_K_M` para FLUX Dev, Kontext y T5, sin medir: equilibra memoria y calidad en equipos de 32 GB. Cambiarla solo requiere editar el manifiesto |
+| Cuantización | `Q5_K_M` para Kontext y T5, y `Q5_K_S` para FLUX Dev porque su repositorio no publica `Q5_K_M`, sin medir en MPS: equilibra memoria y calidad en equipos de 32 GB. Cambiarla solo requiere editar el manifiesto |
 | PyTorch en Mac | Versión estable fijada desde PyPI, que ya incluye MPS, en lugar de la nightly que cita `tech-stack.md`: una nightly no se puede fijar de forma reproducible. Si falla en un Mac real, se cambia en el manifiesto |
 | `quality` en Mac | La misma interfaz: `high` y la edición resuelven a la variante GGUF del perfil, sin parámetros nuevos |
 | Memoria en Mac | La memoria unificada hace de VRAM en las comprobaciones previas, y `/system_stats` en el motor. Nunca se llama a `nvidia-smi` en macOS |
@@ -79,7 +79,7 @@ Además:
 
 ## Supuestos abiertos
 
-- **Modelos fuera de la carpeta principal:** si un ComfyUI adjunto o de desarrollo tiene modelos en rutas de `extra_model_paths.yaml` que `install.json` no registra, se considerarían ausentes. Se asume que basta con la resolución de `doctor`, y hay que comprobarlo con la instalación de desarrollo antes de cerrar. Si falla, se amplía la resolución sin cambiar la decisión de usar archivos y tamaño.
+- **Modelos fuera de la carpeta principal:** si un ComfyUI adjunto o de desarrollo tiene modelos en rutas de `extra_model_paths.yaml` que `install.json` no registra, se considerarían ausentes. Comprobado: la resolución de `doctor` no bastaba, así que catálogo y `doctor` leen también `extra_model_paths.yaml` de la carpeta de ComfyUI, siempre por archivo y tamaño. `setup` no lo lee y descargaría una copia en la carpeta principal. Un archivo indicado con `--extra-model-paths-config` no se detecta.
 - **macOS en real:** nada garantiza que ComfyUI, `ComfyUI-GGUF`, FLUX y Kontext funcionen en MPS. El plan B del roadmap sigue vigente si algún informe lo descarta.
-- **Repositorios GGUF:** se parte de `city96/FLUX.1-dev-gguf`, `city96/t5-v1_1-encoder-gguf` y `QuantStack/FLUX.1-Kontext-dev-GGUF`. Hay que confirmarlos, junto con su licencia, al fijar revisión, tamaño y SHA-256.
+- **Repositorios GGUF:** confirmados con su licencia al fijar revisión, tamaño y SHA-256: `city96/FLUX.1-dev-gguf`, `city96/t5-v1_1-xxl-encoder-gguf` (el nombre inicial era incorrecto) y `QuantStack/FLUX.1-Kontext-dev-GGUF`.
 - **Equipo Windows:** se asume que sigue disponible con NVIDIA. Su modelo y VRAM se anotan en la evidencia al medir.

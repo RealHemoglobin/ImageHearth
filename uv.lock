@@ -483,6 +483,7 @@ dependencies = [
     { name = "pillow" },
     { name = "platformdirs" },
     { name = "psutil" },
+    { name = "pyyaml" },
     { name = "requests" },
 ]
 
@@ -500,6 +501,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=13,<14" },
     { name = "platformdirs", specifier = ">=4,<5" },
     { name = "psutil", specifier = ">=7.2.2" },
+    { name = "pyyaml", specifier = ">=6,<7" },
     { name = "requests", specifier = ">=2.34,<3" },
 ]
 

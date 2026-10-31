@@ -33,7 +33,16 @@ def _build_parser():
     setup = commands.add_parser(
         "setup", help="Install ComfyUI and the models, or attach to an existing ComfyUI."
     )
-    setup.add_argument("--profile", choices=("fast", "quality", "full"))
+    setup.add_argument(
+        "--profile",
+        choices=("fast", "quality", "full", "mac-fast", "mac-quality", "mac-full"),
+        help="What to install. The mac-* profiles are only for macOS.",
+    )
+    setup.add_argument(
+        "--experimental",
+        action="store_true",
+        help="Required on macOS, which is prepared but untested.",
+    )
     _add_consent(setup)
     mode = setup.add_mutually_exclusive_group()
     mode.add_argument(

@@ -1,4 +1,5 @@
 import argparse
+import dataclasses
 import hashlib
 import io
 import json
@@ -240,7 +241,8 @@ def test_windows_adapter_names(tmp_path):
         ("windows", "AMD64", detect.Gpu("amd", "Radeon RX 7900"), "cpu", 3, False),
         ("linux", "x86_64", detect.Gpu("intel", "Intel Arc A770"), "xpu", 3, True),
         ("linux", "x86_64", detect.Gpu("intel", "Intel UHD Graphics 770"), "cpu", 3, True),
-        ("darwin", "arm64", None, "metal", 2, False),
+        ("darwin", "arm64", None, "metal", 3, True),
+        ("darwin", "x86_64", None, "cpu", 3, False),
         ("linux", "aarch64", detect.Gpu("nvidia", "NVIDIA Jetson"), "cpu", 3, False),
     ],
 )
@@ -309,7 +311,7 @@ def test_every_workflow_has_its_models(catalog):
             for node in workflow.values()
             if isinstance(node, dict)
             for value in node.get("inputs", {}).values()
-            if isinstance(value, str) and value.endswith(".safetensors")
+            if isinstance(value, str) and value.endswith((".safetensors", ".gguf"))
         ]
         assert names, path
 
@@ -320,7 +322,8 @@ def test_every_workflow_has_its_models(catalog):
 def test_profiles_are_cumulative(catalog):
     fast, quality, full = (catalog.profiles[n] for n in ("fast", "quality", "full"))
     assert set(fast.models) < set(quality.models) < set(full.models)
-    assert {m.name for m in full.models} == set(catalog.models)
+    gguf = {"flux_dev_gguf", "flux_kontext_gguf", "t5xxl_gguf"}
+    assert {m.name for m in full.models} == set(catalog.models) - gguf
 
 
 def test_pytorch_matches_platform_matrix(catalog):
@@ -328,6 +331,10 @@ def test_pytorch_matches_platform_matrix(catalog):
     assert catalog.pytorch["cu126"].python == "3.12"
 
     for name, pin in catalog.pytorch.items():
+        if name == "metal":
+            assert all("+" not in package for package in pin.packages)
+            continue
+
         assert all(f"+{name}" in package for package in pin.packages)
 
 
@@ -912,6 +919,7 @@ def setup_args(**kwargs):
         models_dir=None,
         port=None,
         skip_smoke_test=True,
+        experimental=False,
     )
     return argparse.Namespace(**{**defaults, **kwargs})
 
@@ -978,14 +986,12 @@ def machine(tmp_path, monkeypatch):
         catalog.licenses,
         small,
         {
-            name: manifest.Profile(
-                name,
-                profile.description,
-                profile.min_vram_mib,
-                tuple(small[m.name] for m in profile.models),
+            name: dataclasses.replace(
+                profile, models=tuple(small[m.name] for m in profile.models)
             )
             for name, profile in catalog.profiles.items()
         },
+        catalog.nodes,
     )
     monkeypatch.setattr(manifest, "load", lambda: fake_catalog)
 

@@ -13,6 +13,10 @@ from imagehearth_mcp.provisioner.manifest import format_size
 STAGING_DIR = ".imagehearth-downloads"
 HASH_CHUNK = 1024 * 1024
 
+EXTRA_PATHS_FILE = "extra_model_paths.yaml"
+# Nombres antiguos que ComfyUI sigue aceptando en ese archivo.
+LEGACY_FOLDERS = {"unet": "diffusion_models", "clip": "text_encoders"}
+
 PRESENT = "present"
 WRONG_SIZE = "wrong_size"
 MISSING = "missing"
@@ -25,21 +29,74 @@ class ModelState:
     state: str
 
 
-def inspect(models, models_dir):
+def resolve_dir(records, comfy_dir):
+    """Carpeta de modelos: la registrada por setup o la de ComfyUI."""
+    return Path(records.models_dir) if records.models_dir else Path(comfy_dir) / "models"
+
+
+def extra_search_paths(comfy_dir):
+    """Carpetas adicionales de `extra_model_paths.yaml`, por tipo de modelo.
+
+    Un archivo ausente o dañado no impide nada: ComfyUI tampoco lo aplicaría.
+    """
+    import yaml
+
+    path = Path(comfy_dir) / EXTRA_PATHS_FILE
+
+    try:
+        values = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return {}
+
+    found = {}
+
+    for section in values.values() if isinstance(values, dict) else ():
+        if not isinstance(section, dict):
+            continue
+
+        base = section.get("base_path")
+        base = Path(os.path.expandvars(str(base))).expanduser() if base else Path()
+        base = path.parent / base
+
+        for folder, value in section.items():
+            if folder in ("base_path", "is_default") or not isinstance(value, str):
+                continue
+
+            folders = found.setdefault(LEGACY_FOLDERS.get(folder, folder), [])
+            folders.extend(base / line.strip() for line in value.splitlines() if line.strip())
+
+    return found
+
+
+def _candidates(model, models_dir, extra_paths):
+    folder, _, name = model.dest.partition("/")
+    return [
+        Path(models_dir) / model.dest,
+        *(Path(extra) / name for extra in (extra_paths or {}).get(folder, ())),
+    ]
+
+
+def inspect(models, models_dir, extra_paths=None):
     """Estado de cada modelo solo por tamaño: rápido y sin leer los archivos."""
     states = []
 
     for model in models:
-        path = Path(models_dir) / model.dest
+        candidates = _candidates(model, models_dir, extra_paths)
+        found = None
 
-        try:
-            size = path.stat().st_size
-        except OSError:
-            state = MISSING
-        else:
-            state = PRESENT if size == model.bytes else WRONG_SIZE
+        for path in candidates:
+            try:
+                size = path.stat().st_size
+            except OSError:
+                continue
 
-        states.append(ModelState(model, path, state))
+            if size == model.bytes:
+                found = ModelState(model, path, PRESENT)
+                break
+
+            found = found or ModelState(model, path, WRONG_SIZE)
+
+        states.append(found or ModelState(model, candidates[0], MISSING))
 
     return states
 

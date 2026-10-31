@@ -12,6 +12,7 @@ from imagehearth_mcp.engine.orchestrator import generation_session
 from imagehearth_mcp.engine.result import ImageResult
 from imagehearth_mcp.engine.validation import (
     fit_to_limits,
+    resolve_edit_workflow,
     validate_dimensions,
     validate_prompt,
 )
@@ -19,7 +20,20 @@ from imagehearth_mcp.engine.workflow_runner import save_session_image
 
 log = get_logger("kontext")
 
-WORKFLOW_FILE = config.WORKFLOWS_DIR / "flux_kontext_dev_basic.json"
+DEFAULT_WORKFLOW = "flux_kontext_dev_basic"
+LOADERS = {
+    "model": ("UNETLoader", "UnetLoaderGGUF"),
+    "clip": ("DualCLIPLoader", "DualCLIPLoaderGGUF"),
+    "vae": ("VAELoader",),
+}
+# Entrada de una sola imagen de la plantilla: se sustituye por las referencias.
+TEMPLATE_INPUT_NODES = {
+    "LoadImage",
+    "ImageStitch",
+    "FluxKontextImageScale",
+    "VAEEncode",
+    "ReferenceLatent",
+}
 
 
 def normalize_image_paths(image_path=None, image_paths=None):
@@ -109,31 +123,74 @@ def output_dimensions(first_image, width=0, height=0):
     return width, height, warning
 
 
-def build_workflow(uploaded_images, prompt, width, height, filename):
-    workflow = json.loads(WORKFLOW_FILE.read_text(encoding="utf-8"))
+def find_node(workflow, *class_types, role=None):
+    """Identificador del único nodo de esos tipos.
 
-    required_nodes = [
-        "192:6",
-        "192:35",
-        "192:37",
-        "192:38",
-        "192:39",
-        "192:135",
-        "192:31",
-        "192:8",
-        "136",
+    `role` distingue por el título varios nodos del mismo tipo, como el
+    `CLIPTextEncode` positivo.
+    """
+    found = [
+        node_id
+        for node_id, node in workflow.items()
+        if isinstance(node, dict) and node.get("class_type") in class_types
     ]
 
-    for node_id in required_nodes:
-        if node_id not in workflow:
-            raise RuntimeError(f"Required node {node_id} is missing from the Kontext workflow.")
+    if role and len(found) > 1:
+        found = [
+            node_id
+            for node_id in found
+            if role in workflow[node_id].get("_meta", {}).get("title", "").lower()
+        ]
+
+    names = " or ".join(class_types)
+
+    if not found:
+        raise RuntimeError(f"Required node {names} is missing from the Kontext workflow.")
+
+    if len(found) > 1:
+        raise RuntimeError(
+            f"The Kontext workflow has several {names} nodes: {', '.join(found)}."
+        )
+
+    return found[0]
+
+
+def find_loaders(workflow):
+    """Salidas del cargador, sea estándar o GGUF: lo único que cambia entre variantes."""
+    return {
+        role: [find_node(workflow, *class_types), 0]
+        for role, class_types in LOADERS.items()
+    }
+
+
+def build_workflow(
+    uploaded_images,
+    prompt,
+    width,
+    height,
+    filename,
+    workflow_name=DEFAULT_WORKFLOW,
+):
+    workflow_file = config.WORKFLOWS_DIR / f"{workflow_name}.json"
+    workflow = json.loads(workflow_file.read_text(encoding="utf-8"))
 
     # Eliminar el antiguo camino basado en ImageStitch y VAEEncode único.
-    for node_id in ("190", "192:146", "192:42", "192:124", "192:177"):
-        workflow.pop(node_id, None)
+    for node_id, node in list(workflow.items()):
+        if node.get("class_type") in TEMPLATE_INPUT_NODES:
+            del workflow[node_id]
 
-    workflow["192:6"]["inputs"]["text"] = prompt
-    workflow["192:31"]["inputs"]["seed"] = random.randint(0, 2**64 - 1)
+    loaders = find_loaders(workflow)
+    positive_id = find_node(workflow, "CLIPTextEncode", role="positive")
+    guidance_id = find_node(workflow, "FluxGuidance")
+    sampler_id = find_node(workflow, "KSampler")
+    find_node(workflow, "ConditioningZeroOut")
+    find_node(workflow, "VAEDecode")
+    save_id = find_node(workflow, "SaveImage")
+
+    workflow[positive_id]["inputs"]["text"] = prompt
+    workflow[positive_id]["inputs"]["clip"] = loaders["clip"]
+    workflow[sampler_id]["inputs"]["seed"] = random.randint(0, 2**64 - 1)
+    workflow[sampler_id]["inputs"]["model"] = loaders["model"]
 
     # Crear un latente de salida independiente de las referencias.
     latent_id = "IMAGEENGINE_EMPTY_LATENT"
@@ -147,10 +204,10 @@ def build_workflow(uploaded_images, prompt, width, height, filename):
         },
     }
 
-    workflow["192:31"]["inputs"]["latent_image"] = [latent_id, 0]
+    workflow[sampler_id]["inputs"]["latent_image"] = [latent_id, 0]
 
     # Encadenar referencias mediante ReferenceLatent.
-    previous_conditioning = "192:6"
+    previous_conditioning = positive_id
 
     for index, uploaded_name in enumerate(uploaded_images, start=1):
         load_id = f"IMAGEENGINE_LOAD_{index}"
@@ -174,7 +231,7 @@ def build_workflow(uploaded_images, prompt, width, height, filename):
             "class_type": "VAEEncode",
             "inputs": {
                 "pixels": [scale_id, 0],
-                "vae": ["192:39", 0],
+                "vae": loaders["vae"],
             },
         }
 
@@ -189,12 +246,12 @@ def build_workflow(uploaded_images, prompt, width, height, filename):
         previous_conditioning = reference_id
 
     # El condicionamiento final contiene todas las referencias.
-    workflow["192:35"]["inputs"]["conditioning"] = [
+    workflow[guidance_id]["inputs"]["conditioning"] = [
         previous_conditioning,
         0,
     ]
 
-    workflow["136"]["inputs"]["filename_prefix"] = filename
+    workflow[save_id]["inputs"]["filename_prefix"] = filename
 
     return workflow
 
@@ -208,6 +265,7 @@ def generate(
     height=0,
 ):
     validate_prompt(prompt)
+    workflow_name = resolve_edit_workflow()
 
     paths = normalize_image_paths(image_path, image_paths)
     width, height, warning = output_dimensions(paths[0], width, height)
@@ -226,6 +284,7 @@ def generate(
             width=width,
             height=height,
             filename=f"{config.COMFY_SUBFOLDER}/{image_id}",
+            workflow_name=workflow_name,
         )
 
         log.info("Independent references: %s", len(paths))

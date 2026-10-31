@@ -1,0 +1,279 @@
+{
+ "136": {
+  "_meta": {
+   "cnr_id": "comfy-core",
+   "title": "Guardar imagen",
+   "ver": "0.3.39"
+  },
+  "class_type": "SaveImage",
+  "inputs": {
+   "filename_prefix": "imagehearth/golden",
+   "images": [
+    "192:8",
+    0
+   ]
+  }
+ },
+ "192:135": {
+  "_meta": {
+   "cnr_id": "comfy-core",
+   "title": "Acondicionamiento (Poner a cero)",
+   "ver": "0.3.39"
+  },
+  "class_type": "ConditioningZeroOut",
+  "inputs": {
+   "conditioning": [
+    "192:6",
+    0
+   ]
+  }
+ },
+ "192:31": {
+  "_meta": {
+   "cnr_id": "comfy-core",
+   "title": "KSampler",
+   "ver": "0.3.38"
+  },
+  "class_type": "KSampler",
+  "inputs": {
+   "cfg": 1,
+   "denoise": 1,
+   "latent_image": [
+    "IMAGEENGINE_EMPTY_LATENT",
+    0
+   ],
+   "model": [
+    "192:37",
+    0
+   ],
+   "negative": [
+    "192:135",
+    0
+   ],
+   "positive": [
+    "192:35",
+    0
+   ],
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "seed": 14354624986284130233,
+   "steps": 20
+  }
+ },
+ "192:35": {
+  "_meta": {
+   "cnr_id": "comfy-core",
+   "title": "Gu\u00eda Flux",
+   "ver": "0.3.38"
+  },
+  "class_type": "FluxGuidance",
+  "inputs": {
+   "conditioning": [
+    "IMAGEENGINE_REFERENCE_3",
+    0
+   ],
+   "guidance": 2.5
+  }
+ },
+ "192:37": {
+  "_meta": {
+   "cnr_id": "comfy-core",
+   "title": "Cargar modelo de difusi\u00f3n",
+   "ver": "0.3.38"
+  },
+  "class_type": "UNETLoader",
+  "inputs": {
+   "unet_name": "flux1-dev-kontext_fp8_scaled.safetensors",
+   "weight_dtype": "default"
+  }
+ },
+ "192:38": {
+  "_meta": {
+   "cnr_id": "comfy-core",
+   "title": "Cargar CLIP dual",
+   "ver": "0.3.38"
+  },
+  "class_type": "DualCLIPLoader",
+  "inputs": {
+   "clip_name1": "clip_l.safetensors",
+   "clip_name2": "t5xxl_fp8_e4m3fn_scaled.safetensors",
+   "device": "default",
+   "type": "flux"
+  }
+ },
+ "192:39": {
+  "_meta": {
+   "cnr_id": "comfy-core",
+   "title": "Cargar VAE",
+   "ver": "0.3.38"
+  },
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "ae.safetensors"
+  }
+ },
+ "192:6": {
+  "_meta": {
+   "cnr_id": "comfy-core",
+   "title": "CLIP Text Encode (Positive Prompt)",
+   "ver": "0.3.38"
+  },
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "clip": [
+    "192:38",
+    0
+   ],
+   "text": "change the sky"
+  }
+ },
+ "192:8": {
+  "_meta": {
+   "cnr_id": "comfy-core",
+   "title": "Decodificaci\u00f3n VAE",
+   "ver": "0.3.38"
+  },
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "192:31",
+    0
+   ],
+   "vae": [
+    "192:39",
+    0
+   ]
+  }
+ },
+ "IMAGEENGINE_EMPTY_LATENT": {
+  "class_type": "EmptySD3LatentImage",
+  "inputs": {
+   "batch_size": 1,
+   "height": 768,
+   "width": 1024
+  }
+ },
+ "IMAGEENGINE_ENCODE_1": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "IMAGEENGINE_SCALE_1",
+    0
+   ],
+   "vae": [
+    "192:39",
+    0
+   ]
+  }
+ },
+ "IMAGEENGINE_ENCODE_2": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "IMAGEENGINE_SCALE_2",
+    0
+   ],
+   "vae": [
+    "192:39",
+    0
+   ]
+  }
+ },
+ "IMAGEENGINE_ENCODE_3": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "IMAGEENGINE_SCALE_3",
+    0
+   ],
+   "vae": [
+    "192:39",
+    0
+   ]
+  }
+ },
+ "IMAGEENGINE_LOAD_1": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "a/reference_1.png"
+  }
+ },
+ "IMAGEENGINE_LOAD_2": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "a/reference_2.jpg"
+  }
+ },
+ "IMAGEENGINE_LOAD_3": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "a/reference_3.webp"
+  }
+ },
+ "IMAGEENGINE_REFERENCE_1": {
+  "class_type": "ReferenceLatent",
+  "inputs": {
+   "conditioning": [
+    "192:6",
+    0
+   ],
+   "latent": [
+    "IMAGEENGINE_ENCODE_1",
+    0
+   ]
+  }
+ },
+ "IMAGEENGINE_REFERENCE_2": {
+  "class_type": "ReferenceLatent",
+  "inputs": {
+   "conditioning": [
+    "IMAGEENGINE_REFERENCE_1",
+    0
+   ],
+   "latent": [
+    "IMAGEENGINE_ENCODE_2",
+    0
+   ]
+  }
+ },
+ "IMAGEENGINE_REFERENCE_3": {
+  "class_type": "ReferenceLatent",
+  "inputs": {
+   "conditioning": [
+    "IMAGEENGINE_REFERENCE_2",
+    0
+   ],
+   "latent": [
+    "IMAGEENGINE_ENCODE_3",
+    0
+   ]
+  }
+ },
+ "IMAGEENGINE_SCALE_1": {
+  "class_type": "FluxKontextImageScale",
+  "inputs": {
+   "image": [
+    "IMAGEENGINE_LOAD_1",
+    0
+   ]
+  }
+ },
+ "IMAGEENGINE_SCALE_2": {
+  "class_type": "FluxKontextImageScale",
+  "inputs": {
+   "image": [
+    "IMAGEENGINE_LOAD_2",
+    0
+   ]
+  }
+ },
+ "IMAGEENGINE_SCALE_3": {
+  "class_type": "FluxKontextImageScale",
+  "inputs": {
+   "image": [
+    "IMAGEENGINE_LOAD_3",
+    0
+   ]
+  }
+ }
+}

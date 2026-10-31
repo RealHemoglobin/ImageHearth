@@ -20,9 +20,11 @@ async def generate_image(
     height: int = 1024,
     negative_prompt: str = "",
 ) -> str:
-    """Generate a new image using a specific available workflow.
+    """Generate a new image using a specific installed workflow.
 
-    Available workflows include sdxl_turbo and flux_dev.
+    Which workflows exist depends on the installed profile: call list_workflows.
+    If a workflow's models are missing, the error names the setup command that
+    installs them.
     Returns the image path, followed by lines starting with WARNING
     if the image was created but something needs attention.
     """
@@ -47,6 +49,7 @@ async def edit_image(
 ) -> str:
     """Edit one or more images using FLUX Kontext.
 
+    Needs the full profile; otherwise the error names the setup command to run.
     image_path: Primary reference image.
     additional_images: Up to five additional reference images.
     width and height: Optional output dimensions. Zero preserves
@@ -91,6 +94,9 @@ async def create_image(
       fast: SDXL Turbo.
       high: FLUX Dev.
 
+    What works depends on the installed profile. If the models for the request
+    are missing, the error names the setup command that installs them; another
+    model is never used instead.
     image_paths: zero to six reference image paths.
     workflow: optionally override the automatic generation workflow.
     Returns the image path, followed by lines starting with WARNING
@@ -111,7 +117,10 @@ async def create_image(
 
 @mcp.tool()
 def list_workflows() -> list:
-    """List available ImageHearth generation workflows."""
+    """List the generation workflows whose models are installed.
+
+    It is checked on every call, so a later setup shows up without a restart.
+    """
     return [
         {"name": name, "file": f"{name}.json"}
         for name in available_workflows()

@@ -202,8 +202,13 @@ def _is_legacy_nvidia(name):
 def classify(system, machine, gpus):
     """Sitúa el sistema en la matriz de PyTorch."""
     if system == "darwin":
+        if machine.lower() != "arm64":
+            return TorchPlatform(
+                "cpu", 3, False, "macOS on Intel is not supported: it needs Apple Silicon."
+            )
+
         return TorchPlatform(
-            "metal", 2, False, "macOS is not supported by setup yet."
+            "metal", 3, True, "Experimental and untested: macOS has never been run."
         )
 
     if machine.lower() not in ("x86_64", "amd64"):
@@ -239,6 +244,12 @@ def classify(system, machine, gpus):
     return TorchPlatform(
         "cpu", 3, True, "No supported GPU: CPU only, SDXL Turbo only, and slow."
     )
+
+
+def _apple_gpu(run, ram_mib):
+    """La memoria es unificada: la del sistema hace de VRAM."""
+    chip = (run(["sysctl", "-n", "machdep.cpu.brand_string"]) or "").strip()
+    return Gpu("apple", chip or "Apple Silicon", "", ram_mib)
 
 
 def is_comfy_dir(path):
@@ -381,19 +392,25 @@ def detect(
     home = home or Path.home()
     environ = os.environ if environ is None else environ
 
-    gpus = _nvidia_gpus(run)
-    adapters = _adapters(system, run, sysfs)
-    driver_missing = not gpus and any(gpu.vendor == "nvidia" for gpu in adapters)
+    ram_mib = psutil.virtual_memory().total // (1024 * 1024)
 
-    if not gpus:
-        gpus = adapters
+    if system == "darwin":
+        gpus = [_apple_gpu(run, ram_mib)] if machine.lower() == "arm64" else []
+        driver_missing = False
+    else:
+        gpus = _nvidia_gpus(run)
+        adapters = _adapters(system, run, sysfs)
+        driver_missing = not gpus and any(gpu.vendor == "nvidia" for gpu in adapters)
+
+        if not gpus:
+            gpus = adapters
 
     return Detection(
         system=system,
         machine=machine,
         gpus=gpus,
         driver_missing=driver_missing,
-        ram_mib=psutil.virtual_memory().total // (1024 * 1024),
+        ram_mib=ram_mib,
         disk_free_bytes=shutil.disk_usage(nearest_existing(disk_path or home)).free,
         comfy_installs=find_comfy_installs(
             home,

@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 from PIL import Image
 
 from imagehearth_mcp.engine import config
+from imagehearth_mcp.provisioner import models
 
 # Antes de importar módulos con logger: las pruebas no escriben en logs/.
 _LOGS = Path(tempfile.mkdtemp(prefix="imagehearth-test-logs-"))
@@ -325,6 +326,7 @@ class EngineTestCase(unittest.TestCase):
             "CANCEL_TIMEOUT": 1,
             "UNLOAD_TIMEOUT": 1,
             "RESTORE_TIMEOUT": 1,
+            "INSTALL_MANIFEST": self.tmp / "install.json",
         }
 
         for name, value in patches.items():
@@ -338,6 +340,18 @@ class EngineTestCase(unittest.TestCase):
         )
         self.gpu_free = gpu.start()
         self.addCleanup(gpu.stop)
+
+        # Los modelos reales pesan decenas de GB: salvo que una prueba de catálogo
+        # lo cambie, todos constan como presentes.
+        present = mock.patch(
+            "imagehearth_mcp.provisioner.models.inspect",
+            side_effect=lambda items, folder, extra=None: [
+                models.ModelState(item, Path(folder) / item.dest, models.PRESENT)
+                for item in items
+            ],
+        )
+        self.models_present = present.start()
+        self.addCleanup(present.stop)
 
     def outputs(self):
         return list(config.OUTPUT_DIR.glob("*")) if config.OUTPUT_DIR.exists() else []

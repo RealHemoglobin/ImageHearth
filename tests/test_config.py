@@ -118,7 +118,13 @@ class PackageData(unittest.TestCase):
         names = {path.name for path in config.WORKFLOWS_DIR.glob("*.json")}
         self.assertEqual(
             names,
-            {"sdxl_turbo.json", "flux_dev.json", "flux_kontext_dev_basic.json"},
+            {
+                "sdxl_turbo.json",
+                "flux_dev.json",
+                "flux_kontext_dev_basic.json",
+                "flux_dev_gguf.json",
+                "flux_kontext_dev_gguf.json",
+            },
         )
 
     def test_skill_and_node_resolve_from_the_package(self):

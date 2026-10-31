@@ -249,4 +249,6 @@ class McpProtocol(EngineTestCase):
 
         text = replies[3]["result"]["content"]
         self.assertNotIn("flux_kontext_dev_basic", json.dumps(text))
-        self.assertIn("sdxl_turbo", json.dumps(text))
+        # Una carpeta de usuario vacía no tiene modelos: la lista está vacía y no falla.
+        self.assertFalse(replies[3]["result"].get("isError"))
+        self.assertNotIn("sdxl_turbo", json.dumps(text))

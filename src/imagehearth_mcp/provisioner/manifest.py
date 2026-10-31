@@ -2,13 +2,14 @@
 
 import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import resources
 
 from imagehearth_mcp.provisioner import ProvisionError
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _REVISION = re.compile(r"[0-9a-f]{40}")
+DESKTOP_PLATFORMS = ("linux", "windows")
 
 
 @dataclass(frozen=True)
@@ -33,11 +34,25 @@ class Model:
 
 
 @dataclass(frozen=True)
+class NodePin:
+    """Nodo personalizado de ComfyUI, fijado por commit y SHA-256."""
+
+    name: str
+    folder: str
+    url: str
+    sha256: str
+    license: str
+    packages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Profile:
     name: str
     description: str
     min_vram_mib: int
     models: tuple[Model, ...]
+    platforms: tuple[str, ...] = DESKTOP_PLATFORMS
+    nodes: tuple[NodePin, ...] = ()
 
     @property
     def bytes(self):
@@ -59,6 +74,7 @@ class TorchPin:
     index: str
     packages: tuple[str, ...]
     min_driver: int | None
+    install_bytes: int | None = None
 
 
 @dataclass(frozen=True)
@@ -68,15 +84,47 @@ class Manifest:
     licenses: dict[str, License]
     models: dict[str, Model]
     profiles: dict[str, Profile]
+    nodes: dict[str, NodePin] = field(default_factory=dict)
 
     def licenses_for(self, profile):
         keys = [self.comfyui.license]
 
-        for model in profile.models:
-            if model.license not in keys:
-                keys.append(model.license)
+        for item in (*profile.nodes, *profile.models):
+            if item.license not in keys:
+                keys.append(item.license)
 
         return [self.licenses[key] for key in keys]
+
+    def profiles_for(self, system):
+        """Los perfiles de un sistema, de menor a mayor."""
+        return {
+            name: profile
+            for name, profile in self.profiles.items()
+            if system in profile.platforms
+        }
+
+    def install_bytes(self, torch):
+        """Lo que ocupan ComfyUI y su entorno, que depende de PyTorch."""
+        if torch is not None and torch.install_bytes:
+            return torch.install_bytes
+
+        return self.comfyui.install_bytes
+
+    def models_for(self, workflow):
+        return tuple(m for m in self.models.values() if workflow in m.workflows)
+
+    def minimum_profile(self, workflow, system):
+        """El menor perfil del sistema con todos los modelos del workflow."""
+        required = set(self.models_for(workflow))
+
+        if not required:
+            return None
+
+        for profile in self.profiles_for(system).values():
+            if required <= set(profile.models):
+                return profile
+
+        return None
 
 
 def parse(values):
@@ -118,12 +166,33 @@ def parse(values):
 
             models[model.name] = model
 
+        nodes = {
+            name: NodePin(
+                name,
+                entry["folder"],
+                entry["url"],
+                entry["sha256"],
+                entry["license"],
+                tuple(entry["packages"]),
+            )
+            for name, entry in values.get("nodes", {}).items()
+        }
+
+        for node in nodes.values():
+            if not _SHA256.fullmatch(node.sha256):
+                raise ValueError(f"{node.name}: invalid sha256")
+
+            if node.license not in licenses:
+                raise ValueError(f"{node.name}: unknown license {node.license}")
+
         profiles = {
             name: Profile(
                 name,
                 entry["description"],
                 entry["min_vram_mib"],
                 tuple(models[item] for item in entry["models"]),
+                tuple(entry["platforms"]),
+                tuple(nodes[item] for item in entry.get("nodes", ())),
             )
             for name, entry in values["profiles"].items()
         }
@@ -148,13 +217,14 @@ def parse(values):
                 entry["index"],
                 tuple(entry["packages"]),
                 entry.get("min_driver"),
+                entry.get("install_bytes"),
             )
             for name, entry in values["pytorch"].items()
         }
     except (KeyError, TypeError, ValueError) as error:
         raise ProvisionError(f"Invalid models.toml: {error!r}") from error
 
-    return Manifest(comfyui, pytorch, licenses, models, profiles)
+    return Manifest(comfyui, pytorch, licenses, models, profiles, nodes)
 
 
 def load():

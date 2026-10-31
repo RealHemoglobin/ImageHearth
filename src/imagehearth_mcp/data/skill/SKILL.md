@@ -14,6 +14,9 @@ It uses:
 - SDXL Turbo for fast generation.
 - FLUX Dev for high-quality generation.
 - FLUX Kontext for image editing and multi-reference composition.
+
+What is available depends on the profile the user installed. Only SDXL Turbo is present with `fast`; `quality` adds FLUX Dev and `full` adds FLUX Kontext.
+
 - Ollama for local LLM inference.
 - A centralized orchestration layer for GPU memory management.
 - MCP as the agent-independent interface.
@@ -125,9 +128,7 @@ Parameters:
 - `height` (integer, optional): Default 1024.
 - `negative_prompt` (string, optional).
 
-Available generation workflows:
-- `sdxl_turbo`
-- `flux_dev`
+Call `list_workflows` to see the generation workflows that are installed.
 
 Prefer `create_image` unless explicit workflow selection is necessary.
 
@@ -146,9 +147,9 @@ Preserve all elements not explicitly requested to change.
 
 ### list_workflows
 
-List the generation workflows available in ImageHearth.
+List the generation workflows whose models are installed.
 
-Use this tool to inspect the available workflow catalog.
+Use this tool to inspect the available workflow catalog. It is checked on every call, so a later `setup` shows up without a restart.
 
 The internal Kontext template is not listed and cannot be selected. Use `create_image` or `edit_image` for Kontext operations.
 
@@ -238,7 +239,9 @@ Never claim that an image was generated unless the tool returned successfully.
 
 ## Error handling
 
-If an operation fails:
+If an operation fails because its models are not installed, the error names the `imagehearth-mcp setup --profile` command to run. Tell the user: the download needs their consent. Do not retry with another model unless they ask.
+
+If an operation fails for any other reason:
 
 1. Call `get_engine_status`.
 2. Check ComfyUI and Ollama status.
