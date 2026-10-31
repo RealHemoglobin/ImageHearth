@@ -20,7 +20,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 | Fase | Resultado | Tamaño | Depende de |
 |---|---|---|---|
-| 0. Preparación | Decisiones cerradas y CI base | S | — |
+| 0. Preparación | Decisiones cerradas y verificación local | S | — |
 | 1. Empaquetado | Se instala como paquete, aún en Linux | M | 0 |
 | 2. Portabilidad | El servidor funciona en los tres sistemas; Ollama opcional | L | 1 |
 | 3. Instalador | `setup` y `doctor` dejan un sistema funcionando | XL | 2 |
@@ -42,10 +42,10 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - [x] Revisar las licencias de FLUX y SDXL Turbo.
 - [x] Conseguir acceso a hardware Windows con NVIDIA. El Mac con Apple Silicon sigue pendiente para la fase 4.
 - [x] Fusionar `robustez` en `main`: sus commits ya estaban en `main`.
-- [ ] Crear CI en Linux con los tests actuales y dejarlo en verde en `main`.
+- [x] ~~Crear CI en Linux~~ Descartado: no se usan GitHub Actions. La verificación es local con `scripts/check.sh` (lint, tests y tests contra el wheel instalado).
 - [x] Definir el entorno de desarrollo, de forma que los tests no dependan del venv de ComfyUI.
 
-**Listo cuando:** el CI está en verde en `main` y no hay decisiones abiertas que bloqueen la fase 1.
+**Listo cuando:** `scripts/check.sh` pasa en `main` y no hay decisiones abiertas que bloqueen la fase 1.
 
 ## Fase 1: Empaquetado
 
@@ -80,7 +80,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - [ ] **Si falta el nodo:** usar como alternativa la memoria libre de `/system_stats`, avisar y no entrar en bucle de `recovery_required`.
 - [ ] Registrar con PID la instancia gestionada y no reiniciar ni matar nunca una ajena.
 - [ ] Traducir mensajes a inglés y renombrar `ADVERTENCIA` a `WARNING`, junto con la skill.
-- [ ] Ampliar el CI a Windows y macOS y añadir la prueba de contrato con `/object_info`.
+- [ ] Ejecutar `scripts/check.sh` (con una versión para PowerShell) en las máquinas Windows y macOS, y añadir la prueba de contrato con `/object_info`.
 
 **Listo cuando:**
 - Los tests pasan en los tres sistemas.
@@ -166,7 +166,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 **Objetivo:** cualquiera con Linux o Windows y NVIDIA puede instalarlo.
 
 - [ ] `install.sh` e `install.ps1`, breves y legibles: instalar uv, instalar la herramienta con versión fijada y lanzar `setup`.
-- [ ] Publicar con GitHub Actions al crear una etiqueta: PyPI con Trusted Publishing y GitHub Release.
+- [ ] Publicar desde la máquina del mantenedor, sin GitHub Actions: `uv publish` a PyPI con un token y `gh release create` para la GitHub Release.
 - [ ] Publicar en el registro oficial de MCP con `server.json`.
 - [ ] Añadir `.mcpb` para Claude Desktop solo si `connect` no es suficiente.
 - [ ] Reescribir el README: la instalación de un comando pasa a ser la principal y se quita el aviso de desarrollo.
@@ -182,7 +182,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - [ ] Integrar macOS como nivel 2.
 - [ ] Probar la matriz completa de niveles 1 y 2 antes de publicar.
 - [ ] Definir la política de versiones: la versión de ImageEngine fija ComfyUI y modelos, y `update` migra entre ellas.
-- [ ] Ejecutar cada semana la prueba de contrato contra el último ComfyUI, para detectar roturas antes de actualizar la versión fijada.
+- [ ] Ejecutar periódicamente, con una tarea programada local, la prueba de contrato contra el último ComfyUI, para detectar roturas antes de actualizar la versión fijada.
 - [ ] Revisión de seguridad: scripts de instalación, descargas, edición de configuración de agentes y lectura de rutas locales.
 
 **Listo cuando:** se cumplen los cinco criterios de éxito de la misión.
@@ -200,7 +200,7 @@ Por valorar según la demanda, sin compromiso: workflows personalizados, LoRAs, 
 | Sin hardware Mac o Windows para probar | **Alto** | Conseguirlo en la fase 0; sin él, no anunciar soporte |
 | Kontext no funciona bien en MPS | Alto | Spike temprano y plan B |
 | Los repositorios de modelos desaparecen o pasan a exigir aprobación | Alto | Manifiesto actualizable, `HF_TOKEN`, errores claros y orígenes alternativos |
-| Una actualización de ComfyUI rompe algo | Medio | Versión fijada y prueba de contrato semanal |
+| Una actualización de ComfyUI rompe algo | Medio | Versión fijada y prueba de contrato periódica en local |
 | Mantener la matriz de PyTorch | Medio | Limitar el nivel 1 a NVIDIA y fijar versiones |
 | Malentendidos sobre licencias no comerciales | Medio | Consentimiento explícito y aviso en README e instalador |
 | Instaladores `curl \| sh` y descargas grandes generan desconfianza | Medio | Scripts cortos, alternativa manual con `uv tool install` y resumen antes de actuar |

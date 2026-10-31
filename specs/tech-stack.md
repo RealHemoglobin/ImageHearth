@@ -84,7 +84,7 @@ Tamaños medidos. La VRAM es orientativa y debe medirse en la fase 4: solo hay d
 ## Herramientas de desarrollo
 
 - `pyproject.toml` con `hatchling`, `uv` y `uv.lock`.
-- `pytest` sobre los tests actuales, `ruff` y GitHub Actions.
-- CI en `ubuntu`, `windows` y `macos`.
-- Prueba de contrato: arrancar ComfyUI en CPU en CI y comprobar con `/object_info` que existen todos los nodos que usan los workflows. No requiere descargar modelos.
-- Publicación en PyPI con Trusted Publishing, sin tokens guardados.
+- `pytest` sobre los tests actuales y `ruff`, ejecutados en local con `scripts/check.sh`. No se usan GitHub Actions.
+- Verificación manual en `ubuntu`, `windows` y `macos` antes de cada versión.
+- Prueba de contrato: arrancar ComfyUI en CPU en local y comprobar con `/object_info` que existen todos los nodos que usan los workflows. No requiere descargar modelos.
+- Publicación en PyPI con `uv publish` y un token del mantenedor, sin Trusted Publishing porque no hay CI.
