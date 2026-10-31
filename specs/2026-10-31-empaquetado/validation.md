@@ -83,6 +83,6 @@ No se exige cobertura mínima. `tech-stack.md` no define ninguna otra puerta de 
 | Contenido del wheel | Contiene workflows, skill, nodo y ambas licencias; 0 entradas de `tests/` o `specs/` | 2026-10-31 |
 | Ejecución del CI en el PR | Pendiente de implementación | |
 | Usuario temporal de Linux | Simulado con un `HOME` vacío (sin crear un usuario real): instalación del wheel con `uv tool install`, 7 herramientas por stdio, error con la ruta buscada, datos solo en carpetas de `platformdirs`. Falta repetirlo con un usuario real | 2026-10-31 |
-| Migración de agentes y skill | Pendiente de implementación | |
-| Generación real con `fast`, `quality` y Kontext | Pendiente de implementación | |
+| Migración de agentes y skill | Copias `*.bak-20261031-010019` de `~/.claude.json` y `~/.codex/config.toml` (permisos 600 en la de Claude); entradas `imagehearth` con `~/.local/bin/imagehearth-mcp`; enlace `~/.claude/skills/imagehearth` al paquete instalado. Falta reiniciar los agentes y listar las herramientas en cada uno | 2026-10-31 |
+| Generación real con `fast`, `quality` y Kontext | Las tres OK con el comando instalado por stdio; imágenes en `~/Pictures/ImageHearth/`; sin sesión pendiente. No se comprobó la restauración de Ollama | 2026-10-31 |
 | Ejecución del CI en `main` | Pendiente de implementación | |
