@@ -3,6 +3,7 @@
 import io
 import json
 import logging
+import os
 import shutil
 import tempfile
 import threading
@@ -29,6 +30,22 @@ get_logger("tests")
 for _handler in list(logging.getLogger("imagehearth").handlers):
     if type(_handler) is logging.StreamHandler:
         logging.getLogger("imagehearth").removeHandler(_handler)
+
+
+def home_env(home):
+    """Entorno de un subproceso cuyas carpetas de usuario caen dentro de `home`."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("IMAGEHEARTH_", "XDG_"))
+    }
+    env["HOME"] = str(home)
+    # En Windows, HOME no cuenta: Path.home() usa USERPROFILE y platformdirs
+    # pregunta al sistema salvo que se fuerce con estas variables.
+    env["USERPROFILE"] = str(home)
+    env["WIN_PD_OVERRIDE_LOCAL_APPDATA"] = str(home / "AppData" / "Local")
+    env["WIN_PD_OVERRIDE_APPDATA"] = str(home / "AppData" / "Roaming")
+    return env
 
 
 def png_bytes():

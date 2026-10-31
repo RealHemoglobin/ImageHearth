@@ -18,7 +18,7 @@ from imagehearth_mcp.engine.validation import (
     validate_dimensions,
 )
 from imagehearth_mcp.engine.workflow_runner import run_workflow
-from tests.harness import EngineTestCase
+from tests.harness import EngineTestCase, home_env
 
 
 class KontextReferences(EngineTestCase):
@@ -142,7 +142,7 @@ class Logging(EngineTestCase):
 
     def test_two_processes_write_their_own_file(self):
         home = self.tmp / "home"
-        env = {**os.environ, "XDG_STATE_HOME": str(home), "HOME": str(home)}
+        env = home_env(home)
         processes = [
             subprocess.Popen(
                 [sys.executable, "-c", self.SCRIPT],
@@ -209,12 +209,7 @@ class McpProtocol(EngineTestCase):
         self.addCleanup(shutil.rmtree, home, True)
 
         # El comando instalado, con un HOME vacío: sin configuración de nadie.
-        env = {
-            key: value
-            for key, value in os.environ.items()
-            if not key.startswith(("IMAGEHEARTH_", "XDG_"))
-        }
-        env["HOME"] = str(home)
+        env = home_env(home)
 
         process = subprocess.Popen(
             [str(Path(sys.executable).parent / "imagehearth-mcp")],

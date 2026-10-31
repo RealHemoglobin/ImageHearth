@@ -66,10 +66,10 @@ No se exige cobertura mínima. La puerta de calidad obligatoria de [tech-stack](
 
 ### Windows con NVIDIA (no bloquea el merge)
 
-- [ ] `scripts\check.ps1` en verde.
-- [ ] Generación real con ComfyUI instalado a mano.
-- [ ] Matar el proceso a mitad de sesión: la recuperación funciona.
-- [ ] Los logs se crean sin errores de renombrado y `os.replace` no falla por bloqueos transitorios.
+- [x] `scripts\check.ps1` en verde.
+- [x] Generación real con ComfyUI instalado a mano.
+- [x] Matar el proceso a mitad de sesión: la recuperación funciona.
+- [x] Los logs se crean sin errores de renombrado y `os.replace` no falla por bloqueos transitorios.
 
 Si no se hace antes de fusionar, se registra en la evidencia como pendiente y la fase 2 no se da por cerrada en el roadmap hasta completarlo.
 
@@ -87,7 +87,7 @@ Si no se hace antes de fusionar, se registra en la evidencia como pendiente y la
 - [x] Instalación local migrada: paquete reinstalado y nodo antiguo sustituido.
 - [ ] Roadmap actualizado con las tareas de la fase 2 verificadas.
 - [ ] Cambios revisados por el usuario, que realiza el commit.
-- [ ] Windows: resultado documentado en la evidencia (hecho o pendiente).
+- [x] Windows: resultado documentado en la evidencia (hecho o pendiente).
 
 ## Evidencia
 
@@ -102,6 +102,6 @@ Si no se hace antes de fusionar, se registra en la evidencia como pendiente y la
 | Instancia ajena de ComfyUI intacta | Solo tests (no se mata ni se reinicia); sin prueba real | 2026-10-31 |
 | Recuperación tras matar el proceso en Linux | Real: `kill -9` a ComfyUI y la siguiente generación lo relanza y registra el nuevo PID | 2026-10-31 |
 | Edición con Kontext tras la migración | Pendiente de prueba real | |
-| `scripts\check.ps1` en Windows | Pendiente: sin acceso en esta sesión | |
-| Generación real y recuperación en Windows | Pendiente | |
+| `scripts\check.ps1` en Windows | Verde: ruff y 92 tests, también contra el wheel. `scripts/check.sh` en Linux falta por repetir con estos cambios en los tests | 2026-10-31 |
+| Generación real, recuperación y logs en Windows | Correctos, según confirma el usuario (RTX 4090 y ComfyUI instalado a mano) | 2026-10-31 |
 | macOS | Sin verificar, no anunciado | |

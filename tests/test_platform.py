@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import psutil
 import requests
 
 from imagehearth_mcp.engine import comfyui_manager, config, gpu
@@ -88,10 +89,29 @@ class Processes(unittest.TestCase):
         self.addCleanup(process.kill)
         time.sleep(0.3)
 
-        self.assertIn(process.pid, processes.find_by_cwd_and_script(Path.cwd(), "main.py"))
-        self.assertNotIn(
-            process.pid, processes.find_by_cwd_and_script(Path.cwd() / "x", "main.py")
+        # En Windows, el python.exe de un venv es un lanzador: el intérprete que
+        # ejecuta el script es su hijo.
+        launcher = psutil.Process(process.pid)
+        expected = {process.pid} | {child.pid for child in launcher.children()}
+
+        self.assertTrue(
+            expected & set(processes.find_by_cwd_and_script(Path.cwd(), "main.py"))
         )
+        self.assertFalse(
+            expected & set(processes.find_by_cwd_and_script(Path.cwd() / "x", "main.py"))
+        )
+
+    def test_stopping_the_started_process_stops_the_interpreter(self):
+        for stop in (lambda pid: processes.terminate(pid, 10), processes.kill):
+            process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+            self.addCleanup(process.kill)
+            time.sleep(0.3)
+            children = psutil.Process(process.pid).children()
+
+            self.assertTrue(stop(process.pid))
+            _, alive = psutil.wait_procs(children, timeout=10)
+
+            self.assertEqual(alive, [])
 
     def test_reused_pid_is_not_the_same_process(self):
         created = processes.create_time(os.getpid())

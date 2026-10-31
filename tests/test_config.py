@@ -1,5 +1,6 @@
 import importlib
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from imagehearth_mcp.engine import config
+from tests.harness import home_env
 
 ENV_KEYS = (
     "IMAGEHEARTH_CONFIG_FILE",
@@ -24,7 +26,7 @@ class ConfigLoading(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="imagehearth-test-config-"))
-        self.addCleanup(subprocess.run, ["rm", "-rf", str(self.tmp)])
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.addCleanup(importlib.reload, config)
 
     def load(self, toml=None, **env):
@@ -101,19 +103,12 @@ class ConfigLoading(unittest.TestCase):
 class ImportHasNoSideEffects(unittest.TestCase):
     def test_import_writes_nothing(self):
         home = Path(tempfile.mkdtemp(prefix="imagehearth-test-home-"))
-        self.addCleanup(subprocess.run, ["rm", "-rf", str(home)])
-
-        env = {
-            k: v
-            for k, v in os.environ.items()
-            if not k.startswith(("IMAGEHEARTH_", "XDG_"))
-        }
-        env["HOME"] = str(home)
+        self.addCleanup(shutil.rmtree, home, True)
 
         code = (
             "import imagehearth_mcp.server, imagehearth_mcp.engine.status"
         )
-        subprocess.run([sys.executable, "-c", code], env=env, check=True)
+        subprocess.run([sys.executable, "-c", code], env=home_env(home), check=True)
 
         self.assertEqual(list(home.rglob("*")), [])
 
