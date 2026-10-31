@@ -16,7 +16,7 @@ ImageHearth is an [MCP](https://modelcontextprotocol.io) server that connects ag
 - *"Change the background of `photo.png` to a snowy mountain"*: FLUX Kontext.
 - *"Combine these three pictures into one scene"*: up to six reference images.
 
-If you also use [Ollama](https://ollama.com), ImageHearth frees its models from GPU memory while generating and restores them afterwards.
+If you also run local language models, ImageHearth frees them from GPU memory while generating and restores them afterwards. Ollama has been tested for real; LM Studio, llama.cpp and vLLM only against simulated servers.
 
 ## Requirements
 
@@ -42,7 +42,11 @@ Measured with `scripts/measure_profiles.py` at 1024x1024 (Kontext with one refer
 - The Windows measurements are still pending.
 
 > [!NOTE]
-> Ollama is optional. If it isn't running, ImageHearth skips it and the status stays `ready`. Set `ollama_mode = "off"` to never touch it.
+> Local model servers are optional. If one isn't running, ImageHearth skips it and the status stays `ready`. See `memory_mode` in the [settings](#settings-optional).
+
+### A language model and images on the same GPU
+
+Measured on the same RTX 4090 with `qwen3.5:9b`, which needs 14.3 GB with Ollama's default context and 5.9 GB with `num_ctx` 8192. With `memory_mode = "auto"` it doesn't matter: the model is unloaded while generating and comes back afterwards. To keep both loaded (`manual` or `off`), the card must hold the language model plus the workflow's peak: with 5.9 GB and SDXL Turbo, the GPU peaked at 19.2 GB, about 3 GB of it from the desktop. With 5.9 GB and FLUX Dev it filled the 24 GB and worked, in 14-16 s, with `memory_mode = "off"`. In `manual`, generation is refused if free memory is below 8 GB for SDXL Turbo or 16 GB for FLUX, so that same case is refused there.
 
 ## Installation
 
@@ -108,7 +112,7 @@ It applies the ComfyUI version and models pinned by this version of ImageHearth.
 imagehearth-mcp uninstall
 ```
 
-It shows what it will remove and removes only what setup installed. Models need a separate confirmation (`--remove-models` or `--keep-models` to decide in advance, `--yes` to skip the first question). A ComfyUI or models that were already there are never touched. To remove the command itself, run `uv tool uninstall imagehearth-mcp`.
+It shows what it will remove and removes only what setup and `connect` installed. Models need a separate confirmation (`--remove-models` or `--keep-models` to decide in advance, `--yes` to skip the first question). A ComfyUI or models that were already there are never touched. To remove the command itself, run `uv tool uninstall imagehearth-mcp`.
 
 ### Settings (optional)
 
@@ -119,44 +123,38 @@ comfy_dir = "~/AI/ComfyUI"      # where ComfyUI is installed
 comfy_port = 8188               # port ComfyUI listens on
 output_dir = "~/Pictures/ImageHearth"
 ollama_url = "http://127.0.0.1:11434"
-ollama_mode = "auto"            # "auto" uses Ollama if it responds; "off" never touches it
+memory_mode = "auto"            # "auto", "off" or "manual", see below
+lmstudio_url = "http://127.0.0.1:1234"
+llamacpp_url = "http://127.0.0.1:8080"
+vllm_url = "http://127.0.0.1:8000"
 ```
 
-Each key can also be set with an environment variable: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL` and `IMAGEHEARTH_OLLAMA_MODE`. Variables win over the file, and the file wins over the defaults.
+Each key can also be set with an environment variable: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL`, `IMAGEHEARTH_LMSTUDIO_URL`, `IMAGEHEARTH_LLAMACPP_URL`, `IMAGEHEARTH_VLLM_URL` and `IMAGEHEARTH_MEMORY_MODE`. Variables win over the file, and the file wins over the defaults.
+
+| `memory_mode` | What happens to your language models |
+|---|---|
+| `auto` | Unloaded before generating and restored afterwards. If a server can't unload (see below), you get a warning with what to do, or an error before starting if the memory isn't enough |
+| `manual` | Never touched. Generation fails with an explanation if the free memory isn't enough |
+| `off` | Never touched, and memory isn't checked |
+
+The older `ollama_mode` still works as an alias for `auto` or `off`; `memory_mode` wins if both are set.
+
+| Server | Can ImageHearth free its memory? |
+|---|---|
+| Ollama | Yes |
+| LM Studio | Yes, with its REST API v1. Older versions: warning only |
+| llama.cpp | Only in router mode. A single-model `llama-server` can't unload: warning only |
+| vLLM | Only when started with `VLLM_SERVER_DEV_MODE=1` and `--enable-sleep-mode`. Otherwise: warning only |
 
 ### 4. Connect your agent
 
-**Claude Code**
-
 ```bash
-claude mcp add --scope user imagehearth -- ~/.local/bin/imagehearth-mcp
+imagehearth-mcp connect --detect
 ```
 
-**Codex**: add this to `~/.codex/config.toml`, replacing `YOUR_USER`:
+It finds the installed clients and offers to connect them. You can also run `connect <client>`, or `connect --print <client>` to see the snippet without changing anything. It makes a backup, keeps your other entries and can be repeated.
 
-```toml
-[mcp_servers.imagehearth]
-command = "/home/YOUR_USER/.local/bin/imagehearth-mcp"
-```
-
-**Other MCP-compatible agents**: find their MCP settings file and add:
-
-```json
-{
-  "mcpServers": {
-    "imagehearth": {
-      "command": "/home/YOUR_USER/.local/bin/imagehearth-mcp"
-    }
-  }
-}
-```
-
-**Optional:** the file [`SKILL.md`](src/imagehearth_mcp/data/skill/SKILL.md) tells agents how to get the best results. In Claude Code, enable it with:
-
-```bash
-mkdir -p ~/.claude/skills
-ln -s "$("$(uv tool dir)/imagehearth-mcp/bin/python" -c 'from imagehearth_mcp.engine import config; print(config.data_path("skill"))')" ~/.claude/skills/imagehearth
-```
+**Tested:** Claude Code, Codex, opencode, Hermes and pi. **Untested**, checked against their documentation only: Claude Desktop, Gemini CLI, Cursor, VS Code and JetBrains. Details and snippets are in [`docs/agents.md`](docs/agents.md). You can also ask an agent to do the installation with [`llms-install.md`](llms-install.md).
 
 ### 5. Try it
 
@@ -173,6 +171,7 @@ Run `imagehearth-mcp doctor`, or ask your agent to *"check the ImageHearth statu
 | Status | Meaning | What to do |
 |---|---|---|
 | `ready` | Everything works | Nothing |
+| `not_installed` | ComfyUI or the models are missing | Run the command in `issues`, or ask your agent to install it |
 | `busy` | Another image is being generated | Wait |
 | `degraded` | Something is missing | Read `issues`. Usually the status node is missing or outdated. Without it generation still works, but GPU memory is checked less reliably |
 | `recovery_required` | A previous session was interrupted | Ask your agent to *"recover the engine"* |

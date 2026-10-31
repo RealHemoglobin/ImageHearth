@@ -11,6 +11,7 @@ from imagehearth_mcp.platform import locks, processes
 from imagehearth_mcp.provisioner import (
     ProvisionError,
     comfyui,
+    connect,
     detect,
     manifest,
     models,
@@ -207,7 +208,10 @@ def _uninstall(args):
     for setting in records.settings:
         print(f"  {setting['key']} in {config.CONFIG_FILE} (restoring the previous value)")
 
-    if not owned and not records.settings:
+    for connection in records.connections:
+        print(f"  The ImageHearth entry of {connection['client']} ({connection['path']})")
+
+    if not owned and not records.settings and not records.connections:
         print("  Nothing besides, optionally, the downloaded models.")
 
     print("Will not touch anything setup did not install.")
@@ -247,6 +251,8 @@ def _uninstall(args):
     for entry in owned:
         attempt(entry, _remove_comfy_dir if entry["kind"] == "comfyui" else _remove)
 
+    failures.extend(connect.disconnect_all(records))
+
     if not failures:
         try:
             settings.restore(config.CONFIG_FILE, records)
@@ -282,6 +288,8 @@ def _uninstall(args):
 
         records.forget(path)
 
+    # `setup_status` no debe informar de una instalación que ya no existe.
+    config.SETUP_JOB_FILE.unlink(missing_ok=True)
     kept = records.owned("model")
 
     if kept:

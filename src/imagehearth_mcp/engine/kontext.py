@@ -272,7 +272,7 @@ def generate(
 
     image_id = f"kontext_{uuid.uuid4().hex[:12]}"
 
-    with generation_session() as session:
+    with generation_session(workflow_name) as session:
         uploaded_images = [
             upload_image(path, index, session.run_id)
             for index, path in enumerate(paths, start=1)

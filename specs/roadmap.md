@@ -143,22 +143,24 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 **Principio:** el servidor MCP estándar por stdio es el producto. Cada agente o editor es solo una forma de conectarlo, y el soporte de uno nuevo no debe exigir cambios en el motor.
 
-- [ ] `connect <agente>` y `connect --detect`, usando la CLI oficial si existe o editando su configuración con copia de seguridad.
-- [ ] **`connect --print <agente>`:** imprime el fragmento de configuración (JSON, TOML o YAML) sin tocar nada, para cualquier cliente que no esté soportado, y una página `docs/agents.md` con el fragmento de cada uno.
+- [x] `connect <agente>` y `connect --detect`, usando la CLI oficial si existe o editando su configuración con copia de seguridad.
+- [x] **`connect --print <agente>`:** imprime el fragmento de configuración (JSON, TOML o YAML) sin tocar nada, para cualquier cliente que no esté soportado, y una página `docs/agents.md` con el fragmento de cada uno.
 - [ ] Soporte inicial de agentes: Claude Code, Claude Desktop, Codex, Gemini CLI, **opencode y Hermes**. Verificar cada formato contra su documentación y probarlo con un modelo local real.
 - [ ] Soporte inicial de editores: Cursor, VS Code e **IntelliJ y otros JetBrains**. Verificar cada configuración contra su documentación.
-- [ ] **pi:** comprobar si admite MCP. Si no, valorar un adaptador pequeño (extensión o llamada a la CLI) o documentar que no está soportado.
-- [ ] **Pasar lo esencial de la skill a `FastMCP(instructions=...)`, de forma obligatoria:** los agentes con modelos locales no cargan skills. Las descripciones de cada herramienta deben bastar por sí solas. Dejar la skill como complemento e instalarla donde el agente la admita.
-- [ ] **Probar con modelos locales pequeños** (por ejemplo 7B–14B con Ollama o llama.cpp) en opencode y Hermes: elegir la herramienta correcta, pasar parámetros válidos y relatar el resultado. Documentar el tamaño mínimo que funciona.
-- [ ] Hacer que el servidor arranque sin ComfyUI y que cada herramienta explique qué falta.
-- [ ] Añadir `setup_status` y `setup_start`. El segundo exige perfil y aceptación explícita, lanza un proceso que sobrevive a la desconexión e informa de su progreso. Las instrucciones obligan al agente a preguntar antes, porque descarga decenas de GB.
+- [x] **pi:** comprobar si admite MCP. Si no, valorar un adaptador pequeño (extensión o llamada a la CLI) o documentar que no está soportado.
+- [x] **Pasar lo esencial de la skill a `FastMCP(instructions=...)`, de forma obligatoria:** los agentes con modelos locales no cargan skills. Las descripciones de cada herramienta deben bastar por sí solas. Dejar la skill como complemento e instalarla donde el agente la admita.
+- [x] **Probar con modelos locales pequeños** (por ejemplo 7B–14B con Ollama o llama.cpp) en opencode y Hermes: elegir la herramienta correcta, pasar parámetros válidos y relatar el resultado. Documentar el tamaño mínimo que funciona.
+- [x] Hacer que el servidor arranque sin ComfyUI y que cada herramienta explique qué falta.
+- [x] Añadir `setup_status` y `setup_start`. El segundo exige perfil y aceptación explícita, lanza un proceso que sobrevive a la desconexión e informa de su progreso. Las instrucciones obligan al agente a preguntar antes, porque descarga decenas de GB.
 - [ ] Publicar `llms-install.md` para pedirle la instalación al agente.
-- [ ] Emitir progreso con `ctx.report_progress` durante la generación.
-- [ ] **Medir el plazo real de cada cliente.** Solo si alguno corta las generaciones, añadir `start_image_job` y `get_job`.
-- [ ] Devolver la ruta y, de forma opcional, la imagen como contenido MCP, manteniendo la ruta en la primera línea.
-- [ ] **Reducir las herramientas expuestas:** `create_image` cubre a `generate_image` y `edit_image`. Menos herramientas y parámetros más simples ayudan a los modelos pequeños. Mantener los nombres antiguos como alias solo si se mide que cuestan poco.
+- [x] Emitir progreso con `ctx.report_progress` durante la generación.
+- [x] **Medir el plazo real de cada cliente.** Solo si alguno corta las generaciones, añadir `start_image_job` y `get_job`.
+- [x] Devolver la ruta y, de forma opcional, la imagen como contenido MCP, manteniendo la ruta en la primera línea.
+- [x] **Reducir las herramientas expuestas:** `create_image` cubre a `generate_image` y `edit_image`. Menos herramientas y parámetros más simples ayudan a los modelos pequeños. Mantener los nombres antiguos como alias solo si se mide que cuestan poco.
 - [ ] **Compaginar con modelos locales en la misma GPU:** implementar `MemoryProvider` para llama.cpp (`llama-server`), LM Studio y vLLM, además de Ollama. Si el servidor no permite descargar el modelo, avisar con un mensaje accionable en lugar de fallar por falta de memoria. Documentar la VRAM necesaria para tener un modelo de lenguaje y la generación a la vez.
-- [ ] Opción `memory_mode` en `config.toml`: `auto`, `off` o `manual`. En `manual`, el motor no toca los modelos del usuario y solo comprueba la memoria libre antes de generar.
+- [x] Opción `memory_mode` en `config.toml`: `auto`, `off` o `manual`. En `manual`, el motor no toca los modelos del usuario y solo comprueba la memoria libre antes de generar.
+
+**Estado (2026-10-31):** pendientes sin marcar: Claude Desktop, Gemini CLI y los editores no se han probado con un cliente real; `llms-install.md` está escrito, pero ningún agente lo ha seguido; los proveedores de llama.cpp, LM Studio y vLLM solo tienen tests simulados. Ver la [evidencia](2026-10-31-integracion-agentes/validation.md#evidencia).
 
 **Listo cuando:**
 - En cada agente y editor soportado se puede conectar, generar con `fast`, generar con `quality` y editar con Kontext, partiendo de una configuración vacía.

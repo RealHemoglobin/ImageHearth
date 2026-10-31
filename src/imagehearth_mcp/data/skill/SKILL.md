@@ -17,9 +17,10 @@ It uses:
 
 What is available depends on the profile the user installed. Only SDXL Turbo is present with `fast`; `quality` adds FLUX Dev and `full` adds FLUX Kontext.
 
-- Ollama for local LLM inference.
 - A centralized orchestration layer for GPU memory management.
 - MCP as the agent-independent interface.
+
+The server's own instructions and tool descriptions are enough to use it. This skill only adds detail.
 
 All agents MUST use ImageHearth MCP tools for image operations.
 
@@ -39,6 +40,7 @@ Parameters:
 - `width` (integer, optional): Output width. Default: automatic.
 - `height` (integer, optional): Output height. Default: automatic.
 - `negative_prompt` (string, optional): Elements to avoid during generation. Only SDXL Turbo applies it; other backends return a warning.
+- `include_image` (boolean, optional): Also return the picture, for models with vision. Default: false, because it uses context. The path stays on the first line.
 
 ### Automatic routing
 
@@ -115,35 +117,7 @@ Combine multiple references:
         ]
     )
 
-## Specialized tools
-
-### generate_image
-
-Generate a new image using an explicitly selected workflow.
-
-Parameters:
-- `prompt` (string, required)
-- `workflow` (string, optional): Default `sdxl_turbo`.
-- `width` (integer, optional): Default 1024.
-- `height` (integer, optional): Default 1024.
-- `negative_prompt` (string, optional).
-
-Call `list_workflows` to see the generation workflows that are installed.
-
-Prefer `create_image` unless explicit workflow selection is necessary.
-
-### edit_image
-
-Edit one or more reference images using FLUX Kontext.
-
-Parameters:
-- `image_path` (string, required): Primary reference.
-- `prompt` (string, required): Requested modifications.
-- `additional_images` (array of strings, optional): Up to five additional references.
-- `width` (integer, optional): Default 0, preserves primary reference dimensions.
-- `height` (integer, optional): Default 0, preserves primary reference dimensions.
-
-Preserve all elements not explicitly requested to change.
+## Other tools
 
 ### list_workflows
 
@@ -151,17 +125,18 @@ List the generation workflows whose models are installed.
 
 Use this tool to inspect the available workflow catalog. It is checked on every call, so a later `setup` shows up without a restart.
 
-The internal Kontext template is not listed and cannot be selected. Use `create_image` or `edit_image` for Kontext operations.
+The internal Kontext template is not listed and cannot be selected. Use `create_image` with `image_paths` for Kontext operations.
 
 ### get_engine_status
 
 Check the current state of:
 - ComfyUI.
-- Ollama.
-- Loaded Ollama models.
+- Ollama and the other local model servers, under `memory`, with the `memory_mode` in use.
+- Loaded models.
 - GPU devices and VRAM information exposed by ComfyUI.
 - The overall `imageengine.status`:
   - `ready`: operational.
+  - `not_installed`: see `imageengine.issues`, or call `setup_status`.
   - `busy`: another generation holds the engine.
   - `degraded`: a dependency has a problem; see `imageengine.issues`.
   - `recovery_required`: an earlier session left work pending; see `imageengine.session`.
@@ -179,9 +154,17 @@ Use when ComfyUI is stopped or unavailable.
 
 ### recover_engine
 
-Resolve a pending session: release ComfyUI and restore the interrupted Ollama models. It never loads Ollama while ComfyUI may still hold GPU memory.
+Resolve a pending session: release ComfyUI and restore the interrupted language models. It never reloads them while ComfyUI may still hold GPU memory.
 
 Use only when `get_engine_status` reports `recovery_required`.
+
+### setup_status and setup_start
+
+`setup_status` shows what is installed, what is missing, each profile's size and licenses, and the progress of an installation. It changes nothing.
+
+`setup_start` installs ComfyUI and a profile. It needs `profile` and `accept_licenses`, refuses experimental profiles, and keeps running if the agent disconnects.
+
+Before calling `setup_start`, tell the user the profile, download size and licenses, and wait for their clear yes. Never accept licenses on their behalf.
 
 ## Image creation guidelines
 
@@ -195,7 +178,7 @@ Use only when `get_engine_status` reports `recovery_required`.
 
 ## Image editing guidelines
 
-1. Use `create_image` with reference images, or `edit_image` for direct editing.
+1. Use `create_image` with reference images.
 2. Supply the exact source image paths.
 3. Describe the requested modifications precisely.
 4. Explicitly identify elements that must remain unchanged.
@@ -209,17 +192,18 @@ ImageHearth manages GPU memory centrally.
 
 The orchestration layer:
 - Serializes generation sessions.
-- Detects loaded Ollama models. Ollama is optional: without it, or with `ollama_mode = "off"`, this step is skipped and the status is not `degraded`.
-- Unloads Ollama models before image generation.
+- Follows `memory_mode` (`auto`, `off` or `manual`, in `config.toml` or `IMAGEHEARTH_MEMORY_MODE`; `ollama_mode` still works as an alias, and `memory_mode` wins):
+  - `auto`: unloads the models of Ollama, LM Studio, llama.cpp router mode and vLLM with sleep mode before generating, and restores them afterwards. A server that isn't running is skipped and the status is not `degraded`. If a server can't unload its model, a warning says what to do, or the generation fails before starting if the memory is not enough.
+  - `manual`: never touches the user's models and fails before generating, with an explanation, if the free memory is not enough.
+  - `off`: never touches the user's models and doesn't check memory.
 - Executes ComfyUI workflows.
 - Releases ComfyUI models after generation.
-- Restores previously loaded Ollama models with their original settings.
 - Records each session on disk so an interrupted one can be recovered.
-- If ComfyUI does not release the GPU memory, restarts it once when its queue is empty (only if ImageHearth started that ComfyUI; a ComfyUI started by someone else is never restarted). If that fails, Ollama stays unloaded and the status becomes `recovery_required`.
+- If ComfyUI does not release the GPU memory, restarts it once when its queue is empty (only if ImageHearth started that ComfyUI; a ComfyUI started by someone else is never restarted). If that fails, the language models stay unloaded and the status becomes `recovery_required`.
 
 Agents MUST NOT:
 - Stop or restart ComfyUI during an ImageHearth operation.
-- Unload Ollama models manually.
+- Unload language models manually.
 - Modify GPU memory management.
 - Launch separate ComfyUI instances.
 - Submit workflows directly to ComfyUI.
@@ -241,10 +225,12 @@ Never claim that an image was generated unless the tool returned successfully.
 
 If an operation fails because its models are not installed, the error names the `imagehearth-mcp setup --profile` command to run. Tell the user: the download needs their consent. Do not retry with another model unless they ask.
 
+If it fails because too little GPU memory is free in `manual` mode, tell the user to free it.
+
 If an operation fails for any other reason:
 
 1. Call `get_engine_status`.
-2. Check ComfyUI and Ollama status.
+2. Check ComfyUI and the model servers.
 3. If the status is `recovery_required`, use `recover_engine`.
 4. If the status is `busy`, wait instead of retrying immediately.
 5. If ComfyUI is stopped, use `ensure_comfyui`.

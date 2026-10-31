@@ -5,11 +5,13 @@ from contextlib import contextmanager
 import requests
 
 from imagehearth_mcp.engine import (
+    catalog,
     comfyui_client,
     comfyui_manager,
     config,
     gpu,
     memory,
+    progress,
     state,
 )
 from imagehearth_mcp.engine.log import get_logger
@@ -34,6 +36,21 @@ def _loaded_models():
         return []
 
 
+def _movable(models):
+    return [model for model in models if model.get("unloadable", True)]
+
+
+def _check_free_memory(required, advice):
+    """Falla antes de generar si no cabe; sin dato de memoria libre, no bloquea."""
+    free = gpu.free_mib()
+
+    if free is not None and free < required:
+        raise MemoryError(
+            f"Only {free} MiB of GPU memory are free and this image needs about "
+            f"{required} MiB. {advice}"
+        )
+
+
 class Session:
     def __init__(self, run_id, models):
         self.run_id = run_id
@@ -41,6 +58,7 @@ class Session:
         self.prompt_id = None
         self.warnings = []
         self.generation_started = False
+        self.required_mib = 0
         self._warned_models = set()
         self._next_ollama_check = 0.0
 
@@ -55,16 +73,17 @@ class Session:
 
     def submit(self, workflow):
         # Otro agente ha podido recargar un modelo desde el inicio de la sesión.
-        loaded = _loaded_models()
+        loaded = _movable(_loaded_models())
 
         if loaded:
             log.warning(
-                "Ollama models reloaded: %s",
+                "Models reloaded: %s",
                 [model["name"] for model in loaded],
             )
             self.add_models(loaded)
             memory.get_provider().unload(loaded)
 
+        progress.stage("Generating the image")
         self.prompt_id = comfyui_client.submit(workflow)
         state.write(phase=state.GENERATING, prompt_id=self.prompt_id)
         return self.prompt_id
@@ -75,6 +94,7 @@ class Session:
 
     def check_ollama(self):
         """Avisa si se carga un modelo durante la generación, sin expulsarlo."""
+        progress.raise_if_cancelled()
         now = time.monotonic()
 
         if now < self._next_ollama_check:
@@ -83,9 +103,9 @@ class Session:
         self._next_ollama_check = now + config.OLLAMA_CHECK_INTERVAL
 
         try:
-            loaded = memory.get_provider().loaded()
+            loaded = _movable(memory.get_provider().loaded())
         except memory.ProviderUnavailable as error:
-            log.warning("Could not query Ollama: %s", error)
+            log.warning("Could not query the model servers: %s", error)
             return
 
         new = [m for m in loaded if m["name"] not in self._warned_models]
@@ -94,7 +114,7 @@ class Session:
             self._warned_models.update(m["name"] for m in new)
             self.add_models(new)
             self.warn(
-                "An Ollama model was loaded during generation: "
+                "A model was loaded during generation: "
                 f"{[m['name'] for m in new]}"
             )
 
@@ -270,7 +290,7 @@ def _restore(models, warnings):
     try:
         result = memory.get_provider().restore(models)
     except Exception as error:
-        warnings.append(f"Error restoring Ollama: {error}")
+        warnings.append(f"Error restoring models: {error}")
         return models
 
     log.info("Restoration result: %s", result)
@@ -287,8 +307,42 @@ def _mark_recovery(session, reason):
         session.warn(f"Could not save the session state: {error}")
 
 
+def _free_server_memory(session):
+    """Descarga lo que se pueda y avisa de lo que un servidor no deja descargar."""
+    mode = config.memory_mode()
+
+    if mode == "manual":
+        _check_free_memory(
+            session.required_mib,
+            "memory_mode is manual, so ImageHearth does not touch your models: "
+            "unload them yourself and try again, or set memory_mode to auto in "
+            f"{config.CONFIG_FILE}.",
+        )
+        return
+
+    loaded = _loaded_models()
+    log.info("Loaded models: %s", [m["name"] for m in loaded])
+    movable = _movable(loaded)
+
+    if movable:
+        progress.stage("Unloading local language models")
+        session.add_models(movable)
+        memory.get_provider().unload(movable)
+
+    for model in loaded:
+        if model not in movable:
+            advice = model.get("advice", "")
+            _check_free_memory(session.required_mib, advice)
+            session.warn(
+                f"{model['name']} stays loaded because its server can't unload it, "
+                f"so generation shares the GPU with it. {advice}"
+            )
+
+
 def _finish(session):
     """Limpia la sesión. Nunca lanza: los fallos quedan como advertencias."""
+    progress.stage("Releasing GPU memory")
+
     try:
         if session.generation_started:
             state.write(phase=state.RELEASING)
@@ -367,7 +421,7 @@ def ensure_comfyui():
 
 
 @contextmanager
-def generation_session():
+def generation_session(workflow=None):
     with _engine_lock(config.LOCK_TIMEOUT):
         run_id = uuid.uuid4().hex[:12]
         token = log_run_id.set(run_id)
@@ -376,6 +430,7 @@ def generation_session():
             # Antes de escribir el nuevo estado: si falla, el anterior se conserva.
             adopted = _reconcile()
             session = Session(run_id, adopted)
+            session.required_mib = catalog.required_vram_mib(workflow)
             state.write(
                 phase=state.UNLOADING,
                 run_id=run_id,
@@ -385,14 +440,9 @@ def generation_session():
             )
 
             try:
-                # Primero se libera la VRAM: ComfyUI puede no arrancar si Ollama la ocupa.
-                loaded = _loaded_models()
-                log.info("Ollama models: %s", [m["name"] for m in loaded])
-
-                if loaded:
-                    session.add_models(loaded)
-                    memory.get_provider().unload(loaded)
-
+                # Primero se libera la VRAM: ComfyUI puede no arrancar si otro la ocupa.
+                _free_server_memory(session)
+                progress.stage("Starting ComfyUI")
                 comfyui_manager.start()
 
                 session.generation_started = True

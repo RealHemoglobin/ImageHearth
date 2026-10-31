@@ -29,6 +29,7 @@ class InstallManifest:
         self.profile = values.get("profile")
         self.entries = values.get("entries", [])
         self.settings = values.get("settings", [])
+        self.connections = values.get("connections", [])
 
     @classmethod
     def load(cls, path):
@@ -68,6 +69,7 @@ class InstallManifest:
                     "profile": self.profile,
                     "entries": self.entries,
                     "settings": self.settings,
+                    "connections": self.connections,
                 },
                 indent=2,
             ),

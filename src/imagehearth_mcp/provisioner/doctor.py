@@ -26,6 +26,7 @@ LAYERS = (
     "gpu",
     "port",
     "ollama",
+    "memory",
 )
 RERUN_SETUP = "Run `imagehearth-mcp setup`."
 
@@ -328,8 +329,8 @@ def check_port(config, session):
 
 
 def check_ollama(config, session):
-    if config.OLLAMA_MODE == "off":
-        return Check("ollama", SKIP, "Disabled with ollama_mode = off.")
+    if config.memory_mode() != "auto":
+        return Check("ollama", SKIP, f"Not touched: memory_mode = {config.memory_mode()}.")
 
     try:
         running = session.get(f"{config.OLLAMA_API}/api/version", timeout=3).ok
@@ -340,6 +341,16 @@ def check_ollama(config, session):
         return Check("ollama", OK, f"Running at {config.OLLAMA_API}.")
 
     return Check("ollama", SKIP, "Not running. It is optional.")
+
+
+def check_memory():
+    """Modo de memoria y servidores detectados; ninguno de ellos es obligatorio."""
+    from imagehearth_mcp.engine import memory
+
+    state = memory.describe()
+    running = [name for name, item in state["servers"].items() if item["status"] == "running"]
+    found = f" Servers responding: {', '.join(running) or 'none'}." if state["mode"] == "auto" else ""
+    return Check("memory", OK, f"memory_mode = {state['mode']}.{found}", details=state)
 
 
 def collect(verify_hashes=False, session=requests, run=subprocess.run, detection=None):
@@ -379,6 +390,7 @@ def collect(verify_hashes=False, session=requests, run=subprocess.run, detection
         checks["gpu"] = check_gpu(detection)
         checks["port"] = check_port(config, session)
         checks["ollama"] = check_ollama(config, session)
+        checks["memory"] = check_memory()
 
     return [
         checks.get(layer) or Check(layer, SKIP, "Skipped: a layer it needs failed.")

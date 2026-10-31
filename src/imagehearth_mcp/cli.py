@@ -97,6 +97,32 @@ def _build_parser():
         action="store_true",
         help="Keep the models setup downloaded, without asking.",
     )
+    connect = commands.add_parser(
+        "connect", help="Add ImageHearth to an agent or editor, with a backup first."
+    )
+    connect.add_argument("agent", nargs="?", help="Which one. See --list.")
+    action = connect.add_mutually_exclusive_group()
+    action.add_argument(
+        "--print",
+        action="store_true",
+        dest="print_only",
+        help="Only print the configuration snippet; nothing is changed.",
+    )
+    action.add_argument(
+        "--detect",
+        action="store_true",
+        help="Find the installed clients and offer to connect them.",
+    )
+    action.add_argument(
+        "--list", action="store_true", dest="list_clients", help="List known clients."
+    )
+    action.add_argument(
+        "--remove", action="store_true", help="Remove ImageHearth from that client."
+    )
+    connect.add_argument("--yes", action="store_true", help="Don't ask for confirmation.")
+    connect.add_argument(
+        "--no-skill", action="store_true", help="Don't install the optional skill."
+    )
     return parser
 
 
@@ -110,6 +136,8 @@ def _run_command(args):
             from imagehearth_mcp.provisioner.doctor import run
         elif args.command == "setup":
             from imagehearth_mcp.provisioner.setup import run
+        elif args.command == "connect":
+            from imagehearth_mcp.provisioner.connect import run
         elif args.command == "update":
             from imagehearth_mcp.provisioner.maintenance import update as run
         else:
@@ -132,7 +160,13 @@ def main(argv=None):
     if args.command:
         sys.exit(_run_command(args))
 
+    from imagehearth_mcp.engine.errors import ConfigError
+
     # Se importa aquí para que --version no cargue el servidor.
-    from imagehearth_mcp.server import mcp
+    try:
+        from imagehearth_mcp.server import mcp
+    except ConfigError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        sys.exit(1)
 
     mcp.run(transport="stdio")

@@ -16,7 +16,7 @@ ImageHearth es un servidor [MCP](https://modelcontextprotocol.io) que conecta ag
 - *"Cambia el fondo de `foto.png` por una montaña nevada"*: FLUX Kontext.
 - *"Combina estas tres fotos en una sola escena"*: hasta seis imágenes de referencia.
 
-Si también usas [Ollama](https://ollama.com), ImageHearth libera sus modelos de la memoria de la GPU mientras genera y los restaura después.
+Si también usas modelos de lenguaje locales, ImageHearth los libera de la memoria de la GPU mientras genera y los restaura después. Ollama se ha probado de verdad; LM Studio, llama.cpp y vLLM, solo con servidores simulados.
 
 ## Requisitos
 
@@ -42,7 +42,11 @@ Medido con `scripts/measure_profiles.py` a 1024x1024 (Kontext con una referencia
 - Las mediciones de Windows siguen pendientes.
 
 > [!NOTE]
-> Ollama es opcional. Si no está en marcha, ImageHearth lo ignora y el estado sigue siendo `ready`. Pon `ollama_mode = "off"` para que nunca lo toque.
+> Los servidores de modelos locales son opcionales. Si uno no está en marcha, ImageHearth lo ignora y el estado sigue siendo `ready`. Consulta `memory_mode` en los ajustes.
+
+### Un modelo de lenguaje e imágenes en la misma GPU
+
+Medido en la misma RTX 4090 con `qwen3.5:9b`, que necesita 14,3 GB con el contexto por defecto de Ollama y 5,9 GB con `num_ctx` 8192. Con `memory_mode = "auto"` da igual: el modelo se descarga mientras se genera y vuelve después. Para tener los dos cargados (`manual` u `off`), la tarjeta debe albergar el modelo de lenguaje más el pico del workflow: con 5,9 GB y SDXL Turbo, la GPU llegó a 19,2 GB, unos 3 GB de ellos del escritorio. Con 5,9 GB y FLUX Dev llenó los 24 GB y funcionó, en 14-16 s, con `memory_mode = "off"`. En `manual`, la generación se rechaza si hay menos de 8 GB libres para SDXL Turbo o de 16 GB para FLUX, así que ese mismo caso se rechaza ahí.
 
 ## Instalación
 
@@ -119,44 +123,38 @@ comfy_dir = "~/AI/ComfyUI"      # dónde está instalado ComfyUI
 comfy_port = 8188               # puerto en el que escucha ComfyUI
 output_dir = "~/Pictures/ImageHearth"
 ollama_url = "http://127.0.0.1:11434"
-ollama_mode = "auto"            # "auto" usa Ollama si responde; "off" no lo toca nunca
+memory_mode = "auto"            # "auto", "off" o "manual", ver abajo
+lmstudio_url = "http://127.0.0.1:1234"
+llamacpp_url = "http://127.0.0.1:8080"
+vllm_url = "http://127.0.0.1:8000"
 ```
 
-Cada clave se puede definir también con una variable de entorno: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL` e `IMAGEHEARTH_OLLAMA_MODE`. Las variables mandan sobre el archivo, y el archivo sobre los valores por defecto.
+Cada clave se puede definir también con una variable de entorno: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL`, `IMAGEHEARTH_LMSTUDIO_URL`, `IMAGEHEARTH_LLAMACPP_URL`, `IMAGEHEARTH_VLLM_URL` e `IMAGEHEARTH_MEMORY_MODE`. Las variables ganan al archivo, y el archivo a los valores por defecto.
+
+| `memory_mode` | Qué pasa con tus modelos de lenguaje |
+|---|---|
+| `auto` | Se descargan antes de generar y se restauran después. Si un servidor no puede descargar (ver abajo), recibes un aviso con qué hacer, o un error antes de empezar si la memoria no basta |
+| `manual` | No se tocan. La generación falla con una explicación si la memoria libre no basta |
+| `off` | No se tocan y no se comprueba la memoria |
+
+El antiguo `ollama_mode` sigue funcionando como alias de `auto` u `off`; si están los dos, gana `memory_mode`.
+
+| Servidor | ¿Puede ImageHearth liberar su memoria? |
+|---|---|
+| Ollama | Sí |
+| LM Studio | Sí, con su API REST v1. Versiones anteriores: solo aviso |
+| llama.cpp | Solo en modo router. Un `llama-server` de un solo modelo no puede descargar: solo aviso |
+| vLLM | Solo si arranca con `VLLM_SERVER_DEV_MODE=1` y `--enable-sleep-mode`. Si no: solo aviso |
 
 ### 4. Conecta tu agente
 
-**Claude Code**
-
 ```bash
-claude mcp add --scope user imagehearth -- ~/.local/bin/imagehearth-mcp
+imagehearth-mcp connect --detect
 ```
 
-**Codex**: añade esto a `~/.codex/config.toml`, sustituyendo `TU_USUARIO`:
+Busca los clientes instalados y ofrece conectarlos. También puedes usar `connect <cliente>`, o `connect --print <cliente>` para ver el fragmento sin tocar nada. Hace copia de seguridad, conserva tus demás entradas y se puede repetir.
 
-```toml
-[mcp_servers.imagehearth]
-command = "/home/TU_USUARIO/.local/bin/imagehearth-mcp"
-```
-
-**Otros agentes compatibles con MCP**: busca su archivo de configuración de MCP y añade:
-
-```json
-{
-  "mcpServers": {
-    "imagehearth": {
-      "command": "/home/TU_USUARIO/.local/bin/imagehearth-mcp"
-    }
-  }
-}
-```
-
-**Opcional:** el archivo [`SKILL.md`](src/imagehearth_mcp/data/skill/SKILL.md) enseña a los agentes a sacar mejores resultados. En Claude Code se activa así:
-
-```bash
-mkdir -p ~/.claude/skills
-ln -s "$("$(uv tool dir)/imagehearth-mcp/bin/python" -c 'from imagehearth_mcp.engine import config; print(config.data_path("skill"))')" ~/.claude/skills/imagehearth
-```
+**Probados:** Claude Code, Codex, opencode, Hermes y pi. **Sin probar**, contrastados solo con su documentación: Claude Desktop, Gemini CLI, Cursor, VS Code y JetBrains. Detalles y fragmentos en [`docs/agents.md`](docs/agents.md). También puedes pedirle la instalación a un agente con [`llms-install.md`](llms-install.md).
 
 ### 5. Pruébalo
 
@@ -175,6 +173,7 @@ Pide a tu agente que *"compruebe el estado de ImageHearth"*. El resultado te dic
 | `ready` | Todo funciona | Nada |
 | `busy` | Se está generando otra imagen | Esperar |
 | `degraded` | Falta algo | Lee `issues`. Normalmente falta el nodo de estado o está desactualizado. Sin él la generación funciona, pero la memoria de la GPU se comprueba con menos fiabilidad |
+| `not_installed` | Faltan ComfyUI o los modelos | Ejecuta el comando de `issues`, o pide a tu agente que lo instale |
 | `recovery_required` | Se interrumpió una sesión anterior | Pide a tu agente que *"recupere el motor"* |
 
 | Problema | Solución |

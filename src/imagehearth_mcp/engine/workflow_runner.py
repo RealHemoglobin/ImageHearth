@@ -127,7 +127,7 @@ def run_workflow(
         f"{config.COMFY_SUBFOLDER}/{image_id}",
     )
 
-    with generation_session() as session:
+    with generation_session(workflow_file.stem) as session:
         destination = save_session_image(
             session,
             workflow,

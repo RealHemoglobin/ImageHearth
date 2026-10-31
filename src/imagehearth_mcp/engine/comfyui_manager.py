@@ -95,14 +95,17 @@ def start():
 
     if not (config.COMFY_DIR / "main.py").exists():
         raise FileNotFoundError(
-            f"ComfyUI not found in {config.COMFY_DIR}. Set its folder with "
+            f"ComfyUI not found in {config.COMFY_DIR}. Install it with "
+            "`imagehearth-mcp setup`, or set its folder with "
             f"comfy_dir in {config.CONFIG_FILE} or with IMAGEHEARTH_COMFY_DIR."
         )
 
     python = paths.find_venv_python(config.COMFY_DIR)
 
     if not python.exists():
-        raise FileNotFoundError(f"Python not found: {python}")
+        raise FileNotFoundError(
+                f"Python not found: {python}. Repair it with `imagehearth-mcp setup`."
+            )
 
     config.COMFY_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     _rotate_log()

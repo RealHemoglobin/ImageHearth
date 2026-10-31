@@ -130,15 +130,37 @@ OLLAMA_API = _url_setting(
     _values, "ollama_url", "IMAGEHEARTH_OLLAMA_URL", "http://127.0.0.1:11434"
 )
 
+LMSTUDIO_API = _url_setting(
+    _values, "lmstudio_url", "IMAGEHEARTH_LMSTUDIO_URL", "http://127.0.0.1:1234"
+)
+LLAMACPP_API = _url_setting(
+    _values, "llamacpp_url", "IMAGEHEARTH_LLAMACPP_URL", "http://127.0.0.1:8080"
+)
+VLLM_API = _url_setting(
+    _values, "vllm_url", "IMAGEHEARTH_VLLM_URL", "http://127.0.0.1:8000"
+)
+
 OLLAMA_MODE = _choice_setting(
     _values, "ollama_mode", "IMAGEHEARTH_OLLAMA_MODE", ("auto", "off"), "auto"
 )
+# None si no se ha fijado: entonces manda su alias, ollama_mode.
+MEMORY_MODE = _choice_setting(
+    _values, "memory_mode", "IMAGEHEARTH_MEMORY_MODE", ("auto", "off", "manual"), None
+)
+
+
+def memory_mode():
+    return MEMORY_MODE or OLLAMA_MODE
+
 
 LOCK_FILE = DATA_DIR / "engine.lock"
 STATE_FILE = DATA_DIR / "state" / "session.json"
 PID_FILE = DATA_DIR / "state" / "comfyui.pid"
 INSTALL_MANIFEST = DATA_DIR / "install.json"
 SETUP_LOCK = DATA_DIR / "setup.lock"
+SETUP_JOB_LOCK = DATA_DIR / "setup-job.lock"
+SETUP_JOB_FILE = DATA_DIR / "state" / "setup_job.json"
+SETUP_JOB_LOG = LOG_DIR / "setup-job.log"
 COMFY_LOG_FILE = LOG_DIR / "comfyui.log"
 ENGINE_LOG_DIR = LOG_DIR
 

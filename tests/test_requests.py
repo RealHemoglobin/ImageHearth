@@ -238,17 +238,36 @@ class McpProtocol(EngineTestCase):
             tools,
             {
                 "create_image",
-                "generate_image",
-                "edit_image",
                 "list_workflows",
                 "get_engine_status",
                 "ensure_comfyui",
                 "recover_engine",
+                "setup_status",
+                "setup_start",
             },
         )
+
+        # Sin skill, esto es lo único que recibe un agente.
+        instructions = replies[1]["result"]["instructions"]
+        self.assertIn("create_image", instructions)
+        self.assertIn("WARNING", instructions)
+        self.assertIn("recovery_required", instructions)
+        self.assertIn("setup_start", instructions)
+
+        for tool in replies[2]["result"]["tools"]:
+            self.assertGreater(len(tool["description"]), 40, tool["name"])
+
+        schema = next(
+            tool["inputSchema"]
+            for tool in replies[2]["result"]["tools"]
+            if tool["name"] == "create_image"
+        )
+        self.assertEqual(schema["required"], ["prompt"])
+        self.assertNotIn("ctx", schema["properties"])
 
         text = replies[3]["result"]["content"]
         self.assertNotIn("flux_kontext_dev_basic", json.dumps(text))
         # Una carpeta de usuario vacía no tiene modelos: la lista está vacía y no falla.
         self.assertFalse(replies[3]["result"].get("isError"))
         self.assertNotIn("sdxl_turbo", json.dumps(text))
+        self.assertIn("imagehearth-mcp setup", json.dumps(text))

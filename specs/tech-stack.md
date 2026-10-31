@@ -19,7 +19,7 @@ ComfyUI ─ entorno propio con PyTorch, gestionado o existente
    └─ nodo imagehearth_status (ruta /imagehearth/status, versionada)
    │ opcional
    ▼
-Ollama ─ opcional (ollama_mode = auto | off), detrás de la interfaz MemoryProvider
+Ollama, LM Studio, llama.cpp, vLLM ─ opcionales (memory_mode = auto | off | manual), detrás de la interfaz MemoryProvider
 ```
 
 El punto clave es que el **servidor MCP no depende de PyTorch**. Arranca en segundos en cualquier sistema, aunque ComfyUI no esté instalado, y puede explicar qué falta en lugar de fallar.
@@ -49,7 +49,9 @@ Se resuelven con `platformdirs` desde `src/imagehearth_mcp/` (paquete `imagehear
 | Logs | Un archivo por proceso con limpieza por antigüedad | Evita renombrar archivos abiertos en Windows | Mantener la rotación compartida |
 | Memoria de GPU | `/system_stats` de ComfyUI primero, `nvidia-smi` como apoyo | La API funciona con cualquier fabricante si ComfyUI está activo | Sondas por fabricante |
 | Modelos en macOS | GGUF con `ComfyUI-GGUF` | Los fp8 no funcionan en MPS | Parchear ComfyUI: frágil ante actualizaciones. Preparado sin probar: falta validar en un Mac real, y no bloquea nada |
-| Ollama | Opcional y autodetectado | No participa en la generación; solo se gestiona para liberar memoria | Instalarlo |
+| Servidores de modelos | Opcionales y autodetectados; solo se actúa sobre un servidor que se identifica como tal | No participan en la generación; solo se gestionan para liberar memoria | Instalarlos |
+| Herramientas MCP | `create_image` como única vía de generación y edición; sin `generate_image` ni `edit_image` | Medido con 9B: ~750 tokens más por petición y nunca elegidas | Mantenerlos como alias |
+| Plazos de los clientes | Progreso cada 5 s y plazo de 1800 s en la entrada de Codex y Hermes | Medido con una herramienta de 330 s: basta para todos los clientes probados | `start_image_job` y `get_job` |
 | Idioma | Inglés en la interfaz, la herramienta y el README principal, con README en español | Máximo alcance | Solo español |
 
 ## Matriz de PyTorch

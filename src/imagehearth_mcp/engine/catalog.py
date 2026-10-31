@@ -73,3 +73,31 @@ def choose(capability):
     variants = VARIANTS[capability]
     known = entries()
     return next((name for name in variants if name in known), variants[0])
+
+
+def required_vram_mib(workflow):
+    """VRAM orientativa del menor perfil con ese workflow; 0 si no se conoce."""
+    from imagehearth_mcp.provisioner import manifest
+
+    profile = manifest.load().minimum_profile(workflow, current_system())
+    return profile.min_vram_mib if profile else 0
+
+
+def missing_installation():
+    """Qué impide generar y con qué comando se arregla, o None si nada lo impide."""
+    if not (
+        (config.COMFY_DIR / "main.py").exists()
+        or (config.COMFY_DIR / "custom_nodes").is_dir()
+    ):
+        return (
+            f"ComfyUI is not installed in {config.COMFY_DIR}. Run "
+            "`imagehearth-mcp setup`, or call setup_status to install it from here."
+        )
+
+    if not any(entry.installed for entry in entries().values()):
+        return (
+            "No image models are installed. Run `imagehearth-mcp setup --profile fast`, "
+            "or call setup_status to install them from here."
+        )
+
+    return None

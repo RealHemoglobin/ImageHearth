@@ -1,11 +1,13 @@
 import requests
 
 from imagehearth_mcp.engine import (
+    catalog,
     comfyui_client,
     comfyui_manager,
     config,
     gpu,
     memory,
+    ollama_manager,
     orchestrator,
     state,
 )
@@ -31,7 +33,7 @@ def _comfyui_status():
 
 
 def _ollama_status():
-    if config.OLLAMA_MODE == "off":
+    if config.memory_mode() != "auto":
         return {"status": "disabled", "loaded_models": []}
 
     try:
@@ -41,7 +43,7 @@ def _ollama_status():
         return {
             "status": "running",
             "version": response.json().get("version"),
-            "loaded_models": memory.get_provider().loaded(),
+            "loaded_models": ollama_manager.get_loaded_models(),
         }
 
     except (requests.RequestException, memory.ProviderUnavailable) as error:
@@ -80,10 +82,16 @@ def get_status():
     elif comfyui_manager.port_is_open() or comfyui_manager.find_processes():
         issues.append("ComfyUI has an active process, but it does not respond.")
 
+    # ComfyUI en marcha basta: puede ser una instancia ajena.
+    missing = None if comfy["status"] == "running" else catalog.missing_installation()
+
     if busy:
         overall = "busy"
     elif pending:
         overall = "recovery_required"
+    elif missing:
+        overall = "not_installed"
+        issues.append(missing)
     elif issues:
         overall = "degraded"
     else:
@@ -106,4 +114,5 @@ def get_status():
         "imageengine": engine,
         "comfyui": comfy,
         "ollama": ollama,
+        "memory": memory.describe(),
     }
