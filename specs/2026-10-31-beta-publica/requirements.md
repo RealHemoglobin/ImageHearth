@@ -85,7 +85,7 @@ Pendientes de fases anteriores:
 
 ## Supuestos abiertos
 
-- **Registro MCP:** el formato de `server.json`, el espacio de nombres `io.github.RealHemoglobin/*` y la verificación de propiedad del paquete de PyPI (se supone una línea `mcp-name:` en el README) son de memoria. Se contrastan con su documentación al implementarlos. Si la marca debe estar en el README publicado, tiene que entrar antes de subir `0.1.0b1`.
+- **Registro MCP (contrastado el 2026-10-31):** esquema `2025-12-11`, nombre con el prefijo `io.github.<usuario>/` y marca `mcp-name:` en el README de PyPI, ya incluida. Queda sin confirmar si el registro distingue mayúsculas en `RealHemoglobin`, y si acepta `0.1.0b1`: el esquema admite versiones que no son semver, pero lo recomienda. Se ve al ejecutar `mcp-publisher validate` y `publish`.
 - **Versión preliminar con uv:** se supone que `uv tool install paquete==0.1.0b1` funciona sin `--prerelease`, al estar fijada. Se comprueba en el ensayo con TestPyPI, donde además hará falta indicar el índice y que las dependencias sigan viniendo de PyPI.
 - **Hardware:** el mantenedor aporta el equipo Windows y las máquinas limpias. Sin ellos, la fusión es posible pero la publicación queda bloqueada.
 - **`install.ps1` en esta máquina:** sin `pwsh` solo se puede ejecutar en Windows. Hasta entonces consta como sin ejecutar.

@@ -1,0 +1,39 @@
+name: Bug report
+description: Something fails after a successful installation.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before pasting, check the output for anything private. `doctor --json` includes local paths, which may show your user name: replace it if you prefer. You don't need to share your prompts or images.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `imagehearth-mcp doctor --json`
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent or editor, and its language model
+      placeholder: opencode with qwen3.5:9b
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: The error or tool result
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: See the troubleshooting guide for where they are.
+      render: text

@@ -1,6 +1,6 @@
 # Connecting agents and editors
 
-ImageHearth is a standard MCP server over stdio, so any client that supports MCP can use it. `connect` adds it for you:
+ImageHearth is a standard MCP server over stdio, so any client that supports MCP can use it. The [installer](../README.md#installation) offers to connect the clients it finds. To install by hand, run `uv tool install imagehearth-mcp==0.1.0b1`. After that, `connect` adds it for you:
 
 ```bash
 imagehearth-mcp connect --list          # known clients and their support level

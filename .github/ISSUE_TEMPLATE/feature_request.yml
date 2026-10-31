@@ -1,0 +1,18 @@
+name: Feature request
+description: Suggest an improvement, or support for another agent or model.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you want to do that you can't do now?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How do you imagine it working?
+  - type: input
+    id: setup
+    attributes:
+      label: Your system, GPU and agent, if they matter here

@@ -10,8 +10,10 @@ You are helping a user install ImageHearth, an MCP server that generates and edi
 ## 2. Install the command
 
 ```bash
-uv tool install git+https://github.com/RealHemoglobin/ImageHearth.git
+uv tool install imagehearth-mcp==0.1.0b1
 ```
+
+If `imagehearth-mcp` isn't found afterwards, use the path from `uv tool dir --bin`, or run `uv tool update-shell` and open a new terminal.
 
 ## 3. Connect this agent
 
@@ -20,7 +22,7 @@ imagehearth-mcp connect --list
 imagehearth-mcp connect <client>
 ```
 
-It makes a backup first and keeps the other entries. If your client isn't listed, run `imagehearth-mcp connect --print claude-desktop` and adapt the snippet: see [docs/agents.md](docs/agents.md). Ask the user to restart the agent if the new tools don't appear.
+It makes a backup first and keeps the other entries. If your client isn't listed, run `imagehearth-mcp connect --print claude-desktop` and adapt the snippet: see [docs/agents.md](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/agents.md). Ask the user to restart the agent if the new tools don't appear.
 
 ## 4. Choose with the user
 
@@ -44,4 +46,4 @@ imagehearth-mcp setup --profile <profile> --accept-licenses --non-interactive --
 
 ## 6. Verify
 
-Call `create_image` with a short prompt and tell the user the path on the first line of the result. If something fails, run `imagehearth-mcp doctor` and report what it says.
+Call `create_image` with a short prompt and tell the user the path on the first line of the result. If something fails, run `imagehearth-mcp doctor` and report what it says. Common problems are in [docs/troubleshooting.md](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/troubleshooting.md).

@@ -474,7 +474,7 @@ wheels = [
 
 [[package]]
 name = "imagehearth-mcp"
-version = "0.1.0.dev0"
+version = "0.1.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "filelock" },
@@ -489,6 +489,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "jsonschema" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -507,6 +508,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "jsonschema", specifier = ">=4" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.8" },
 ]

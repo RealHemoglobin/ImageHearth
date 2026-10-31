@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.RealHemoglobin/imagehearth",
+  "title": "ImageHearth",
+  "description": "Generate and edit images locally on your own GPU through ComfyUI, with no cloud",
+  "version": "0.1.0b1",
+  "repository": {
+    "url": "https://github.com/RealHemoglobin/ImageHearth",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "imagehearth-mcp",
+      "version": "0.1.0b1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

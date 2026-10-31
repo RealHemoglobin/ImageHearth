@@ -4,10 +4,21 @@
 
 ImageHearth is an [MCP](https://modelcontextprotocol.io) server that connects agents such as Claude Code or Codex to [ComfyUI](https://github.com/Comfy-Org/ComfyUI).
 
-[Leer en español](README.es.md)
+<!-- mcp-name: io.github.RealHemoglobin/imagehearth -->
 
-> [!WARNING]
-> **Early development.** `imagehearth-mcp setup` targets **Linux and Windows 11 with an NVIDIA GPU**, and has not been verified on clean machines yet. A one-command installer is planned, and macOS is prepared but has never been run: see the [roadmap](specs/roadmap.md).
+[Leer en español](https://github.com/RealHemoglobin/ImageHearth/blob/main/README.es.md)
+
+**Public beta.** Install it with one command, and if something fails, [tell us](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/troubleshooting.md#reporting-a-problem).
+
+```bash
+# Linux
+curl -LsSf https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.sh | sh
+```
+
+```powershell
+# Windows
+irm https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.ps1 | iex
+```
 
 ## What you can ask your agent
 
@@ -22,10 +33,20 @@ If you also run local language models, ImageHearth frees them from GPU memory wh
 
 | | |
 |---|---|
-| **System** | Linux or Windows 11. macOS on Apple Silicon is prepared but untested, and not supported: see [below](#macos-untested) |
-| **GPU** | NVIDIA series 20 or newer with a current driver. Only measured on an RTX 4090 with 24 GB; see the [measurements](#measured-requirements). Less memory may be slow or fail with the FLUX models. Other GPUs are detected and offered as experimental |
+| **GPU** | NVIDIA series 20 or newer with a current driver. Only measured on an RTX 4090 with 24 GB; see the [measurements](#measured-requirements). Less memory may be slow or fail with the FLUX models |
 | **Disk** | 7.2 GB for ComfyUI and its environment, plus the profile you choose |
-| **Software** | [uv](https://docs.astral.sh/uv/getting-started/installation/). Git and Python aren't needed. [Ollama](https://ollama.com/download) is optional |
+| **Software** | Nothing to install first: the script installs [uv](https://docs.astral.sh/uv/), which brings its own Python. Git isn't needed. [Ollama](https://ollama.com/download) is optional |
+
+### Support
+
+Only what has run on real hardware is announced as supported.
+
+| System and GPU | Level |
+|---|---|
+| Linux, NVIDIA series 20 or newer | **Supported.** Tested on real hardware |
+| Windows 11, NVIDIA series 20 or newer | **Target of this beta.** Its verification on clean machines is pending |
+| NVIDIA series 10 or older, AMD, Intel Arc, CPU only | **Experimental.** Detected and offered with a warning, never tested. CPU only runs `fast` |
+| macOS on Apple Silicon | **Untested.** Prepared behind `--experimental`: see [below](#macos-untested) |
 
 ### Measured requirements
 
@@ -41,8 +62,7 @@ Measured with `scripts/measure_profiles.py` at 1024x1024 (Kontext with one refer
 - "First generation" comes after unloading the models from the GPU, with the files still in the system's disk cache. Loading from a cold disk takes longer.
 - The Windows measurements are still pending.
 
-> [!NOTE]
-> Local model servers are optional. If one isn't running, ImageHearth skips it and the status stays `ready`. See `memory_mode` in the [settings](#settings-optional).
+> **Note:** local model servers are optional. If one isn't running, ImageHearth skips it and the status stays `ready`. See `memory_mode` in the [settings](#settings-optional).
 
 ### A language model and images on the same GPU
 
@@ -50,20 +70,27 @@ Measured on the same RTX 4090 with `qwen3.5:9b`, which needs 14.3 GB with Ollama
 
 ## Installation
 
-### 1. Install ImageHearth
+### 1. Run the installer
+
+Use the command for your system from the [top of this page](#imagehearth). The scripts are short, so you can read [`install.sh`](https://github.com/RealHemoglobin/ImageHearth/blob/main/install.sh) or [`install.ps1`](https://github.com/RealHemoglobin/ImageHearth/blob/main/install.ps1) first. They:
+
+1. Install uv with its official installer, if it's missing.
+2. Install `imagehearth-mcp` at a pinned version.
+3. Run `setup` and `connect --detect`, which ask you before downloading or changing anything.
+
+They never ask for `sudo` or administrator rights, and never accept a license for you. You can run them again safely.
+
+**Prefer to do it by hand?** With [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
 
 ```bash
-git clone https://github.com/RealHemoglobin/ImageHearth.git
-uv tool install ./ImageHearth
-```
-
-### 2. Run setup
-
-```bash
+uv tool install imagehearth-mcp==0.1.0b1
 imagehearth-mcp setup
+imagehearth-mcp connect --detect
 ```
 
-It detects your hardware and any existing ComfyUI, proposes a profile, and shows the disk space and licenses **before downloading anything**. Then it installs ComfyUI and the models and generates a test image. If it's interrupted, run it again and it continues where it stopped.
+### 2. What setup does
+
+Setup detects your hardware and any existing ComfyUI, proposes a profile, and shows the disk space and licenses **before downloading anything**. Then it installs ComfyUI and the models and generates a test image. If it's interrupted, run it again and it continues where it stopped.
 
 | Profile | What you get | Models |
 |---|---|---|
@@ -90,11 +117,13 @@ Set `HF_TOKEN` if Hugging Face restricts access to a model.
 
 #### macOS (untested)
 
-**ImageHearth has never been run on a Mac, and macOS is not supported.** Setup is prepared for Apple Silicon behind `--experimental`, with GGUF models (`mac-fast` 6.9 GB, `mac-quality` 19.2 GB, `mac-full` 27.6 GB) and the `ComfyUI-GGUF` node. The GGUF workflows were run on an NVIDIA GPU, which checks the graph and the files but not MPS. Macs with Intel aren't supported. If you try it, please report how it went, with the output of `imagehearth-mcp doctor --json`.
+**ImageHearth has never been run on a Mac, and macOS is not supported.** To try it, add the flag to the installer: `curl -LsSf https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.sh | sh -s -- --experimental`. Setup is prepared for Apple Silicon, with GGUF models (`mac-fast` 6.9 GB, `mac-quality` 19.2 GB, `mac-full` 27.6 GB) and the `ComfyUI-GGUF` node. The GGUF workflows were run on an NVIDIA GPU, which checks the graph and the files but not MPS. Macs with Intel aren't supported. If you try it, please report how it went, with the output of `imagehearth-mcp doctor --json`.
 
 **Using a ComfyUI you already have.** With `--attach`, or by choosing it when asked, ImageHearth uses it instead of installing another, and doesn't download the models it already has. Your ComfyUI is only changed if you allow the status node to be installed. ComfyUI Desktop has to be open, since ImageHearth can't start it.
 
 ### 3. Check, update or remove it
+
+The installer doesn't change your `PATH`. If `imagehearth-mcp` isn't found, run `uv tool update-shell` and open a new terminal.
 
 ```bash
 imagehearth-mcp doctor
@@ -148,13 +177,9 @@ The older `ollama_mode` still works as an alias for `auto` or `off`; `memory_mod
 
 ### 4. Connect your agent
 
-```bash
-imagehearth-mcp connect --detect
-```
+The installer already ran `imagehearth-mcp connect --detect`, which finds the installed clients and offers to connect them. Run it again after installing a new one. You can also run `connect <client>`, or `connect --print <client>` to see the snippet without changing anything. It makes a backup, keeps your other entries and can be repeated.
 
-It finds the installed clients and offers to connect them. You can also run `connect <client>`, or `connect --print <client>` to see the snippet without changing anything. It makes a backup, keeps your other entries and can be repeated.
-
-**Tested:** Claude Code, Codex, opencode, Hermes and pi. **Untested**, checked against their documentation only: Claude Desktop, Gemini CLI, Cursor, VS Code and JetBrains. Details and snippets are in [`docs/agents.md`](docs/agents.md). You can also ask an agent to do the installation with [`llms-install.md`](llms-install.md).
+**Tested:** Claude Code, Codex, opencode, Hermes and pi. **Untested**, checked against their documentation only: Claude Desktop, Gemini CLI, Cursor, VS Code and JetBrains. Details and snippets are in [`docs/agents.md`](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/agents.md). You can also ask an agent to do the installation with [`llms-install.md`](https://github.com/RealHemoglobin/ImageHearth/blob/main/llms-install.md).
 
 ### 5. Try it
 
@@ -166,28 +191,13 @@ ComfyUI starts on its own. The first image takes longer because the model has to
 
 ## Troubleshooting
 
-Run `imagehearth-mcp doctor`, or ask your agent to *"check the ImageHearth status"*. The result tells you what is wrong:
-
-| Status | Meaning | What to do |
-|---|---|---|
-| `ready` | Everything works | Nothing |
-| `not_installed` | ComfyUI or the models are missing | Run the command in `issues`, or ask your agent to install it |
-| `busy` | Another image is being generated | Wait |
-| `degraded` | Something is missing | Read `issues`. Usually the status node is missing or outdated. Without it generation still works, but GPU memory is checked less reliably |
-| `recovery_required` | A previous session was interrupted | Ask your agent to *"recover the engine"* |
-
-| Problem | Solution |
-|---|---|
-| The agent doesn't see the tools | Restart it and check the command path in step 4 |
-| Error about a model that isn't installed | Run the `imagehearth-mcp setup --profile ...` command in the error |
-| ComfyUI doesn't start | Read `~/.local/state/imagehearth/log/comfyui.log` |
-| Port 8188 is busy | Close whatever is using it, or set another `comfy_port` |
+Run `imagehearth-mcp doctor`, or ask your agent to *"check the ImageHearth status"*. Common problems and how to report one are in [`docs/troubleshooting.md`](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/troubleshooting.md).
 
 ImageHearth only restarts or stops a ComfyUI it started itself (it records its PID in the data folder). If you run ComfyUI on the same port, ImageHearth uses it but never restarts it.
 
 ## Model licenses
 
-The models are not part of this project and have their own terms. **By downloading them, you accept those terms.** This summary is not legal advice; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for details.
+The models are not part of this project and have their own terms. **By downloading them, you accept those terms.** This summary is not legal advice; see [`THIRD_PARTY_NOTICES.md`](https://github.com/RealHemoglobin/ImageHearth/blob/main/THIRD_PARTY_NOTICES.md) for details.
 
 | Model | License | Short version |
 |---|---|---|
@@ -203,8 +213,8 @@ uv run ruff check .
 uv run pytest
 ```
 
-This needs [uv](https://docs.astral.sh/uv/getting-started/installation/), which creates its own environment in `.venv`, separate from ComfyUI's. The tests use simulated servers and don't need a GPU. Read the [roadmap](specs/roadmap.md) to see what's planned.
+This needs [uv](https://docs.astral.sh/uv/getting-started/installation/), which creates its own environment in `.venv`, separate from ComfyUI's. The tests use simulated servers and don't need a GPU. See [`CONTRIBUTING.md`](https://github.com/RealHemoglobin/ImageHearth/blob/main/CONTRIBUTING.md) to contribute, and the [roadmap](https://github.com/RealHemoglobin/ImageHearth/blob/main/specs/roadmap.md) for what's planned. To help test the beta, see [`docs/beta-testing.md`](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/beta-testing.md). To report a vulnerability, see [`SECURITY.md`](https://github.com/RealHemoglobin/ImageHearth/blob/main/SECURITY.md).
 
 ## License
 
-[MIT](LICENSE), except the ComfyUI custom node in [`src/imagehearth_mcp/data/imagehearth_status/`](src/imagehearth_mcp/data/imagehearth_status/LICENSE), which is GPL-3.0. Third-party components and models are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+[MIT](https://github.com/RealHemoglobin/ImageHearth/blob/main/LICENSE), except the ComfyUI custom node in [`src/imagehearth_mcp/data/imagehearth_status/`](https://github.com/RealHemoglobin/ImageHearth/blob/main/src/imagehearth_mcp/data/imagehearth_status/LICENSE), which is GPL-3.0. Third-party components and models are listed in [`THIRD_PARTY_NOTICES.md`](https://github.com/RealHemoglobin/ImageHearth/blob/main/THIRD_PARTY_NOTICES.md).

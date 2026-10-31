@@ -1,0 +1,49 @@
+name: Installation failure
+description: The installer, setup or the first image failed.
+labels: ["installation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before pasting, check the output for anything private. `doctor --json` includes local paths, which may show your user name: replace it if you prefer.
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where did it fail?
+      options:
+        - install.sh or install.ps1, before setup
+        - setup, before downloading
+        - setup, while downloading or installing
+        - The test image at the end of setup
+        - connect
+        - The first image from an agent
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `imagehearth-mcp doctor --json`
+      description: If the command doesn't exist yet, write that here. It may be in the folder that `uv tool dir --bin` prints.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output of the command that failed
+      description: The last lines are enough, including the error.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System and GPU
+      placeholder: Ubuntu 24.04, RTX 3060 12 GB
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: For example, an existing ComfyUI, a proxy or a disk that's nearly full.

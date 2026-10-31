@@ -174,10 +174,12 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - [ ] `install.sh` e `install.ps1`, breves y legibles: instalar uv, instalar la herramienta con versión fijada y lanzar `setup`.
 - [ ] Publicar desde la máquina del mantenedor, sin GitHub Actions: `uv publish` a PyPI con un token y `gh release create` para la GitHub Release.
 - [ ] Publicar en el registro oficial de MCP con `server.json`.
-- [ ] Añadir `.mcpb` para Claude Desktop solo si `connect` no es suficiente.
-- [ ] Reescribir el README: la instalación de un comando pasa a ser la principal y se quita el aviso de desarrollo.
-- [ ] Añadir guía de problemas frecuentes, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` y plantillas de incidencias que pidan la salida de `doctor --json`.
+- [x] ~~Añadir `.mcpb` para Claude Desktop~~ No se crea: Claude Desktop sigue con `connect` y consta como sin probar.
+- [x] Reescribir el README: la instalación de un comando pasa a ser la principal y se quita el aviso de desarrollo.
+- [x] Añadir guía de problemas frecuentes, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` y plantillas de incidencias que pidan la salida de `doctor --json`.
 - [ ] Reunir entre 5 y 10 probadores externos en hardware distinto.
+
+**Estado (2026-10-31):** rama lista para fusionar. Los scripts, la guía de publicación y `server.json` están escritos, sin marcar hasta publicar: `install.ps1` no se ha ejecutado. La publicación sigue bloqueada por lo pendiente en la [validación](2026-10-31-beta-publica/validation.md#antes-de-publicar-pendientes-de-fases-anteriores).
 
 **Listo cuando:** al menos 3 personas externas instalan y generan sin ayuda, y los fallos de instalación se pueden diagnosticar con `doctor --json`.
 

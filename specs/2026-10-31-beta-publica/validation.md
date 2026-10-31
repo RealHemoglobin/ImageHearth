@@ -52,20 +52,20 @@ La puerta de calidad obligatoria de [tech-stack](../tech-stack.md) es `scripts/c
 
 Los tests deben cubrir:
 
-- [ ] Misma versión en `pyproject.toml`, `install.sh`, `install.ps1` y `server.json`.
-- [ ] `server.json` válido.
-- [ ] Wheel y sdist con datos de paquete y licencias, y sin modelos ni archivos locales.
-- [ ] Scripts sin `sudo` ni `--accept-licenses`.
+- [x] Misma versión en `pyproject.toml`, `install.sh`, `install.ps1` y `server.json`.
+- [x] `server.json` válido.
+- [x] Wheel y sdist con datos de paquete y licencias, y sin modelos ni archivos locales.
+- [x] Scripts sin `sudo` ni `--accept-licenses`.
 
 ## Validaciones manuales
 
 ### Antes de fusionar
 
-- [ ] Revisión de árbol e historial sin secretos ni datos privados, o decisión tomada con el mantenedor.
-- [ ] `install.sh` en un HOME aislado con un wheel local: sin uv, con uv y repetido.
-- [ ] `install.sh` por tubería desde un servidor local, para comprobar `/dev/tty` y el caso sin terminal.
-- [ ] Registro MCP contrastado con su documentación actual, y supuestos de [requirements.md](requirements.md) resueltos.
-- [ ] Enlaces del README correctos fuera de GitHub.
+- [x] Revisión de árbol e historial sin secretos ni datos privados, o decisión tomada con el mantenedor.
+- [x] `install.sh` en un HOME aislado con un wheel local: sin uv, con uv y repetido.
+- [x] `install.sh` por tubería desde un servidor local, para comprobar `/dev/tty` y el caso sin terminal.
+- [x] Registro MCP contrastado con su documentación actual, y supuestos de [requirements.md](requirements.md) resueltos.
+- [x] Enlaces del README correctos fuera de GitHub.
 
 ### Antes de publicar (pendientes de fases anteriores)
 
@@ -91,12 +91,12 @@ Los tests deben cubrir:
 
 ## Lista para fusionar
 
-- [ ] `scripts/check.sh` en verde en Linux.
-- [ ] Prueba de contrato `/object_info` en verde.
-- [ ] Validaciones "Antes de fusionar" completadas.
-- [ ] Ambos README, `docs/troubleshooting.md`, `docs/releasing.md`, `docs/beta-testing.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` y plantillas creados.
-- [ ] Ningún documento anuncia como soportado algo sin probar.
-- [ ] Roadmap actualizado con las tareas hechas.
+- [x] `scripts/check.sh` en verde en Linux.
+- [x] Prueba de contrato `/object_info` en verde.
+- [x] Validaciones "Antes de fusionar" completadas.
+- [x] Ambos README, `docs/troubleshooting.md`, `docs/releasing.md`, `docs/beta-testing.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` y plantillas creados.
+- [x] Ningún documento anuncia como soportado algo sin probar.
+- [x] Roadmap actualizado con las tareas hechas.
 - [ ] Cambios revisados por el usuario, que realiza el commit.
 
 Fusionar no significa publicar: la publicación sigue bloqueada hasta completar "Antes de publicar".
@@ -113,12 +113,12 @@ Fusionar no significa publicar: la publicación sigue bloqueada hasta completar 
 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
-| `scripts/check.sh` en Linux | | |
+| `scripts/check.sh` en Linux | Verde: 380 tests, ruff limpio, también contra el wheel | 2026-10-31 |
 | `scripts\check.ps1` en Windows | | |
-| Prueba de contrato `/object_info` | | |
-| Revisión de árbol e historial | | |
-| `install.sh` en HOME aislado | | |
-| `install.ps1` en Windows | | |
+| Prueba de contrato `/object_info` | Verde: existen los 19 tipos de nodo | 2026-10-31 |
+| Revisión de árbol e historial | Sin tokens, claves, rutas personales ni correos personales, en los 25 commits. Ningún binario, `engine.lock`, `state/` ni `logs/` versionado. Un commit de 2026-10-31 (`d8ef2c5`) tiene como autor el nombre `TitoYano`, con correo noreply del mismo identificador de GitHub: es público, sin secreto, y lo decide el mantenedor | 2026-10-31 |
+| `install.sh` en HOME aislado | Con wheel local, sin uv, por tubería desde un servidor local y dentro de una terminal: instala uv y el paquete, pregunta por `/dev/tty`, y al rechazar las licencias no descarga nada y sale con 1. Repetido con uv: no rompe nada. Sin terminal (`setsid`): se detiene sin tocar nada. `connect --detect` real: detecta clientes, pregunta por cada uno y, al responder que no, no cambia nada. Orden `setup` + `connect` con terminal comprobado con un ejecutable simulado, porque el real exige aceptar licencias y descargar. La descarga real queda para las máquinas limpias | 2026-10-31 |
+| `install.ps1` en Windows | Sin ejecutar: no hay `pwsh` en esta máquina | |
 | Generación y mediciones en Windows | | |
 | Máquina limpia Ubuntu | | |
 | Máquina limpia Windows 11 | | |

@@ -1,11 +1,30 @@
 [project]
 name = "imagehearth-mcp"
-version = "0.1.0.dev0"
+version = "0.1.0b1"
 description = "MCP server that lets AI agents generate and edit images locally through ComfyUI"
 readme = "README.md"
 license = "MIT AND GPL-3.0-only"
-license-files = ["LICENSE", "src/imagehearth_mcp/data/imagehearth_status/LICENSE"]
+license-files = [
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "src/imagehearth_mcp/data/imagehearth_status/LICENSE",
+]
 requires-python = ">=3.13"
+authors = [{ name = "Hemoglobin" }]
+keywords = ["mcp", "model-context-protocol", "comfyui", "image-generation", "flux", "ai-agents"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "filelock>=4.2.5",
     "huggingface-hub>=1,<3",
@@ -17,6 +36,12 @@ dependencies = [
     "requests>=2.34,<3",
 ]
 
+[project.urls]
+Homepage = "https://github.com/RealHemoglobin/ImageHearth"
+Documentation = "https://github.com/RealHemoglobin/ImageHearth#readme"
+Issues = "https://github.com/RealHemoglobin/ImageHearth/issues"
+Changelog = "https://github.com/RealHemoglobin/ImageHearth/blob/main/CHANGELOG.md"
+
 [project.scripts]
 imagehearth-mcp = "imagehearth_mcp.cli:main"
 
@@ -27,8 +52,21 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/imagehearth_mcp"]
 
+# Lista cerrada: sin ella, el sdist incluye specs/ y cualquier archivo no ignorado.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/README.es.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/THIRD_PARTY_NOTICES.md",
+]
+
 [dependency-groups]
 dev = [
+    "jsonschema>=4",
     "pytest>=8",
     "ruff>=0.8",
 ]
