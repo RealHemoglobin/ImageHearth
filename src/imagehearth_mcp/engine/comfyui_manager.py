@@ -99,7 +99,7 @@ def start():
             f"comfy_dir in {config.CONFIG_FILE} or with IMAGEHEARTH_COMFY_DIR."
         )
 
-    python = paths.venv_python(config.COMFY_DIR / "venv")
+    python = paths.find_venv_python(config.COMFY_DIR)
 
     if not python.exists():
         raise FileNotFoundError(f"Python not found: {python}")

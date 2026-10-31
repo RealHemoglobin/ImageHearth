@@ -78,33 +78,34 @@ Los tests simulan hardware, red y procesos, y no descargan modelos. No se exige 
 
 ### macOS
 
-- [ ] No se verifica en esta fase y no se anuncia como soportado: anotarlo en la evidencia.
+- [x] No se verifica en esta fase y no se anuncia como soportado: anotarlo en la evidencia.
 
 ## Lista para fusionar
 
 - [ ] `scripts/check.sh` en verde en Linux y `scripts\check.ps1` en verde en Windows.
-- [ ] Prueba de contrato `/object_info` en verde.
+- [x] Prueba de contrato `/object_info` en verde.
 - [ ] Validaciones manuales de Ubuntu, Windows 11 y modo adjunto completadas.
-- [ ] Las 7 herramientas conservan nombres, parámetros y resultados, revisado en el diff.
-- [ ] `models.toml` con todas las revisiones fijadas y los SHA-256 comprobados.
+- [x] Las 7 herramientas conservan nombres, parámetros y resultados, revisado en el diff.
+- [x] `models.toml` con todas las revisiones fijadas y los SHA-256 comprobados.
 - [ ] Texto de consentimiento revisado con las licencias confirmadas.
-- [ ] README (ambos), `tech-stack.md` y `THIRD_PARTY_NOTICES.md` actualizados.
-- [ ] Roadmap actualizado con las tareas de la fase 3 verificadas.
+- [x] README (ambos), `tech-stack.md` y `THIRD_PARTY_NOTICES.md` actualizados.
+- [x] Roadmap actualizado con las tareas de la fase 3 verificadas.
 - [ ] Cambios revisados por el usuario, que realiza el commit.
 
 ## Evidencia
 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
-| Decisión del spike | | |
-| `scripts/check.sh` en Linux | | |
+| Decisión del spike | Instalador propio, en `tech-stack.md`. Ejecutado solo en Linux | 2026-10-31 |
+| `scripts/check.sh` en Linux | Correcto: 214 tests | 2026-10-31 |
 | `scripts\check.ps1` en Windows | | |
-| Prueba de contrato `/object_info` | | |
-| `setup` en Ubuntu limpio | | |
+| Prueba de contrato `/object_info` | Correcta en Linux, contra el ComfyUI de desarrollo (v0.43.0-14), no contra la versión fijada | 2026-10-31 |
+| `setup` en Ubuntu limpio | Pendiente. Parcial en el equipo de desarrollo: `--managed --profile fast` en carpetas aisladas instala ComfyUI 0.43.0 y PyTorch `cu130` y genera la imagen de prueba por GPU, con el modelo ya presente | 2026-10-31 |
 | `setup` en Windows 11 limpio | | |
-| Reanudación de descarga | | |
-| Archivo corrupto | | |
-| Espacio insuficiente | | |
-| Modo adjunto y `uninstall` con datos preexistentes | | |
-| `doctor --json` con capa rota | | |
+| Reanudación de descarga | Parcial: `ae.safetensors` interrumpido a 125 MB y reanudado, con SHA-256 correcto. Falta repetirlo con `setup` | 2026-10-31 |
+| Archivo corrupto | Solo con descargador simulado | 2026-10-31 |
+| Espacio insuficiente | Solo con disco simulado | 2026-10-31 |
+| Modo adjunto y `uninstall` con datos preexistentes | Parcial: `--attach` y `uninstall --remove-models` sobre el ComfyUI de desarrollo lo dejan intacto (`git status` limpio, nodo y modelo sin cambios), sin generar imagen | 2026-10-31 |
+| `doctor --json` con capa rota | Parcial en Linux: al borrar el nodo, `ok` es false y la capa `node` indica cómo arreglarlo | 2026-10-31 |
 | macOS | Sin verificar, no anunciado | |
+| Cierre de la fase | Marcada como completada por decisión del usuario. Las casillas sin marcar no tienen evidencia registrada | 2026-10-31 |

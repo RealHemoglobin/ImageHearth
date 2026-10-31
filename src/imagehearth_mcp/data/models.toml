@@ -1,0 +1,137 @@
+# Lo que instala `imagehearth-mcp setup`. Cada valor está fijado y comprobado:
+# cambiar una versión aquí es lo que hace que `update` la aplique.
+
+[comfyui]
+version = "0.43.0"
+url = "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/v0.43.0.tar.gz"
+sha256 = "8a496a7d82bd343cafdb2b867857fe8c5140e3cd9ec5cf46c6277ccb7466f202"
+license = "comfyui"
+# ComfyUI (0,2 GB) y su entorno con PyTorch CUDA (7 GB).
+install_bytes = 7200000000
+
+[pytorch.cu130]
+python = "3.13"
+index = "https://download.pytorch.org/whl/cu130"
+packages = ["torch==2.14.1+cu130", "torchvision==0.29.1+cu130", "torchaudio==2.11.0+cu130"]
+min_driver = 580
+
+[pytorch.cu126]
+python = "3.12"
+index = "https://download.pytorch.org/whl/cu126"
+packages = ["torch==2.14.1+cu126", "torchvision==0.29.1+cu126", "torchaudio==2.11.0+cu126"]
+
+[pytorch."rocm7.2"]
+python = "3.13"
+index = "https://download.pytorch.org/whl/rocm7.2"
+packages = ["torch==2.14.1+rocm7.2", "torchvision==0.29.1+rocm7.2", "torchaudio==2.11.0+rocm7.2"]
+
+[pytorch.xpu]
+python = "3.13"
+index = "https://download.pytorch.org/whl/xpu"
+packages = ["torch==2.15.0+xpu", "torchvision==0.29.2+xpu", "torchaudio==2.11.1+xpu"]
+
+[pytorch.cpu]
+python = "3.13"
+index = "https://download.pytorch.org/whl/cpu"
+packages = ["torch==2.15.0+cpu", "torchvision==0.29.2+cpu", "torchaudio==2.11.1+cpu"]
+
+[licenses.comfyui]
+name = "GPL-3.0"
+url = "https://github.com/Comfy-Org/ComfyUI/blob/master/LICENSE"
+summary = "ComfyUI, the separate program that runs the models."
+
+[licenses.sai-community]
+name = "Stability AI Community License"
+url = "https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md"
+summary = "Commercial use requires registering with Stability AI and an enterprise license above USD 1M in annual revenue."
+
+[licenses.flux-dev-non-commercial]
+name = "FLUX [dev] Non-Commercial License v2.0"
+url = "https://bfl.ai/legal/non-commercial-license-terms"
+summary = "Non-commercial use of the model. Commercial use of its images is unresolved: check with Black Forest Labs."
+
+[licenses.apache-2]
+name = "Apache-2.0"
+url = "https://www.apache.org/licenses/LICENSE-2.0"
+summary = "Permissive license."
+
+[[models]]
+name = "sdxl_turbo"
+repo = "stabilityai/sdxl-turbo"
+revision = "71153311d3dbb46851df1931d3ca6e939de83304"
+filename = "sd_xl_turbo_1.0_fp16.safetensors"
+dest = "checkpoints/sd_xl_turbo_1.0_fp16.safetensors"
+bytes = 6938081905
+sha256 = "e869ac7d6942cb327d68d5ed83a40447aadf20e0c3358d98b2cc9e270db0da26"
+license = "sai-community"
+workflows = ["sdxl_turbo"]
+
+[[models]]
+name = "flux_dev"
+repo = "comfyanonymous/flux_dev_scaled_fp8_test"
+revision = "594059e8b11432ceaf2d7cf2e95f9eb1c0ecd3ed"
+filename = "flux_dev_fp8_scaled_diffusion_model.safetensors"
+dest = "diffusion_models/flux_dev_fp8_scaled_diffusion_model.safetensors"
+bytes = 11901607560
+sha256 = "358fff9355c962532593898b10436f13e6f9bfb0389f36df03c6e55fe7c9cbfe"
+license = "flux-dev-non-commercial"
+workflows = ["flux_dev"]
+
+[[models]]
+name = "flux_kontext"
+repo = "Comfy-Org/Flux-1-Kontext-Dev"
+revision = "795e390e4a1200720e40af3780d5d8b96bc13ae3"
+filename = "split_files/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors"
+dest = "diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors"
+bytes = 11904640136
+sha256 = "630ba795ec64283b4230ea23cf79406c2c68b7c578229ed139f30043eadb30a2"
+license = "flux-dev-non-commercial"
+workflows = ["flux_kontext_dev_basic"]
+
+[[models]]
+name = "t5xxl"
+repo = "comfyanonymous/flux_text_encoders"
+revision = "6af2a98e3f615bdfa612fbd85da93d1ed5f69ef5"
+filename = "t5xxl_fp8_e4m3fn_scaled.safetensors"
+dest = "text_encoders/t5xxl_fp8_e4m3fn_scaled.safetensors"
+bytes = 5157348688
+sha256 = "a498f0485dc9536735258018417c3fd7758dc3bccc0a645feaa472b34955557a"
+license = "apache-2"
+workflows = ["flux_dev", "flux_kontext_dev_basic"]
+
+[[models]]
+name = "clip_l"
+repo = "comfyanonymous/flux_text_encoders"
+revision = "6af2a98e3f615bdfa612fbd85da93d1ed5f69ef5"
+filename = "clip_l.safetensors"
+dest = "text_encoders/clip_l.safetensors"
+bytes = 246144152
+sha256 = "660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd"
+license = "apache-2"
+workflows = ["flux_dev", "flux_kontext_dev_basic"]
+
+[[models]]
+name = "flux_vae"
+repo = "Comfy-Org/Lumina-Image-2"
+revision = "5b072540ef86570fecb8249c505f23d5bdeb88cd"
+filename = "split_files/vae/ae.safetensors"
+dest = "vae/ae.safetensors"
+bytes = 335304388
+sha256 = "afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38"
+license = "apache-2"
+workflows = ["flux_dev", "flux_kontext_dev_basic"]
+
+[profiles.fast]
+description = "Quick generation with SDXL Turbo"
+min_vram_mib = 8000
+models = ["sdxl_turbo"]
+
+[profiles.quality]
+description = "fast + high-quality generation with FLUX Dev"
+min_vram_mib = 16000
+models = ["sdxl_turbo", "flux_dev", "t5xxl", "clip_l", "flux_vae"]
+
+[profiles.full]
+description = "quality + image editing with FLUX Kontext"
+min_vram_mib = 16000
+models = ["sdxl_turbo", "flux_dev", "t5xxl", "clip_l", "flux_vae", "flux_kontext"]

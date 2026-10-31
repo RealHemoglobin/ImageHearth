@@ -8,6 +8,7 @@ license-files = ["LICENSE", "src/imagehearth_mcp/data/imagehearth_status/LICENSE
 requires-python = ">=3.13"
 dependencies = [
     "filelock>=4.2.5",
+    "huggingface-hub>=1,<3",
     "mcp>=1.30,<2",
     "pillow>=13,<14",
     "platformdirs>=4,<5",
@@ -47,6 +48,8 @@ explicit-preview-rules = true
 # Restaurar Ollama es limpieza final: cualquier fallo se convierte en aviso
 # para no perder la imagen ya generada.
 "src/imagehearth_mcp/engine/orchestrator.py" = ["BLE001"]
+# La prueba de humo informa de cualquier fallo del motor, sea cual sea la capa.
+"src/imagehearth_mcp/provisioner/smoke.py" = ["BLE001"]
 # Los llamadores capturan ValueError; pasar a TypeError cambiaría el comportamiento.
 "src/imagehearth_mcp/engine/validation.py" = ["TRY004"]
 # Se conserva el orden con el que ComfyUI carga el nodo: importa sus módulos internos.

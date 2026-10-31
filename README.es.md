@@ -7,7 +7,7 @@ ImageHearth es un servidor [MCP](https://modelcontextprotocol.io) que conecta ag
 [Read in English](README.md)
 
 > [!WARNING]
-> **En desarrollo temprano.** Hoy solo funciona en **Linux con GPU NVIDIA**, y la instalación es manual. Está prevista la instalación con un solo comando para Linux, macOS y Windows: consulta el [roadmap](specs/roadmap.md).
+> **En desarrollo temprano.** `imagehearth-mcp setup` está pensado para **Linux y Windows 11 con GPU NVIDIA**, y aún no se ha verificado en máquinas limpias. El instalador de un comando y el soporte de macOS están previstos: consulta el [roadmap](specs/roadmap.md).
 
 ## Qué le puedes pedir a tu agente
 
@@ -22,44 +22,78 @@ Si también usas [Ollama](https://ollama.com), ImageHearth libera sus modelos de
 
 | | |
 |---|---|
-| **Sistema** | Linux. Windows 10/11 con NVIDIA: el código es portable pero aún no está verificado (ver la nota). macOS todavía no es compatible |
-| **GPU** | NVIDIA. Solo se ha probado en una RTX 4090 de 24 GB; con menos memoria, los modelos FLUX pueden ir lentos o fallar |
-| **Disco** | Unos 45 GB para todo (36,5 GB de modelos). Solo con SDXL Turbo, unos 15 GB |
-| **Software** | Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), driver de NVIDIA actualizado y, opcionalmente, [Ollama](https://ollama.com/download) |
+| **Sistema** | Linux o Windows 11. macOS aún no está soportado |
+| **GPU** | NVIDIA serie 20 o posterior con un controlador actual. Solo probado en una RTX 4090 de 24 GB; con menos memoria puede ir lento o fallar con los modelos FLUX. Otras GPU se detectan y se ofrecen como experimentales |
+| **Disco** | 7,2 GB para ComfyUI y su entorno, más el perfil que elijas |
+| **Software** | [uv](https://docs.astral.sh/uv/getting-started/installation/). No hacen falta Git ni Python. [Ollama](https://ollama.com/download) es opcional |
 
 > [!NOTE]
-> Ollama es opcional. Si no está en marcha, ImageHearth lo ignora y el estado sigue siendo `ready`. Con `ollama_mode = "off"` no lo toca nunca.
->
-> En Windows instalas ComfyUI a mano (su venv usa `Scripts\python.exe`) y ejecutas `scripts\check.ps1` para verificar el repositorio. Este camino aún no está validado en una máquina real: considéralo experimental.
+> Ollama es opcional. Si no está en marcha, ImageHearth lo ignora y el estado sigue siendo `ready`. Pon `ollama_mode = "off"` para que nunca lo toque.
 
 ## Instalación
 
-Abre una terminal y ejecuta cada paso en orden.
-
-### 1. Instala ComfyUI
+### 1. Instala ImageHearth
 
 ```bash
-mkdir -p ~/AI && cd ~/AI
-git clone https://github.com/Comfy-Org/ComfyUI.git
-cd ComfyUI
-python3.13 -m venv venv
-venv/bin/pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu130
-venv/bin/pip install -r requirements.txt
-```
-
-### 2. Instala ImageHearth
-
-```bash
-cd ~/AI
 git clone https://github.com/RealHemoglobin/ImageHearth.git
-cd ImageHearth
-uv tool install ./
-cp -r src/imagehearth_mcp/data/imagehearth_status ~/AI/ComfyUI/custom_nodes/imagehearth_status
+uv tool install ./ImageHearth
 ```
 
-### 3. Configura (opcional)
+### 2. Ejecuta setup
 
-ImageHearth busca ComfyUI en su propia carpeta de datos (`~/.local/share/imagehearth/comfyui` en Linux). Si lo instalaste en otro sitio, crea `~/.config/imagehearth/config.toml`:
+```bash
+imagehearth-mcp setup
+```
+
+Detecta tu hardware y cualquier ComfyUI existente, propone un perfil y muestra el espacio y las licencias **antes de descargar nada**. Después instala ComfyUI y los modelos y genera una imagen de prueba. Si se interrumpe, vuelve a ejecutarlo y continúa donde se quedó.
+
+| Perfil | Qué incluye | Modelos |
+|---|---|---|
+| `fast` | Generación rápida con SDXL Turbo | 6,9 GB |
+| `quality` | `fast` + FLUX Dev | 24,6 GB |
+| `full` | `quality` + edición con FLUX Kontext | 36,5 GB |
+
+Puedes empezar con `fast` y ejecutar `setup --profile full` más adelante: lo que ya está no se vuelve a descargar.
+
+| Opción | Uso |
+|---|---|
+| `--profile fast\|quality\|full` | Elige el perfil sin preguntar |
+| `--accept-licenses` | Acepta las licencias sin preguntar. Obligatoria con `--non-interactive` |
+| `--non-interactive` | No pregunta nunca: falla si falta una decisión |
+| `--managed` | Instala un ComfyUI propio, aunque exista otro |
+| `--attach RUTA` | Usa el ComfyUI que hay en `RUTA` |
+| `--install-node` | Permite instalar el nodo de estado en un ComfyUI adjunto |
+| `--models-dir RUTA` | Guarda los modelos en `RUTA` y los comparte con `extra_model_paths.yaml` |
+| `--port PUERTO` | Puerto en el que escucha ComfyUI |
+| `--skip-smoke-test` | No genera la imagen de prueba |
+
+Define `HF_TOKEN` si Hugging Face restringe el acceso a un modelo.
+
+**Usar un ComfyUI que ya tienes.** Con `--attach`, o eligiéndolo cuando te pregunte, ImageHearth lo usa en lugar de instalar otro y no descarga los modelos que ya tiene. Tu ComfyUI solo cambia si permites instalar el nodo de estado. ComfyUI Desktop debe estar abierto, porque ImageHearth no puede arrancarlo.
+
+### 3. Compruébalo, actualízalo o elimínalo
+
+```bash
+imagehearth-mcp doctor
+```
+
+Comprueba cada capa e indica cómo arreglar lo que falle. Añade `--json` para un formato estable, o `--verify-hashes` para comparar el SHA-256 de cada modelo en lugar de su tamaño. Termina con un código distinto de cero si algo falla.
+
+```bash
+imagehearth-mcp update
+```
+
+Aplica la versión de ComfyUI y los modelos que fija esta versión de ImageHearth. Un ComfyUI adjunto no se toca, salvo el nodo de estado que haya instalado setup.
+
+```bash
+imagehearth-mcp uninstall
+```
+
+Muestra qué va a borrar y borra solo lo que instaló setup. Los modelos necesitan una confirmación aparte (`--remove-models` o `--keep-models` para decidirlo de antemano, `--yes` para saltar la primera pregunta). Un ComfyUI o unos modelos que ya estaban nunca se tocan. Para quitar el propio comando, ejecuta `uv tool uninstall imagehearth-mcp`.
+
+### Configuración (opcional)
+
+`setup` escribe lo que necesita en `~/.config/imagehearth/config.toml` en Linux y en `%APPDATA%\imagehearth\config.toml` en Windows. También puedes editarlo:
 
 ```toml
 comfy_dir = "~/AI/ComfyUI"      # dónde está instalado ComfyUI
@@ -69,41 +103,9 @@ ollama_url = "http://127.0.0.1:11434"
 ollama_mode = "auto"            # "auto" usa Ollama si responde; "off" no lo toca nunca
 ```
 
-Cada clave también se puede definir con una variable de entorno: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL` e `IMAGEHEARTH_OLLAMA_MODE`. Las variables tienen prioridad sobre el archivo, y el archivo sobre los valores por defecto.
+Cada clave se puede definir también con una variable de entorno: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL` e `IMAGEHEARTH_OLLAMA_MODE`. Las variables mandan sobre el archivo, y el archivo sobre los valores por defecto.
 
-### 4. Descarga los modelos
-
-Descarga solo lo que necesites. Antes, consulta las [licencias](#licencias-de-los-modelos).
-
-```bash
-cd ~/AI/ComfyUI/models
-HF=https://huggingface.co
-
-# Generación rápida: SDXL Turbo (6,9 GB)
-curl -L -C - -o checkpoints/sd_xl_turbo_1.0_fp16.safetensors \
-  $HF/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors
-
-# Necesarios para FLUX Dev y FLUX Kontext (5,7 GB)
-mkdir -p text_encoders vae diffusion_models
-curl -L -C - -o text_encoders/clip_l.safetensors \
-  $HF/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors
-curl -L -C - -o text_encoders/t5xxl_fp8_e4m3fn_scaled.safetensors \
-  $HF/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn_scaled.safetensors
-curl -L -C - -o vae/ae.safetensors \
-  $HF/Comfy-Org/Lumina_Image_2.0_Repackaged/resolve/main/split_files/vae/ae.safetensors
-
-# Alta calidad: FLUX Dev (11,9 GB)
-curl -L -C - -o diffusion_models/flux_dev_fp8_scaled_diffusion_model.safetensors \
-  $HF/comfyanonymous/flux_dev_scaled_fp8_test/resolve/main/flux_dev_fp8_scaled_diffusion_model.safetensors
-
-# Edición de imágenes: FLUX Kontext (11,9 GB)
-curl -L -C - -o diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors \
-  $HF/Comfy-Org/flux1-kontext-dev_ComfyUI/resolve/main/split_files/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors
-```
-
-Si se interrumpe una descarga, repite el mismo comando y continuará.
-
-### 5. Conecta tu agente
+### 4. Conecta tu agente
 
 **Claude Code**
 
@@ -137,7 +139,7 @@ mkdir -p ~/.claude/skills
 ln -s "$("$(uv tool dir)/imagehearth-mcp/bin/python" -c 'from imagehearth_mcp.engine import config; print(config.data_path("skill"))')" ~/.claude/skills/imagehearth
 ```
 
-### 6. Pruébalo
+### 5. Pruébalo
 
 Reinicia tu agente y pídele:
 
@@ -153,13 +155,13 @@ Pide a tu agente que *"compruebe el estado de ImageHearth"*. El resultado te dic
 |---|---|---|
 | `ready` | Todo funciona | Nada |
 | `busy` | Se está generando otra imagen | Esperar |
-| `degraded` | Falta algo | Lee `issues`. Normalmente falta el nodo del paso 2 o está desactualizado. Sin él la generación funciona, pero la memoria de la GPU se comprueba con menos fiabilidad |
+| `degraded` | Falta algo | Lee `issues`. Normalmente falta el nodo de estado o está desactualizado. Sin él la generación funciona, pero la memoria de la GPU se comprueba con menos fiabilidad |
 | `recovery_required` | Se interrumpió una sesión anterior | Pide a tu agente que *"recupere el motor"* |
 
 | Problema | Solución |
 |---|---|
-| El agente no ve las herramientas | Reinícialo y revisa la ruta del comando del paso 5 |
-| Error de modelo no encontrado | Comprueba que el archivo del paso 4 esté en su carpeta |
+| El agente no ve las herramientas | Reinícialo y revisa la ruta del comando del paso 4 |
+| Error de modelo no encontrado | Ejecuta `imagehearth-mcp setup --profile full` para instalar los que falten |
 | ComfyUI no arranca | Lee `~/.local/state/imagehearth/log/comfyui.log` |
 | El puerto 8188 está ocupado | Cierra lo que lo esté usando, o define otro `comfy_port` |
 

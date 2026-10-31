@@ -5,11 +5,10 @@ from pathlib import Path
 
 from platformdirs import user_config_path, user_data_path, user_log_path
 
+# Vive aparte para poder capturarla cuando falla la propia importación de config.
+from imagehearth_mcp.engine.errors import ConfigError
+
 APP_NAME = "imagehearth"
-
-
-class ConfigError(RuntimeError):
-    """Invalid configuration: the message names the file or variable."""
 
 
 def _int_env(name, default):
@@ -138,6 +137,8 @@ OLLAMA_MODE = _choice_setting(
 LOCK_FILE = DATA_DIR / "engine.lock"
 STATE_FILE = DATA_DIR / "state" / "session.json"
 PID_FILE = DATA_DIR / "state" / "comfyui.pid"
+INSTALL_MANIFEST = DATA_DIR / "install.json"
+SETUP_LOCK = DATA_DIR / "setup.lock"
 COMFY_LOG_FILE = LOG_DIR / "comfyui.log"
 ENGINE_LOG_DIR = LOG_DIR
 

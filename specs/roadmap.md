@@ -95,17 +95,17 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 **Spike inicial (máximo 2 días):** comparar el instalador propio con `comfy-cli` en Linux y Windows, y validar la decisión de [tech-stack](tech-stack.md).
 
-- [ ] **Detección:** sistema, arquitectura, GPU, driver, VRAM, RAM, disco, ComfyUI existente (incluido Desktop), Ollama, LM Studio, llama.cpp y vLLM.
-- [ ] **Manifiesto** `models.toml`: repositorio, revisión fijada, ruta, tamaño, SHA-256, licencia y workflows que habilita. Partir de la tabla verificada del análisis.
-- [ ] **ComfyUI:** descargar una versión fijada, crear el entorno con uv y Python gestionado, instalar el PyTorch adecuado e instalar el nodo.
-- [ ] **Modo adjunto:** usar un ComfyUI existente, instalar el nodo con permiso y configurar URL y rutas.
-- [ ] **Modelos:** descarga reanudable con verificación SHA-256, que no vuelva a descargar lo que ya existe.
-- [ ] **Consentimiento:** mostrar espacio, licencias y enlaces antes de descargar. En modo no interactivo, exigir `--accept-licenses`.
-- [ ] **Comprobaciones previas:** disco insuficiente, driver ausente, GPU sin soporte o puerto ocupado; cada una con un mensaje accionable.
-- [ ] **`doctor`:** comprobar cada capa, con salida legible y `--json`.
-- [ ] **`update` y `uninstall`:** registrar en un manifiesto qué se instaló; no borrar nunca nada ajeno ni, sin confirmación, los modelos.
-- [ ] **Mostrar el resumen de lo que se va a descargar antes de hacerlo y permitir elegir el perfil**, para que quien ya usa modelos locales pueda empezar solo con `fast` y poco disco.
-- [ ] Prueba de humo final con una imagen pequeña.
+- [x] **Detección:** sistema, arquitectura, GPU, driver, VRAM, RAM, disco, ComfyUI existente (incluido Desktop), Ollama, LM Studio, llama.cpp y vLLM.
+- [x] **Manifiesto** `models.toml`: repositorio, revisión fijada, ruta, tamaño, SHA-256, licencia y workflows que habilita. Partir de la tabla verificada del análisis.
+- [x] **ComfyUI:** descargar una versión fijada, crear el entorno con uv y Python gestionado, instalar el PyTorch adecuado e instalar el nodo.
+- [x] **Modo adjunto:** usar un ComfyUI existente, instalar el nodo con permiso y configurar URL y rutas.
+- [x] **Modelos:** descarga reanudable con verificación SHA-256, que no vuelva a descargar lo que ya existe.
+- [x] **Consentimiento:** mostrar espacio, licencias y enlaces antes de descargar. En modo no interactivo, exigir `--accept-licenses`.
+- [x] **Comprobaciones previas:** disco insuficiente, driver ausente, GPU sin soporte o puerto ocupado; cada una con un mensaje accionable.
+- [x] **`doctor`:** comprobar cada capa, con salida legible y `--json`.
+- [x] **`update` y `uninstall`:** registrar en un manifiesto qué se instaló; no borrar nunca nada ajeno ni, sin confirmación, los modelos.
+- [x] **Mostrar el resumen de lo que se va a descargar antes de hacerlo y permitir elegir el perfil**, para que quien ya usa modelos locales pueda empezar solo con `fast` y poco disco.
+- [x] Prueba de humo final con una imagen pequeña.
 
 **Listo cuando:**
 - Funciona en máquinas virtuales o equipos limpios: Ubuntu y Windows 11 con NVIDIA.
@@ -113,6 +113,8 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - Un archivo corrupto se detecta y se vuelve a descargar.
 - Con espacio insuficiente falla antes de descargar nada.
 - `uninstall` deja intactos un ComfyUI y unos modelos preexistentes.
+
+**Estado:** completada por decisión del usuario el 2026-10-31. Las pruebas en máquinas limpias no constan en la [evidencia](2026-10-31-instalador/validation.md#evidencia), que recoge lo pendiente.
 
 ## Fase 4: Perfiles y macOS
 
