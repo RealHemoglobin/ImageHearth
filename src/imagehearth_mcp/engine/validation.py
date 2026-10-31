@@ -1,6 +1,6 @@
 import re
 
-from engine import config
+from imagehearth_mcp.engine import config
 
 
 def validate_prompt(prompt):

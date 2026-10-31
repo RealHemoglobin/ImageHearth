@@ -1,8 +1,8 @@
-# ImageEngine
+# ImageHearth
 
 **Dale a cualquier agente de IA la capacidad de generar y editar imágenes en tu propio PC.** Sin suscripciones ni nube: tus prompts e imágenes se quedan en tu equipo.
 
-ImageEngine es un servidor [MCP](https://modelcontextprotocol.io) que conecta agentes como Claude Code o Codex con [ComfyUI](https://github.com/Comfy-Org/ComfyUI).
+ImageHearth es un servidor [MCP](https://modelcontextprotocol.io) que conecta agentes como Claude Code o Codex con [ComfyUI](https://github.com/Comfy-Org/ComfyUI).
 
 [Read in English](README.md)
 
@@ -16,7 +16,7 @@ ImageEngine es un servidor [MCP](https://modelcontextprotocol.io) que conecta ag
 - *"Cambia el fondo de `foto.png` por una montaña nevada"*: FLUX Kontext.
 - *"Combina estas tres fotos en una sola escena"*: hasta seis imágenes de referencia.
 
-Si también usas [Ollama](https://ollama.com), ImageEngine libera sus modelos de la memoria de la GPU mientras genera y los restaura después.
+Si también usas [Ollama](https://ollama.com), ImageHearth libera sus modelos de la memoria de la GPU mientras genera y los restaura después.
 
 ## Requisitos
 
@@ -25,14 +25,14 @@ Si también usas [Ollama](https://ollama.com), ImageEngine libera sus modelos de
 | **Sistema** | Linux |
 | **GPU** | NVIDIA. Solo se ha probado en una RTX 4090 de 24 GB; con menos memoria, los modelos FLUX pueden ir lentos o fallar |
 | **Disco** | Unos 45 GB para todo (36,5 GB de modelos). Solo con SDXL Turbo, unos 15 GB |
-| **Software** | Git, Python 3.13, driver de NVIDIA actualizado y [Ollama](https://ollama.com/download) |
+| **Software** | Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), driver de NVIDIA actualizado y [Ollama](https://ollama.com/download) |
 
 > [!NOTE]
 > Por ahora, Ollama debe estar instalado y en marcha aunque no lo uses. [Este requisito desaparecerá](specs/roadmap.md#fase-2-portabilidad-del-núcleo).
 
 ## Instalación
 
-Abre una terminal y ejecuta cada paso en orden. De momento las rutas son fijas, así que déjalas como están.
+Abre una terminal y ejecuta cada paso en orden.
 
 ### 1. Instala ComfyUI
 
@@ -45,18 +45,30 @@ venv/bin/pip install torch torchvision torchaudio --extra-index-url https://down
 venv/bin/pip install -r requirements.txt
 ```
 
-### 2. Instala ImageEngine
+### 2. Instala ImageHearth
 
 ```bash
 cd ~/AI
-git clone https://github.com/RealHemoglobin/ImageHearth.git ImageEngine
-cd ImageEngine
-python3.13 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp -r extras/comfyui_custom_nodes/imageengine_status ~/AI/ComfyUI/custom_nodes/
+git clone https://github.com/RealHemoglobin/ImageHearth.git
+cd ImageHearth
+uv tool install ./
+cp -r src/imagehearth_mcp/data/comfyui_node ~/AI/ComfyUI/custom_nodes/imageengine_status
 ```
 
-### 3. Descarga los modelos
+### 3. Configura (opcional)
+
+ImageHearth busca ComfyUI en su propia carpeta de datos (`~/.local/share/imagehearth/comfyui` en Linux). Si lo instalaste en otro sitio, crea `~/.config/imagehearth/config.toml`:
+
+```toml
+comfy_dir = "~/AI/ComfyUI"      # dónde está instalado ComfyUI
+comfy_port = 8188               # puerto en el que escucha ComfyUI
+output_dir = "~/Pictures/ImageHearth"
+ollama_url = "http://127.0.0.1:11434"
+```
+
+Cada clave también se puede definir con una variable de entorno: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR` e `IMAGEHEARTH_OLLAMA_URL`. Las variables tienen prioridad sobre el archivo, y el archivo sobre los valores por defecto.
+
+### 4. Descarga los modelos
 
 Descarga solo lo que necesites. Antes, consulta las [licencias](#licencias-de-los-modelos).
 
@@ -88,20 +100,19 @@ curl -L -C - -o diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors \
 
 Si se interrumpe una descarga, repite el mismo comando y continuará.
 
-### 4. Conecta tu agente
+### 5. Conecta tu agente
 
 **Claude Code**
 
 ```bash
-claude mcp add --scope user imageengine -- ~/AI/ImageEngine/.venv/bin/python ~/AI/ImageEngine/mcp/server.py
+claude mcp add --scope user imagehearth -- ~/.local/bin/imagehearth-mcp
 ```
 
 **Codex**: añade esto a `~/.codex/config.toml`, sustituyendo `TU_USUARIO`:
 
 ```toml
-[mcp_servers.imageengine]
-command = "/home/TU_USUARIO/AI/ImageEngine/.venv/bin/python"
-args = ["/home/TU_USUARIO/AI/ImageEngine/mcp/server.py"]
+[mcp_servers.imagehearth]
+command = "/home/TU_USUARIO/.local/bin/imagehearth-mcp"
 ```
 
 **Otros agentes compatibles con MCP**: busca su archivo de configuración de MCP y añade:
@@ -109,31 +120,31 @@ args = ["/home/TU_USUARIO/AI/ImageEngine/mcp/server.py"]
 ```json
 {
   "mcpServers": {
-    "imageengine": {
-      "command": "/home/TU_USUARIO/AI/ImageEngine/.venv/bin/python",
-      "args": ["/home/TU_USUARIO/AI/ImageEngine/mcp/server.py"]
+    "imagehearth": {
+      "command": "/home/TU_USUARIO/.local/bin/imagehearth-mcp"
     }
   }
 }
 ```
 
-**Opcional:** el archivo [`skill/SKILL.md`](skill/SKILL.md) enseña a los agentes a sacar mejores resultados. En Claude Code se activa así:
+**Opcional:** el archivo [`SKILL.md`](src/imagehearth_mcp/data/skill/SKILL.md) enseña a los agentes a sacar mejores resultados. En Claude Code se activa así:
 
 ```bash
-mkdir -p ~/.claude/skills && ln -s ~/AI/ImageEngine/skill ~/.claude/skills/imageengine
+mkdir -p ~/.claude/skills
+ln -s "$("$(uv tool dir)/imagehearth-mcp/bin/python" -c 'from imagehearth_mcp.engine import config; print(config.data_path("skill"))')" ~/.claude/skills/imagehearth
 ```
 
-### 5. Pruébalo
+### 6. Pruébalo
 
 Reinicia tu agente y pídele:
 
 > Genera una imagen de una bicicleta roja en una playa, con calidad rápida.
 
-ComfyUI arranca solo. La primera imagen tarda más porque tiene que cargar el modelo. Las imágenes se guardan en `~/AI/ImageEngine/output/`.
+ComfyUI arranca solo. La primera imagen tarda más porque tiene que cargar el modelo. Las imágenes se guardan en `~/Pictures/ImageHearth/`.
 
 ## Solución de problemas
 
-Pide a tu agente que *"compruebe el estado de ImageEngine"*. El resultado te dice qué ocurre:
+Pide a tu agente que *"compruebe el estado de ImageHearth"*. El resultado te dice qué ocurre:
 
 | Estado | Significado | Qué hacer |
 |---|---|---|
@@ -144,10 +155,10 @@ Pide a tu agente que *"compruebe el estado de ImageEngine"*. El resultado te dic
 
 | Problema | Solución |
 |---|---|
-| El agente no ve las herramientas | Reinícialo y revisa las rutas del paso 4 |
-| Error de modelo no encontrado | Comprueba que el archivo del paso 3 esté en su carpeta |
-| ComfyUI no arranca | Lee `~/AI/ImageEngine/logs/comfyui.log` |
-| El puerto 8188 está ocupado | Cierra lo que lo esté usando; todavía no se puede cambiar |
+| El agente no ve las herramientas | Reinícialo y revisa la ruta del comando del paso 5 |
+| Error de modelo no encontrado | Comprueba que el archivo del paso 4 esté en su carpeta |
+| ComfyUI no arranca | Lee `~/.local/state/imagehearth/log/comfyui.log` |
+| El puerto 8188 está ocupado | Cierra lo que lo esté usando, o define otro `comfy_port` |
 
 El log de ComfyUI muestra `imageengine_status` como `IMPORT FAILED`. Es un [problema conocido](specs/analysis.md) e inofensivo: el nodo funciona.
 
@@ -173,4 +184,4 @@ Hace falta [uv](https://docs.astral.sh/uv/getting-started/installation/), que cr
 
 ## Licencia
 
-[MIT](LICENSE), salvo el nodo personalizado de ComfyUI en [`extras/comfyui_custom_nodes/imageengine_status/`](extras/comfyui_custom_nodes/imageengine_status/LICENSE), que es GPL-3.0. Los componentes y modelos de terceros figuran en [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE), salvo el nodo personalizado de ComfyUI en [`src/imagehearth_mcp/data/comfyui_node/`](src/imagehearth_mcp/data/comfyui_node/LICENSE), que es GPL-3.0. Los componentes y modelos de terceros figuran en [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

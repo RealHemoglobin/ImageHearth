@@ -15,20 +15,20 @@ from urllib.parse import parse_qs, urlparse
 
 from PIL import Image
 
-from engine import config
+from imagehearth_mcp.engine import config
 
 # Antes de importar módulos con logger: las pruebas no escriben en logs/.
-_LOGS = Path(tempfile.mkdtemp(prefix="imageengine-test-logs-"))
+_LOGS = Path(tempfile.mkdtemp(prefix="imagehearth-test-logs-"))
 config.LOG_DIR = _LOGS
-config.ENGINE_LOG_FILE = _LOGS / "imageengine.log"
+config.ENGINE_LOG_FILE = _LOGS / "imagehearth.log"
 
-from engine.log import get_logger
+from imagehearth_mcp.engine.log import get_logger
 
 get_logger("tests")
 
-for _handler in list(logging.getLogger("imageengine").handlers):
+for _handler in list(logging.getLogger("imagehearth").handlers):
     if type(_handler) is logging.StreamHandler:
-        logging.getLogger("imageengine").removeHandler(_handler)
+        logging.getLogger("imagehearth").removeHandler(_handler)
 
 
 def png_bytes():
@@ -274,7 +274,7 @@ class FakeComfy(FakeServer):
 
 class EngineTestCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="imageengine-test-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="imagehearth-test-"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
         self.comfy_dir = self.tmp / "ComfyUI"
@@ -292,7 +292,7 @@ class EngineTestCase(unittest.TestCase):
             "COMFY_API": f"http://127.0.0.1:{self.comfy.port}",
             "OLLAMA_API": f"http://127.0.0.1:{self.ollama.port}",
             "OUTPUT_DIR": self.tmp / "output",
-            "LOCK_FILE": self.tmp / "engine.lock",
+            "LOCK_FILE": self.tmp / "imagehearth_mcp.engine.lock",
             "STATE_FILE": self.tmp / "state" / "session.json",
             "POLL_INTERVAL": 0.01,
             "OLLAMA_CHECK_INTERVAL": 0.0,
@@ -308,7 +308,7 @@ class EngineTestCase(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
         gpu = mock.patch(
-            "engine.comfyui_manager.gpu_free_mib",
+            "imagehearth_mcp.engine.comfyui_manager.gpu_free_mib",
             return_value=20000,
         )
         self.gpu_free = gpu.start()

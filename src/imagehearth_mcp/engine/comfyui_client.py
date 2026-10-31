@@ -8,8 +8,8 @@ import uuid
 import requests
 from PIL import Image
 
-from engine import config
-from engine.log import get_logger
+from imagehearth_mcp.engine import config
+from imagehearth_mcp.engine.log import get_logger
 
 log = get_logger("comfyui")
 

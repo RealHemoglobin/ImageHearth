@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 
 import requests
 
-from engine import config
-from engine.log import get_logger
+from imagehearth_mcp.engine import config
+from imagehearth_mcp.engine.log import get_logger
 
 log = get_logger("ollama")
 
@@ -153,6 +153,3 @@ def _keep_alive(expires_at):
 
     return f"{max(seconds, MIN_KEEP_ALIVE)}s"
 
-
-if __name__ == "__main__":
-    print("Modelos activos:", [m["name"] for m in get_loaded_models()])

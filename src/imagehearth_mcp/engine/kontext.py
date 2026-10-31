@@ -6,12 +6,16 @@ from pathlib import Path
 import requests
 from PIL import Image
 
-from engine import comfyui_client, config
-from engine.log import get_logger
-from engine.orchestrator import generation_session
-from engine.result import ImageResult
-from engine.validation import fit_to_limits, validate_dimensions, validate_prompt
-from engine.workflow_runner import save_session_image
+from imagehearth_mcp.engine import comfyui_client, config
+from imagehearth_mcp.engine.log import get_logger
+from imagehearth_mcp.engine.orchestrator import generation_session
+from imagehearth_mcp.engine.result import ImageResult
+from imagehearth_mcp.engine.validation import (
+    fit_to_limits,
+    validate_dimensions,
+    validate_prompt,
+)
+from imagehearth_mcp.engine.workflow_runner import save_session_image
 
 log = get_logger("kontext")
 
@@ -237,21 +241,3 @@ def generate(
     warnings = [warning] if warning else []
     return ImageResult(destination, warnings + session.warnings)
 
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Generación FLUX Kontext")
-    parser.add_argument("image", nargs="+", help="Imágenes de referencia")
-    parser.add_argument("--prompt", required=True)
-    parser.add_argument("--width", type=int, default=0)
-    parser.add_argument("--height", type=int, default=0)
-
-    args = parser.parse_args()
-
-    generate(
-        prompt=args.prompt,
-        image_paths=args.image,
-        width=args.width,
-        height=args.height,
-    )

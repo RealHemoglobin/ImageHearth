@@ -1,19 +1,24 @@
 import json
 import logging
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from PIL import Image
 
-from engine import config, kontext
-from engine.image_router import create_image
-from engine.log import SharedRotatingFileHandler
-from engine.validation import fit_to_limits, resolve_workflow, validate_dimensions
-from engine.workflow_runner import run_workflow
+from imagehearth_mcp.engine import config, kontext
+from imagehearth_mcp.engine.image_router import create_image
+from imagehearth_mcp.engine.log import SharedRotatingFileHandler
+from imagehearth_mcp.engine.validation import (
+    fit_to_limits,
+    resolve_workflow,
+    validate_dimensions,
+)
+from imagehearth_mcp.engine.workflow_runner import run_workflow
 from tests.harness import EngineTestCase
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 class KontextReferences(EngineTestCase):
@@ -51,7 +56,7 @@ class KontextReferences(EngineTestCase):
         self.assertEqual(mine.read_bytes(), b"mi archivo")
         self.assertEqual(result.warnings, [])
         self.assertEqual(
-            list((self.comfy_dir / "input" / "imageengine").iterdir()),
+            list((self.comfy_dir / "input" / "imagehearth").iterdir()),
             [],
         )
 
@@ -63,7 +68,7 @@ class KontextReferences(EngineTestCase):
             kontext.generate("edita", image_paths=[reference])
 
         self.assertEqual(
-            list((self.comfy_dir / "input" / "imageengine").iterdir()),
+            list((self.comfy_dir / "input" / "imagehearth").iterdir()),
             [],
         )
 
@@ -169,8 +174,20 @@ class McpProtocol(EngineTestCase):
             },
         ]
 
+        home = Path(tempfile.mkdtemp(prefix="imagehearth-test-home-"))
+        self.addCleanup(shutil.rmtree, home, True)
+
+        # El comando instalado, con un HOME vacío: sin configuración de nadie.
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith(("IMAGEHEARTH_", "XDG_"))
+        }
+        env["HOME"] = str(home)
+
         process = subprocess.Popen(
-            [sys.executable, str(ROOT / "mcp" / "server.py")],
+            [str(Path(sys.executable).parent / "imagehearth-mcp")],
+            env=env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -191,8 +208,17 @@ class McpProtocol(EngineTestCase):
             replies[reply["id"]] = reply
 
         tools = {tool["name"] for tool in replies[2]["result"]["tools"]}
-        self.assertTrue(
-            {"create_image", "recover_engine", "get_engine_status"} <= tools
+        self.assertEqual(
+            tools,
+            {
+                "create_image",
+                "generate_image",
+                "edit_image",
+                "list_workflows",
+                "get_engine_status",
+                "ensure_comfyui",
+                "recover_engine",
+            },
         )
 
         text = replies[3]["result"]["content"]

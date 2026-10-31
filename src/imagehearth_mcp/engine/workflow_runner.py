@@ -2,11 +2,11 @@ import json
 import random
 import uuid
 
-from engine import comfyui_client, config
-from engine.log import get_logger
-from engine.orchestrator import generation_session
-from engine.result import ImageResult
-from engine.validation import validate_dimensions, validate_prompt
+from imagehearth_mcp.engine import comfyui_client, config
+from imagehearth_mcp.engine.log import get_logger
+from imagehearth_mcp.engine.orchestrator import generation_session
+from imagehearth_mcp.engine.result import ImageResult
+from imagehearth_mcp.engine.validation import validate_dimensions, validate_prompt
 
 log = get_logger("workflow")
 

@@ -6,10 +6,11 @@ import os
 import sys
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-from engine import config
+from imagehearth_mcp.engine import config
 
-run_id = contextvars.ContextVar("imageengine_run_id", default="")
+run_id = contextvars.ContextVar("imagehearth_run_id", default="")
 
 
 class JsonFormatter(logging.Formatter):
@@ -33,6 +34,9 @@ class SharedRotatingFileHandler(RotatingFileHandler):
     """Rotación segura entre los procesos MCP de cada agente."""
 
     def emit(self, record):
+        # La carpeta se crea al escribir, no al importar.
+        Path(self.baseFilename).parent.mkdir(parents=True, exist_ok=True)
+
         with open(f"{self.baseFilename}.lock", "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             self._reopen_if_rotated()
@@ -53,7 +57,7 @@ class SharedRotatingFileHandler(RotatingFileHandler):
 
 
 def get_logger(name):
-    root = logging.getLogger("imageengine")
+    root = logging.getLogger("imagehearth")
 
     if not root.handlers:
         root.setLevel(logging.INFO)
@@ -64,12 +68,12 @@ def get_logger(name):
         console.setFormatter(logging.Formatter("%(message)s"))
         root.addHandler(console)
 
-        config.LOG_DIR.mkdir(parents=True, exist_ok=True)
         file_handler = SharedRotatingFileHandler(
             config.ENGINE_LOG_FILE,
             maxBytes=config.ENGINE_LOG_MAX_BYTES,
             backupCount=config.ENGINE_LOG_BACKUPS,
             encoding="utf-8",
+            delay=True,
         )
         file_handler.setFormatter(JsonFormatter())
         root.addHandler(file_handler)

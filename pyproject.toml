@@ -1,15 +1,27 @@
 [project]
-name = "imagehearth"
-version = "0.0.0"
+name = "imagehearth-mcp"
+version = "0.1.0.dev0"
 description = "MCP server that lets AI agents generate and edit images locally through ComfyUI"
 readme = "README.md"
-license = "MIT"
+license = "MIT AND GPL-3.0-only"
+license-files = ["LICENSE", "src/imagehearth_mcp/data/comfyui_node/LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "mcp>=1.30,<2",
     "pillow>=13,<14",
+    "platformdirs>=4,<5",
     "requests>=2.34,<3",
 ]
+
+[project.scripts]
+imagehearth-mcp = "imagehearth_mcp.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/imagehearth_mcp"]
 
 [dependency-groups]
 dev = [
@@ -17,13 +29,8 @@ dev = [
     "ruff>=0.8",
 ]
 
-# Solo entorno de desarrollo: el empaquetado llega en la fase 1.
-[tool.uv]
-package = false
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
 
 [tool.ruff]
 target-version = "py313"
@@ -31,8 +38,8 @@ target-version = "py313"
 [tool.ruff.lint.per-file-ignores]
 # Restaurar Ollama es limpieza final: cualquier fallo se convierte en aviso
 # para no perder la imagen ya generada.
-"engine/orchestrator.py" = ["BLE001"]
+"src/imagehearth_mcp/engine/orchestrator.py" = ["BLE001"]
 # Los llamadores capturan ValueError; pasar a TypeError cambiaría el comportamiento.
-"engine/validation.py" = ["TRY004"]
+"src/imagehearth_mcp/engine/validation.py" = ["TRY004"]
 # Se conserva el orden con el que ComfyUI carga el nodo: importa sus módulos internos.
-"extras/comfyui_custom_nodes/imageengine_status/__init__.py" = ["I001"]
+"src/imagehearth_mcp/data/comfyui_node/__init__.py" = ["I001"]

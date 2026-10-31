@@ -6,9 +6,9 @@ from unittest import mock
 
 import requests
 
-from engine import config, ollama_manager, orchestrator, state
-from engine.status import get_status
-from engine.workflow_runner import run_workflow
+from imagehearth_mcp.engine import config, ollama_manager, orchestrator, state
+from imagehearth_mcp.engine.status import get_status
+from imagehearth_mcp.engine.workflow_runner import run_workflow
 from tests.harness import EngineTestCase
 
 
@@ -46,7 +46,7 @@ class SuccessfulSession(EngineTestCase):
         self.assertEqual(seen, [{}])
 
     def test_removes_only_its_copy_from_comfy_output(self):
-        other = self.comfy_dir / "output" / "imageengine" / "antigua.png"
+        other = self.comfy_dir / "output" / "imagehearth" / "antigua.png"
         other.parent.mkdir(parents=True)
         other.write_bytes(b"x")
 
@@ -71,7 +71,7 @@ class ReleaseFailures(EngineTestCase):
         self.comfy.free_ok = False
         self.comfy.on_prompt = lambda: self.comfy.pending.append("ajeno")
 
-        with mock.patch("engine.comfyui_manager.restart") as restart:
+        with mock.patch("imagehearth_mcp.engine.comfyui_manager.restart") as restart:
             result = generate()
 
         restart.assert_not_called()
@@ -89,7 +89,7 @@ class ReleaseFailures(EngineTestCase):
             self.comfy.free_ok = True
 
         with mock.patch(
-            "engine.comfyui_manager.restart",
+            "imagehearth_mcp.engine.comfyui_manager.restart",
             side_effect=restart,
         ) as mocked:
             result = generate()
@@ -103,7 +103,7 @@ class ReleaseFailures(EngineTestCase):
         self.ollama.add("modelo")
         self.comfy.free_ok = False
 
-        with mock.patch("engine.comfyui_manager.restart"):
+        with mock.patch("imagehearth_mcp.engine.comfyui_manager.restart"):
             result = generate()
 
         self.assertIn("recovery_required", str(result))
@@ -239,7 +239,7 @@ class OllamaRaces(EngineTestCase):
         self.comfy.on_prompt = lambda: seen.append(set(self.ollama.loaded))
 
         with mock.patch(
-            "engine.orchestrator.ollama_manager.unload_all",
+            "imagehearth_mcp.engine.orchestrator.ollama_manager.unload_all",
             side_effect=unload_then_reload,
         ):
             result = generate()
@@ -275,7 +275,7 @@ class PersistedState(EngineTestCase):
             models=[{"name": "perdido", "size_vram": 1024 * 1024}],
         )
         self.comfy.running.append("viejo")
-        leftovers = self.comfy_dir / "input" / "imageengine" / "abc123"
+        leftovers = self.comfy_dir / "input" / "imagehearth" / "abc123"
         leftovers.mkdir(parents=True)
         (leftovers / "reference_1.png").write_bytes(b"x")
 

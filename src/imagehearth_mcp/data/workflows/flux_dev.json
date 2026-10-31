@@ -75,7 +75,7 @@
     "class_type": "SaveImage",
     "inputs": {
       "images": ["9", 0],
-      "filename_prefix": "imageengine/flux_dev"
+      "filename_prefix": "imagehearth/flux_dev"
     }
   }
 }

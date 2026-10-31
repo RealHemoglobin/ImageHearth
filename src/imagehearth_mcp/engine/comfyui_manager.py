@@ -1,20 +1,14 @@
-#!/usr/bin/env python3
-
 import os
 import signal
 import socket
 import subprocess
-import sys
 import time
 from pathlib import Path
 
 import requests
 
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from engine import config
-from engine.log import get_logger
+from imagehearth_mcp.engine import config
+from imagehearth_mcp.engine.log import get_logger
 
 log = get_logger("comfyui")
 
@@ -100,13 +94,16 @@ def start():
             "pero no responde como ComfyUI."
         )
 
+    if not (config.COMFY_DIR / "main.py").exists():
+        raise FileNotFoundError(
+            f"No encuentro ComfyUI en {config.COMFY_DIR}. Indica su carpeta con "
+            f"comfy_dir en {config.CONFIG_FILE} o con IMAGEHEARTH_COMFY_DIR."
+        )
+
     python = config.COMFY_DIR / "venv" / "bin" / "python"
 
     if not python.exists():
         raise FileNotFoundError(f"No encuentro Python: {python}")
-
-    if not (config.COMFY_DIR / "main.py").exists():
-        raise FileNotFoundError(f"No encuentro ComfyUI en {config.COMFY_DIR}")
 
     config.COMFY_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     _rotate_log()
@@ -120,6 +117,8 @@ def start():
                 "main.py",
                 "--listen",
                 config.COMFY_HOST,
+                "--port",
+                str(config.COMFY_PORT),
             ],
             cwd=config.COMFY_DIR,
             stdin=subprocess.DEVNULL,
@@ -172,18 +171,3 @@ def restart():
 
     start()
 
-
-def main():
-    action = sys.argv[1] if len(sys.argv) > 1 else "ensure"
-
-    if action == "status":
-        print("ComfyUI funcionando." if is_running() else "ComfyUI detenido.")
-    elif action in ("start", "ensure"):
-        start()
-    else:
-        print("Uso: comfyui_manager.py [status|start|ensure]")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
