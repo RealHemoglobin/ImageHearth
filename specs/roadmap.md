@@ -24,12 +24,12 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 | 1. Empaquetado | Se instala como paquete, aún en Linux | M | 0 |
 | 2. Portabilidad | El servidor funciona en los tres sistemas; Ollama opcional | L | 1 |
 | 3. Instalador | `setup` y `doctor` dejan un sistema funcionando | XL | 2 |
-| 4. Perfiles y macOS | Modelos según hardware; validación en Mac | L | 3 |
+| 4. Perfiles y macOS | Modelos según hardware; macOS preparado sin probar | L | 3 |
 | 5. Agentes | Conexión con un comando y generaciones largas fiables | M | 2 |
 | 6. Beta pública | v0.1 en PyPI y en el registro MCP | M | 3, 5 |
-| 7. v1.0 | macOS soportado y matriz de pruebas completa | M | 4, 6 |
+| 7. v1.0 | macOS experimental y matriz de pruebas completa | M | 4, 6 |
 
-**Recomendación de orden:** publicar la beta sin esperar a macOS. La fase 4 tiene el mayor riesgo técnico y necesita hardware que hoy no está disponible. La fase 5 se puede hacer en paralelo a la 3.
+**macOS no bloquea ninguna fase:** no hay Mac disponible, así que se deja preparado sin probar y sin anunciarlo como soportado. Solo sube de nivel cuando se pruebe con hardware real. La fase 5 se puede hacer en paralelo a la 3.
 
 ---
 
@@ -123,17 +123,19 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - [ ] Hacer dinámico el catálogo: `list_workflows`, `quality` y los errores se basan en lo instalado. Un error dice qué perfil instalar.
 - [ ] Separar en `build_workflow` el cargador de modelo de los identificadores de nodo fijos.
 - [ ] Medir VRAM y tiempo reales por perfil y documentarlos.
-- [ ] **Spike en Mac (bloqueante):** comprobar que ComfyUI, `ComfyUI-GGUF`, FLUX y Kontext funcionan en MPS. Elegir cuantización y codificador T5.
-- [ ] Crear workflows y manifiesto para Mac, con hashes fijados.
+- [ ] Elegir cuantización y codificador T5 para Mac, sin medir.
+- [ ] Crear workflows y manifiesto para Mac, con hashes fijados, y dejar `setup` y `doctor` preparados tras `--experimental`.
+- [ ] Sin Mac: ejecutar los workflows GGUF en NVIDIA y cubrir lo propio de macOS con tests simulados.
+- [ ] **Cuando haya un Mac (no bloquea):** comprobar que ComfyUI, `ComfyUI-GGUF`, FLUX y Kontext funcionan en MPS.
 - [ ] Añadir perfil GGUF para NVIDIA con poca VRAM si las mediciones lo justifican.
 - [ ] Buscar un origen más estable para FLUX Dev.
 - [ ] Evaluar FLUX.1 Schnell como opción Apache-2.0 para uso comercial; su repositorio oficial exige aprobación automática.
 
 **Listo cuando:**
-- Un Mac real completa las tres capacidades, o se documenta y se oculta la que no funcione.
-- La tabla de requisitos del README contiene mediciones reales.
+- macOS queda preparado tras `--experimental`, documentado como sin probar y sin anunciarse como soportado.
+- La tabla de requisitos del README contiene mediciones reales de Linux y Windows.
 
-**Plan B:** si Kontext no es viable en Mac, la v1 ofrece generación en macOS y marca la edición como no disponible.
+**Plan B:** si un informe real descarta Kontext en Mac, se ofrece generación en macOS y se marca la edición como no disponible.
 
 ## Fase 5: Integración con agentes
 
@@ -181,7 +183,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 **Objetivo:** cumplir todos los criterios de la [misión](mission.md).
 
-- [ ] Integrar macOS como nivel 2.
+- [ ] Mantener macOS como nivel 3 experimental; pasa a nivel 2 solo si se ha probado con hardware real, sin que eso retenga la versión.
 - [ ] Probar la matriz completa de niveles 1 y 2 antes de publicar.
 - [ ] Definir la política de versiones: la versión de ImageEngine fija ComfyUI y modelos, y `update` migra entre ellas.
 - [ ] Ejecutar periódicamente, con una tarea programada local, la prueba de contrato contra el último ComfyUI, para detectar roturas antes de actualizar la versión fijada.
@@ -199,8 +201,8 @@ Por valorar según la demanda, sin compromiso: workflows personalizados, LoRAs, 
 
 | Riesgo | Impacto | Medida |
 |---|---|---|
-| Sin hardware Mac o Windows para probar | **Alto** | Conseguirlo en la fase 0; sin él, no anunciar soporte |
-| Kontext no funciona bien en MPS | Alto | Spike temprano y plan B |
+| Sin hardware Mac para probar | Medio | macOS preparado tras `--experimental`, sin anunciar soporte, y a la espera de informes reales |
+| Kontext o GGUF no funcionan bien en MPS | Medio | Solo afecta a macOS experimental; plan B de la fase 4 |
 | Los repositorios de modelos desaparecen o pasan a exigir aprobación | Alto | Manifiesto actualizable, `HF_TOKEN`, errores claros y orígenes alternativos |
 | Una actualización de ComfyUI rompe algo | Medio | Versión fijada y prueba de contrato periódica en local |
 | Mantener la matriz de PyTorch | Medio | Limitar el nivel 1 a NVIDIA y fijar versiones |
@@ -213,12 +215,11 @@ Por valorar según la demanda, sin compromiso: workflows personalizados, LoRAs, 
 
 ## Decisiones abiertas
 
-| Decisión | Recomendación | Bloquea |
-|---|---|---|
-| Hardware de prueba | Linux y Windows con NVIDIA ya disponibles. Falta un Mac con 32 GB o más | Fase 4 |
+Ninguna.
 
 **Cerradas el 2026-10-31:**
 
+- **Hardware Mac:** no hay ni se espera. macOS se prepara sin probar y no bloquea ninguna fase.
 - **Nombre público:** ImageHearth. `imageengine` está ocupado en PyPI e ImageEngine es también una marca de un CDN de imágenes. El paquete y el comando pasan a `imagehearth_mcp` e `imagehearth-mcp` en la fase 1.
 - **Licencia:** MIT para el proyecto y GPL-3.0 para la carpeta del nodo, que importa código de ComfyUI.
 - **Dueño en GitHub:** cuenta personal `RealHemoglobin`, con el repositorio `RealHemoglobin/ImageHearth`.

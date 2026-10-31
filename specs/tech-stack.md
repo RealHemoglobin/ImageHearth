@@ -48,7 +48,7 @@ Se resuelven con `platformdirs` desde `src/imagehearth_mcp/` (paquete `imagehear
 | Procesos | `psutil` y archivo de PID | Sustituye `/proc`; permite distinguir la instancia propia de una ajena | Comandos por sistema |
 | Logs | Un archivo por proceso con limpieza por antigüedad | Evita renombrar archivos abiertos en Windows | Mantener la rotación compartida |
 | Memoria de GPU | `/system_stats` de ComfyUI primero, `nvidia-smi` como apoyo | La API funciona con cualquier fabricante si ComfyUI está activo | Sondas por fabricante |
-| Modelos en macOS | GGUF con `ComfyUI-GGUF` | Los fp8 no funcionan en MPS | Parchear ComfyUI: frágil ante actualizaciones. Pendiente de validar en un Mac real |
+| Modelos en macOS | GGUF con `ComfyUI-GGUF` | Los fp8 no funcionan en MPS | Parchear ComfyUI: frágil ante actualizaciones. Preparado sin probar: falta validar en un Mac real, y no bloquea nada |
 | Ollama | Opcional y autodetectado | No participa en la generación; solo se gestiona para liberar memoria | Instalarlo |
 | Idioma | Inglés en la interfaz, la herramienta y el README principal, con README en español | Máximo alcance | Solo español |
 
@@ -60,7 +60,7 @@ Según la documentación de ComfyUI de octubre de 2026. Los valores exactos est�
 |---|---|---|---|
 | Linux o Windows, NVIDIA serie 20 o posterior | `cu130` | 3.13 | **1**: objetivo principal |
 | Linux o Windows, NVIDIA serie 10 o anterior | `cu126` | 3.12 | 3: experimental |
-| macOS con Apple Silicon | Nightly con Metal | 3.13 | 2: tras la validación en un Mac |
+| macOS con Apple Silicon | Estable fijada desde PyPI (incluye MPS) | 3.13 | 3: preparado sin probar, tras `--experimental` |
 | Linux, AMD | `rocm7.2` | 3.13 | 3: experimental |
 | Windows 11, AMD | Paquetes ROCm de AMD | 3.13, 64 bits | 3: experimental |
 | Linux o Windows, Intel Arc | `xpu` | 3.13 | 3: experimental |
@@ -96,7 +96,7 @@ Tamaños medidos. La VRAM es orientativa y debe medirse en la fase 4: solo hay d
 | `fast` | Generación rápida con SDXL Turbo | 6,9 GB | Desde 8 GB |
 | `quality` | `fast` + FLUX Dev | 24,6 GB | Desde 16 GB |
 | `full` | `quality` + edición con Kontext | 36,5 GB | Desde 16 GB |
-| `mac-*` | Equivalentes en GGUF | Por definir | Por definir |
+| `mac-*` | Equivalentes en GGUF `Q5_K_M`, sin probar | Por fijar en el manifiesto | Sin medir |
 
 ## Herramientas de desarrollo
 
