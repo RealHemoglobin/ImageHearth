@@ -69,9 +69,10 @@ Los tests deben cubrir:
 
 ### Antes de publicar (pendientes de fases anteriores)
 
-- [ ] `scripts\check.ps1` y `scripts\contract.ps1` en verde en Windows.
-- [ ] `install.ps1` ejecutado en Windows.
-- [ ] Generación real en Windows con NVIDIA.
+- [x] `scripts\check.ps1` en verde en Windows.
+- [ ] `scripts\contract.ps1` en verde en Windows.
+- [x] `install.ps1` ejecutado en Windows (desde un clon del repositorio).
+- [x] Generación real en Windows con NVIDIA.
 - [ ] Mediciones de Windows en el README y `tech-stack.md`.
 - [ ] Máquina limpia Ubuntu con NVIDIA: instalación completa e imagen de prueba.
 - [ ] Máquina limpia Windows 11 con NVIDIA: instalación completa e imagen de prueba.
@@ -114,12 +115,12 @@ Fusionar no significa publicar: la publicación sigue bloqueada hasta completar 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
 | `scripts/check.sh` en Linux | Verde: 380 tests, ruff limpio, también contra el wheel | 2026-10-31 |
-| `scripts\check.ps1` en Windows | | |
+| `scripts\check.ps1` en Windows | Verde (Windows 11, Python 3.13): ruff y 376 tests con 4 omitidos, también contra el wheel | 2026-11-01 |
 | Prueba de contrato `/object_info` | Verde: existen los 19 tipos de nodo | 2026-10-31 |
 | Revisión de árbol e historial | Sin tokens, claves, rutas personales ni correos personales, en los 25 commits. Ningún binario, `engine.lock`, `state/` ni `logs/` versionado. Un commit de 2026-10-31 (`d8ef2c5`) tiene como autor el nombre `TitoYano`, con correo noreply del mismo identificador de GitHub: es público, sin secreto, y lo decide el mantenedor | 2026-10-31 |
 | `install.sh` en HOME aislado | Con wheel local, sin uv, por tubería desde un servidor local y dentro de una terminal: instala uv y el paquete, pregunta por `/dev/tty`, y al rechazar las licencias no descarga nada y sale con 1. Repetido con uv: no rompe nada. Sin terminal (`setsid`): se detiene sin tocar nada. `connect --detect` real: detecta clientes, pregunta por cada uno y, al responder que no, no cambia nada. Orden `setup` + `connect` con terminal comprobado con un ejecutable simulado, porque el real exige aceptar licencias y descargar. La descarga real queda para las máquinas limpias | 2026-10-31 |
-| `install.ps1` en Windows | Sin ejecutar: no hay `pwsh` en esta máquina | |
-| Generación y mediciones en Windows | | |
+| `install.ps1` en Windows | Ejecutado desde un clon (instala el código del clon) en el equipo de desarrollo, tras borrar el ComfyUI y los modelos instalados a mano: `setup` completo con el perfil `full` y `doctor` en verde (RTX 4090, controlador 621.01). No es una máquina limpia ni la URL pública | 2026-11-01 |
+| Generación y mediciones en Windows | Generación `fast` y `quality` correcta con Claude Code (`claude`). Mediciones sin hacer | 2026-11-01 |
 | Máquina limpia Ubuntu | | |
 | Máquina limpia Windows 11 | | |
 | `llms-install.md` con un agente real | | |

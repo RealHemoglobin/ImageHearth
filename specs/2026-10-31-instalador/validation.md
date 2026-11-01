@@ -82,7 +82,7 @@ Los tests simulan hardware, red y procesos, y no descargan modelos. No se exige 
 
 ## Lista para fusionar
 
-- [ ] `scripts/check.sh` en verde en Linux y `scripts\check.ps1` en verde en Windows.
+- [x] `scripts/check.sh` en verde en Linux y `scripts\check.ps1` en verde en Windows.
 - [x] Prueba de contrato `/object_info` en verde.
 - [ ] Validaciones manuales de Ubuntu, Windows 11 y modo adjunto completadas.
 - [x] Las 7 herramientas conservan nombres, parámetros y resultados, revisado en el diff.
@@ -98,10 +98,10 @@ Los tests simulan hardware, red y procesos, y no descargan modelos. No se exige 
 |---|---|---|
 | Decisión del spike | Instalador propio, en `tech-stack.md`. Ejecutado solo en Linux | 2026-10-31 |
 | `scripts/check.sh` en Linux | Correcto: 214 tests | 2026-10-31 |
-| `scripts\check.ps1` en Windows | | |
+| `scripts\check.ps1` en Windows | Verde (Windows 11, Python 3.13): ruff y 376 tests con 4 omitidos, también contra el wheel | 2026-11-01 |
 | Prueba de contrato `/object_info` | Correcta en Linux, contra el ComfyUI de desarrollo (v0.43.0-14), no contra la versión fijada | 2026-10-31 |
 | `setup` en Ubuntu limpio | Pendiente. Parcial en el equipo de desarrollo: `--managed --profile fast` en carpetas aisladas instala ComfyUI 0.43.0 y PyTorch `cu130` y genera la imagen de prueba por GPU, con el modelo ya presente | 2026-10-31 |
-| `setup` en Windows 11 limpio | | |
+| `setup` en Windows 11 limpio | Parcial: `install.ps1` desde un clon en el equipo de desarrollo (no limpio), perfil `full` completo y `doctor` en verde. Faltan interrupción, corrupción, espacio, `uninstall` y modo adjunto en Windows | 2026-11-01 |
 | Reanudación de descarga | Parcial: `ae.safetensors` interrumpido a 125 MB y reanudado, con SHA-256 correcto. Falta repetirlo con `setup` | 2026-10-31 |
 | Archivo corrupto | Solo con descargador simulado | 2026-10-31 |
 | Espacio insuficiente | Solo con disco simulado | 2026-10-31 |

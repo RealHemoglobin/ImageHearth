@@ -77,7 +77,7 @@ Los tests simulan la carpeta de modelos y no descargan nada. La puerta de calida
 
 ## Lista para fusionar
 
-- [ ] `scripts/check.sh` en verde en Linux y `scripts\check.ps1` en verde en Windows.
+- [x] `scripts/check.sh` en verde en Linux y `scripts\check.ps1` en verde en Windows.
 - [x] Prueba de contrato `/object_info` en verde.
 - [ ] Validaciones manuales completadas.
 - [x] Las 7 herramientas conservan nombres y parámetros, revisado en el diff.
@@ -92,7 +92,7 @@ Los tests simulan la carpeta de modelos y no descargan nada. La puerta de calida
 | Comprobación | Resultado | Fecha |
 |---|---|---|
 | `scripts/check.sh` en Linux | Verde, 261 tests | 2026-10-31 |
-| `scripts\check.ps1` en Windows | | |
+| `scripts\check.ps1` en Windows | Verde (Windows 11, Python 3.13): ruff y 376 tests con 4 omitidos, también contra el wheel | 2026-11-01 |
 | Prueba de contrato `/object_info` | Verde en Linux, 19 tipos de nodo, con ComfyUI-GGUF | 2026-10-31 |
 | Catálogo con cada perfil | Prueba manual del usuario en Linux, con un ComfyUI adjunto aislado: `fast`, `quality` y `full` generan con cada perfil, y los errores indican el perfil. Modelo truncado y ComfyUI sin arrancar en los errores, comprobados aparte con carpetas aisladas | 2026-10-31 |
 | Modelos en `extra_model_paths.yaml` | El supuesto falló: ComfyUI veía Kontext y el catálogo no. Catálogo y `doctor` leen ya ese archivo. Corrección cubierta con tests; falta repetir la edición real con el modelo en esa ruta | 2026-10-31 |

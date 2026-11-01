@@ -179,7 +179,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 - [x] Añadir guía de problemas frecuentes, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` y plantillas de incidencias que pidan la salida de `doctor --json`.
 - [ ] Reunir entre 5 y 10 probadores externos en hardware distinto.
 
-**Estado (2026-10-31):** rama lista para fusionar. Los scripts, la guía de publicación y `server.json` están escritos, sin marcar hasta publicar: `install.ps1` no se ha ejecutado. La publicación sigue bloqueada por lo pendiente en la [validación](2026-10-31-beta-publica/validation.md#antes-de-publicar-pendientes-de-fases-anteriores).
+**Estado (2026-11-01):** rama lista para fusionar. Los scripts, la guía de publicación y `server.json` están escritos, sin marcar hasta publicar. `install.ps1` se ha ejecutado en Windows 11 con NVIDIA desde un clon, con `check.ps1` en verde y generación `fast` y `quality` con Claude Code; faltan la máquina limpia, `contract.ps1` y las mediciones de Windows. La publicación sigue bloqueada por lo pendiente en la [validación](2026-10-31-beta-publica/validation.md#antes-de-publicar-pendientes-de-fases-anteriores).
 
 **Listo cuando:** al menos 3 personas externas instalan y generan sin ayuda, y los fallos de instalación se pueden diagnosticar con `doctor --json`.
 

@@ -94,7 +94,7 @@ Para cada uno: conectar, `fast`, `quality` y edición con Kontext.
 
 ## Lista para fusionar
 
-- [ ] `scripts/check.sh` en verde en Linux y `scripts\check.ps1` en verde en Windows.
+- [x] `scripts/check.sh` en verde en Linux y `scripts\check.ps1` en verde en Windows.
 - [x] Prueba de contrato `/object_info` en verde.
 - [ ] Validaciones manuales completadas.
 - [x] Ningún documento anuncia como soportado un cliente sin probar.
@@ -108,7 +108,7 @@ Para cada uno: conectar, `fast`, `quality` y edición con Kontext.
 | Comprobación | Resultado | Fecha |
 |---|---|---|
 | `scripts/check.sh` en Linux | Verde: 361 tests, también contra el wheel | 2026-10-31 |
-| `scripts\\check.ps1` en Windows | **Pendiente:** no hay Windows en esta máquina | |
+| `scripts\check.ps1` en Windows | Verde (Windows 11, Python 3.13): ruff y 376 tests con 4 omitidos, también contra el wheel | 2026-11-01 |
 | Prueba de contrato `/object_info` | Verde: 19 tipos de nodo | 2026-10-31 |
 | Claude Code | `connect` con su CLI real en HOME vacío (`claude mcp list`: conectado). `fast`, `quality` y Kontext con `claude -p`, modelo haiku | 2026-10-31 |
 | Codex | `connect` en HOME vacío. Las tres tareas con `codex exec --oss` y `qwen3.5:9b`. Con el modelo de su configuración real (`gpt-5.6-sol`) falla antes de llamar a nada: la cuenta no lo admite | 2026-10-31 |
