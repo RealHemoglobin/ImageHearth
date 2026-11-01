@@ -207,6 +207,7 @@ def test_detects_missing_driver_from_lspci(tmp_path):
     assert result.platform.index == "cu130"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="sysfs only exists on Linux")
 def test_detects_gpu_from_sysfs_without_lspci(tmp_path):
     device = tmp_path / "sysfs" / "0000:01:00.0"
     device.mkdir(parents=True)
@@ -802,7 +803,7 @@ def test_extra_model_paths_never_overwrites(tmp_path, records):
     models_dir = tmp_path / "shared models"
     assert comfyui.write_extra_model_paths(comfy, models_dir, records) is None
     written = comfy / comfyui.EXTRA_PATHS_FILE
-    assert str(models_dir) in written.read_text(encoding="utf-8")
+    assert json.dumps(str(models_dir)) in written.read_text(encoding="utf-8")
     assert records.is_owned(written)
 
     written.write_text("mine: {}\n", encoding="utf-8")
@@ -1124,7 +1125,7 @@ def test_models_dir_is_shared_with_yaml(machine):
     shared = machine.tmp / "shared"
     setup_command.run(setup_args(attach=str(comfy), models_dir=str(shared)))
     assert (shared / "checkpoints" / "sd_xl_turbo_1.0_fp16.safetensors").exists()
-    assert str(shared.resolve()) in (comfy / "extra_model_paths.yaml").read_text(
+    assert json.dumps(str(shared.resolve())) in (comfy / "extra_model_paths.yaml").read_text(
         encoding="utf-8"
     )
 

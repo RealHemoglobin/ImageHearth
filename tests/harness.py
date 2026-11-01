@@ -316,6 +316,10 @@ class EngineTestCase(unittest.TestCase):
             "COMFY_PORT": self.comfy.port,
             "COMFY_API": f"http://127.0.0.1:{self.comfy.port}",
             "OLLAMA_API": f"http://127.0.0.1:{self.ollama.port}",
+            # Sin servidor en estos puertos: en Windows rechazar una conexión tarda 2 s.
+            "LMSTUDIO_API": f"http://127.0.0.1:{self.ollama.port}/lmstudio",
+            "LLAMACPP_API": f"http://127.0.0.1:{self.ollama.port}/llamacpp",
+            "VLLM_API": f"http://127.0.0.1:{self.ollama.port}/vllm",
             "OUTPUT_DIR": self.tmp / "output",
             "LOCK_FILE": self.tmp / "engine.lock",
             "PID_FILE": self.tmp / "state" / "comfyui.pid",

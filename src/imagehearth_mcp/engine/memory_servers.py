@@ -17,12 +17,14 @@ from imagehearth_mcp.engine.memory import MemoryProvider, ProviderUnavailable
 log = get_logger("memory")
 
 REQUEST_TIMEOUT = 10
+# Un servidor local acepta al instante; en Windows un puerto cerrado tarda 2 s en rechazar.
+CONNECT_TIMEOUT = 0.5
 
 
 def _get(url, unavailable, **options):
     """JSON de un GET, o None si la ruta no existe. Sin respuesta: ProviderUnavailable."""
     try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT, **options)
+        response = requests.get(url, timeout=(CONNECT_TIMEOUT, REQUEST_TIMEOUT), **options)
 
         if response.status_code == 404:
             return None

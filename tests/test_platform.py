@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import subprocess
@@ -74,8 +75,15 @@ class Locks(unittest.TestCase):
         self.assertEqual(holder.stdout.readline().strip(), "held")
         self.assertTrue(locks.is_locked(self.path))
 
+        # En Windows, el python de un venv es un lanzador que crea el intérprete real
+        # como hijo: matar solo el lanzador dejaría vivo al que tiene el bloqueo.
+        tree = psutil.Process(holder.pid).children(recursive=True)
         holder.kill()
         holder.wait()
+        for child in tree:
+            with contextlib.suppress(psutil.NoSuchProcess):
+                child.kill()
+        psutil.wait_procs(tree, timeout=5)
 
         self.assertFalse(locks.is_locked(self.path))
 

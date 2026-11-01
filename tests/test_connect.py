@@ -51,8 +51,11 @@ a = true
 def home(tmp_path, monkeypatch):
     monkeypatch.setattr(connect.Path, "home", lambda: tmp_path)
 
-    for name in ("XDG_CONFIG_HOME", "CODEX_HOME", "HERMES_HOME", "APPDATA"):
+    for name in ("XDG_CONFIG_HOME", "CODEX_HOME", "HERMES_HOME"):
         monkeypatch.delenv(name, raising=False)
+
+    # Sin APPDATA, en Windows se usaría la carpeta real del usuario.
+    monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
 
     # Sin CLI oficial, para cubrir la edición del archivo en todos los formatos.
     monkeypatch.setattr(connect.shutil, "which", lambda name: None)
