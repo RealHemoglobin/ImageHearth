@@ -70,21 +70,43 @@ Medido en la misma RTX 4090 con `qwen3.5:9b`, que necesita 14,3 GB con el contex
 
 ### 1. Ejecuta el instalador
 
-Usa el comando de tu sistema del [principio de esta página](#imagehearth). Los scripts son breves, así que puedes leer antes [`install.sh`](https://github.com/RealHemoglobin/ImageHearth/blob/main/install.sh) o [`install.ps1`](https://github.com/RealHemoglobin/ImageHearth/blob/main/install.ps1). Hacen esto:
+Elige el nivel que prefieras. Los tres terminan igual: uv, `imagehearth-mcp`, `setup` y `connect --detect`.
 
-1. Instalan uv con su instalador oficial, si falta.
-2. Instalan `imagehearth-mcp` en una versión fijada.
-3. Ejecutan `setup` y `connect --detect`, que te preguntan antes de descargar o cambiar nada.
+**Lo más simple: un comando.** Usa el de tu sistema del [principio de esta página](#imagehearth).
 
-Nunca piden `sudo` ni permisos de administrador, ni aceptan una licencia por ti. Puedes repetirlos sin problema.
+**Con el repositorio clonado.** Descarga el código y ejecuta `install`; así puedes leer antes lo que va a hacer:
 
-**¿Prefieres hacerlo a mano?** Con [uv](https://docs.astral.sh/uv/getting-started/installation/) instalado:
+```bash
+# Linux
+git clone https://github.com/RealHemoglobin/ImageHearth.git
+cd ImageHearth
+./install.sh
+```
+
+```powershell
+# Windows
+git clone https://github.com/RealHemoglobin/ImageHearth.git
+cd ImageHearth
+.\install.ps1
+```
+
+Sin Git, descarga el ZIP desde GitHub y ejecuta el mismo script dentro de la carpeta. Desde un clon se instala ese código, no el paquete publicado. Si PowerShell bloquea el script, ejecuta `powershell -ExecutionPolicy Bypass -File .\install.ps1`.
+
+**Lo más avanzado: a mano.** Con [uv](https://docs.astral.sh/uv/getting-started/installation/) instalado:
 
 ```bash
 uv tool install imagehearth-mcp==0.1.0b1
 imagehearth-mcp setup
 imagehearth-mcp connect --detect
 ```
+
+Los scripts son breves: [`install.sh`](https://github.com/RealHemoglobin/ImageHearth/blob/main/install.sh) e [`install.ps1`](https://github.com/RealHemoglobin/ImageHearth/blob/main/install.ps1). Hacen esto:
+
+1. Instalan uv con su instalador oficial, si falta.
+2. Instalan `imagehearth-mcp`: en una versión fijada, o el código del clon si lo ejecutas desde uno.
+3. Ejecutan `setup` y `connect --detect`, que te preguntan antes de descargar o cambiar nada.
+
+Nunca piden `sudo` ni permisos de administrador, ni aceptan una licencia por ti. Puedes repetirlos sin problema.
 
 ### 2. Qué hace setup
 

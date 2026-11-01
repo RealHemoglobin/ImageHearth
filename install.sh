@@ -74,8 +74,15 @@ main() {
     check_terminal
     install_uv
 
-    # Only for testing a local wheel; by default, the pinned version from PyPI.
-    package="${IMAGEHEARTH_INSTALL_SOURCE:-imagehearth-mcp==$VERSION}"
+    # From a clone of the repository, install that code; with IMAGEHEARTH_INSTALL_SOURCE,
+    # a local wheel; otherwise, the pinned version from PyPI.
+    package="imagehearth-mcp==$VERSION"
+    repo_dir=$(cd "$(dirname "$0")" 2>/dev/null && pwd) || repo_dir=""
+    if [ -n "${IMAGEHEARTH_INSTALL_SOURCE:-}" ]; then
+        package="$IMAGEHEARTH_INSTALL_SOURCE"
+    elif [ -n "$repo_dir" ] && [ -f "$repo_dir/pyproject.toml" ]; then
+        package="$repo_dir"
+    fi
     printf 'Installing %s...\n' "$package"
     uv tool install "$package" || fail "Can't install $package. Check your network connection and try again."
 

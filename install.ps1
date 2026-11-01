@@ -52,8 +52,14 @@ function Install-ImageHearth {
         }
     }
 
-    # Only for testing a local wheel; by default, the pinned version from PyPI.
-    $Package = if ($env:IMAGEHEARTH_INSTALL_SOURCE) { $env:IMAGEHEARTH_INSTALL_SOURCE } else { "imagehearth-mcp==$Version" }
+    # From a clone of the repository, install that code; with IMAGEHEARTH_INSTALL_SOURCE,
+    # a local wheel; otherwise, the pinned version from PyPI.
+    $Package = "imagehearth-mcp==$Version"
+    if ($env:IMAGEHEARTH_INSTALL_SOURCE) {
+        $Package = $env:IMAGEHEARTH_INSTALL_SOURCE
+    } elseif ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "pyproject.toml"))) {
+        $Package = $PSScriptRoot
+    }
     Write-Host "Installing $Package..."
     uv tool install $Package
 
