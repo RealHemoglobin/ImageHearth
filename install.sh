@@ -35,7 +35,7 @@ check_terminal() {
     # With `curl | sh`, standard input is this script: questions must use /dev/tty.
     (exec </dev/tty) 2>/dev/null || fail "No terminal available, so setup can't ask you to accept the model licenses. Nothing was changed.
 Without a terminal, install it yourself:
-  uv tool install imagehearth-mcp==$VERSION
+  uv tool install --python 3.13 imagehearth-mcp==$VERSION
   imagehearth-mcp setup --non-interactive
 That command tells you which options it needs to continue. See $DOCS/blob/main/llms-install.md."
 }
@@ -88,13 +88,13 @@ main() {
     fi
     printf 'Installing %s...\n' "$package"
 
-    if ! uv tool install "$package"; then
+    if ! uv tool install --python 3.13 "$package"; then
         [ -n "$from_pypi" ] || fail "Can't install $package. Check your network connection and try again."
 
         # The same release, as a wheel on GitHub, in case PyPI doesn't have it.
         package="$DOCS/releases/download/v$VERSION/imagehearth_mcp-$VERSION-py3-none-any.whl"
-        printf 'Not available from PyPI. Trying the GitHub release instead...\nInstalling %s...\n' "$package"
-        uv tool install "$package" || fail "Can't install $package. Check your network connection and try again."
+        printf 'Could not install from PyPI. Trying the GitHub release instead...\nInstalling %s...\n' "$package"
+        uv tool install --python 3.13 "$package" || fail "Can't install $package. Check your network connection and try again."
     fi
 
     # It may not be in PATH yet.

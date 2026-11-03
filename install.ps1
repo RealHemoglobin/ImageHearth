@@ -30,7 +30,7 @@ function Install-ImageHearth {
     if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
         Show-Failure "No terminal available, so setup can't ask you to accept the model licenses. Nothing was changed."
         Write-Host "Without a terminal, install it yourself:"
-        Write-Host "  uv tool install imagehearth-mcp==$Version"
+        Write-Host "  uv tool install --python 3.13 imagehearth-mcp==$Version"
         Write-Host "  imagehearth-mcp setup --non-interactive"
         Write-Host "That command tells you which options it needs to continue. See $Docs/blob/main/llms-install.md."
         return
@@ -64,14 +64,14 @@ function Install-ImageHearth {
         $FromPyPI = $false
     }
     Write-Host "Installing $Package..."
-    uv tool install $Package
+    uv tool install --python 3.13 $Package
 
     if ($LASTEXITCODE -ne 0 -and $FromPyPI) {
         # The same release, as a wheel on GitHub, in case PyPI doesn't have it.
         $Package = "$Docs/releases/download/v$Version/imagehearth_mcp-$Version-py3-none-any.whl"
-        Write-Host "Not available from PyPI. Trying the GitHub release instead..."
+        Write-Host "Could not install from PyPI. Trying the GitHub release instead..."
         Write-Host "Installing $Package..."
-        uv tool install $Package
+        uv tool install --python 3.13 $Package
     }
 
     if ($LASTEXITCODE -ne 0) {

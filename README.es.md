@@ -98,7 +98,7 @@ Sin Git, descarga el ZIP desde GitHub y ejecuta el mismo script dentro de la car
 **Lo más avanzado: a mano.** Con [uv](https://docs.astral.sh/uv/getting-started/installation/) instalado:
 
 ```bash
-uv tool install imagehearth-mcp==0.1.0b1
+uv tool install --python 3.13 imagehearth-mcp==0.1.0b1
 imagehearth-mcp setup
 imagehearth-mcp connect --detect
 ```
