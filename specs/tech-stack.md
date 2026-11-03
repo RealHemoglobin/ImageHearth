@@ -64,7 +64,7 @@ Según la documentación de ComfyUI de octubre de 2026. Los valores exactos est�
 | Linux o Windows, NVIDIA serie 10 o anterior | `cu126` | 3.12 | 3: experimental |
 | macOS con Apple Silicon | Estable fijada desde PyPI (incluye MPS) | 3.13 | 3: preparado sin probar, tras `--experimental` |
 | Linux, AMD | `rocm7.2` | 3.13 | 3: experimental |
-| Windows 11, AMD | Paquetes ROCm de AMD | 3.13, 64 bits | 3: experimental |
+| Windows 11, AMD (RX 7000 y 9000) | `rocm-win-gfx*`: paquetes ROCm del índice de AMD, con el extra `[device-gfx*]` de la tarjeta | 3.13, 64 bits | 3: experimental, sin probar |
 | Linux o Windows, Intel Arc | `xpu` | 3.13 | 3: experimental |
 | Solo CPU | `cpu` | 3.13 | 3: solo SDXL Turbo, con aviso de lentitud |
 

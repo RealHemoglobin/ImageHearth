@@ -239,7 +239,14 @@ def test_windows_adapter_names(tmp_path):
         ("linux", "x86_64", detect.Gpu("nvidia", "NVIDIA GeForce GTX 1080"), "cu126", 3, True),
         ("windows", "AMD64", detect.Gpu("nvidia", "NVIDIA GeForce GT 710"), "cu126", 3, True),
         ("linux", "x86_64", detect.Gpu("amd", "Radeon RX 7900"), "rocm7.2", 3, True),
-        ("windows", "AMD64", detect.Gpu("amd", "Radeon RX 7900"), "cpu", 3, False),
+        ("windows", "AMD64", detect.Gpu("amd", "AMD Radeon RX 9060 XT"), "rocm-win-gfx1200", 3, True),
+        ("windows", "AMD64", detect.Gpu("amd", "AMD Radeon RX 9070 XT"), "rocm-win-gfx1201", 3, True),
+        ("windows", "AMD64", detect.Gpu("amd", "AMD Radeon RX 7900 XTX"), "rocm-win-gfx1100", 3, True),
+        ("windows", "AMD64", detect.Gpu("amd", "AMD Radeon RX 7800 XT"), "rocm-win-gfx1101", 3, True),
+        ("windows", "AMD64", detect.Gpu("amd", "AMD Radeon RX 7600"), "rocm-win-gfx1102", 3, True),
+        ("windows", "AMD64", detect.Gpu("amd", "AMD Radeon 780M Graphics"), "rocm-win-gfx1103", 3, True),
+        ("windows", "AMD64", detect.Gpu("amd", "AMD Radeon RX 6800"), "cpu", 3, False),
+        ("windows", "AMD64", detect.Gpu("amd", "AMD Radeon(TM) Graphics"), "cpu", 3, False),
         ("linux", "x86_64", detect.Gpu("intel", "Intel Arc A770"), "xpu", 3, True),
         ("linux", "x86_64", detect.Gpu("intel", "Intel UHD Graphics 770"), "cpu", 3, True),
         ("darwin", "arm64", None, "metal", 3, True),
@@ -250,6 +257,36 @@ def test_windows_adapter_names(tmp_path):
 def test_classify_matrix(system, machine, gpu, index, tier, supported):
     result = detect.classify(system, machine, [gpu] if gpu else [])
     assert (result.index, result.tier, result.supported) == (index, tier, supported)
+
+
+def test_every_amd_windows_architecture_has_a_pinned_install():
+    catalog = manifest.load()
+
+    for _, gfx in detect._AMD_WINDOWS_GFX:
+        pin = catalog.pytorch[f"rocm-win-{gfx}"]
+        assert all(
+            f"[device-{gfx}]" in package
+            for package in pin.packages
+            if package.startswith(("torch[", "torchvision["))
+        )
+        assert pin.python == "3.13"
+
+
+def test_amd_windows_extras_reach_uv_untouched(tmp_path, records):
+    pin = manifest.load().pytorch["rocm-win-gfx1200"]
+    uv = FakeUv()
+    comfyui.install_managed(
+        comfy_pin(),
+        pin,
+        tmp_path / "comfyui",
+        records,
+        run=uv,
+        fetch=fetch_archive(make_archive()),
+        which=lambda _: "/bin/uv",
+    )
+    torch_command = uv.commands[1]
+    assert torch_command[torch_command.index("--default-index") + 1] == pin.index
+    assert "torch[device-gfx1200]==2.14.0+rocm10.1.0" in torch_command
 
 
 def test_finds_comfy_in_known_paths_and_desktop(tmp_path):
@@ -336,7 +373,8 @@ def test_pytorch_matches_platform_matrix(catalog):
             assert all("+" not in package for package in pin.packages)
             continue
 
-        assert all(f"+{name}" in package for package in pin.packages)
+        suffix = "rocm10.1.0" if name.startswith("rocm-win-") else name
+        assert all(f"+{suffix}" in package for package in pin.packages)
 
 
 def manifest_values():

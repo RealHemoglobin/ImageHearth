@@ -55,13 +55,24 @@ function Install-ImageHearth {
     # From a clone of the repository, install that code; with IMAGEHEARTH_INSTALL_SOURCE,
     # a local wheel; otherwise, the pinned version from PyPI.
     $Package = "imagehearth-mcp==$Version"
+    $FromPyPI = $true
     if ($env:IMAGEHEARTH_INSTALL_SOURCE) {
         $Package = $env:IMAGEHEARTH_INSTALL_SOURCE
+        $FromPyPI = $false
     } elseif ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "pyproject.toml"))) {
         $Package = $PSScriptRoot
+        $FromPyPI = $false
     }
     Write-Host "Installing $Package..."
     uv tool install $Package
+
+    if ($LASTEXITCODE -ne 0 -and $FromPyPI) {
+        # The same release, as a wheel on GitHub, in case PyPI doesn't have it.
+        $Package = "$Docs/releases/download/v$Version/imagehearth_mcp-$Version-py3-none-any.whl"
+        Write-Host "Not available from PyPI. Trying the GitHub release instead..."
+        Write-Host "Installing $Package..."
+        uv tool install $Package
+    }
 
     if ($LASTEXITCODE -ne 0) {
         Show-Failure "Can't install $Package. Check your network connection and try again."

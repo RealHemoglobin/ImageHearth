@@ -77,14 +77,25 @@ main() {
     # From a clone of the repository, install that code; with IMAGEHEARTH_INSTALL_SOURCE,
     # a local wheel; otherwise, the pinned version from PyPI.
     package="imagehearth-mcp==$VERSION"
+    from_pypi=1
     repo_dir=$(cd "$(dirname "$0")" 2>/dev/null && pwd) || repo_dir=""
     if [ -n "${IMAGEHEARTH_INSTALL_SOURCE:-}" ]; then
         package="$IMAGEHEARTH_INSTALL_SOURCE"
+        from_pypi=""
     elif [ -n "$repo_dir" ] && [ -f "$repo_dir/pyproject.toml" ]; then
         package="$repo_dir"
+        from_pypi=""
     fi
     printf 'Installing %s...\n' "$package"
-    uv tool install "$package" || fail "Can't install $package. Check your network connection and try again."
+
+    if ! uv tool install "$package"; then
+        [ -n "$from_pypi" ] || fail "Can't install $package. Check your network connection and try again."
+
+        # The same release, as a wheel on GitHub, in case PyPI doesn't have it.
+        package="$DOCS/releases/download/v$VERSION/imagehearth_mcp-$VERSION-py3-none-any.whl"
+        printf 'Not available from PyPI. Trying the GitHub release instead...\nInstalling %s...\n' "$package"
+        uv tool install "$package" || fail "Can't install $package. Check your network connection and try again."
+    fi
 
     # It may not be in PATH yet.
     bin_dir=$(uv tool dir --bin) || fail "uv can't tell where it installs tools."

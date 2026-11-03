@@ -199,6 +199,27 @@ def _is_legacy_nvidia(name):
     return bool(match) and int(match.group(1)) < 1100
 
 
+# Arquitecturas que AMD publica para Windows. Windows no da la arquitectura gfx:
+# se deduce del nombre de la tarjeta, y una que no esté aquí no se instala sola.
+_AMD_WINDOWS_GFX = (
+    (r"(?<!\d)9060(?!\d)", "gfx1200"),
+    (r"(?<!\d)9070(?!\d)|\bR9700\b", "gfx1201"),
+    (r"(?<!\d)7900(?!\d)|\bW7800\b", "gfx1100"),
+    (r"(?<!\d)7[78]00(?!\d)", "gfx1101"),
+    (r"(?<!\d)76[05]0(?!\d)", "gfx1102"),
+    (r"(?<!\d)7[468]0M\b", "gfx1103"),
+)
+
+
+def _amd_windows_gfx(name):
+    """Arquitectura gfx de una Radeon de Windows, o None si AMD no la cubre."""
+    for pattern, gfx in _AMD_WINDOWS_GFX:
+        if re.search(pattern, name, re.IGNORECASE):
+            return gfx
+
+    return None
+
+
 def classify(system, machine, gpus):
     """Sitúa el sistema en la matriz de PyTorch."""
     if system == "darwin":
@@ -228,12 +249,22 @@ def classify(system, machine, gpus):
 
     if "amd" in vendors:
         if system == "windows":
+            gfx = _amd_windows_gfx(vendors["amd"].name)
+
+            if gfx is None:
+                return TorchPlatform(
+                    "cpu",
+                    3,
+                    False,
+                    "AMD publishes PyTorch for Windows only for the Radeon RX 7000 "
+                    "and 9000 series, and this GPU is not one of them.",
+                )
+
             return TorchPlatform(
-                "cpu",
+                f"rocm-win-{gfx}",
                 3,
-                False,
-                "AMD on Windows needs AMD's own PyTorch packages, which setup "
-                "can't install. Install ComfyUI by hand and use --attach.",
+                True,
+                "Experimental: AMD GPU on Windows, with AMD's own ROCm packages.",
             )
 
         return TorchPlatform("rocm7.2", 3, True, "Experimental: AMD GPU.")

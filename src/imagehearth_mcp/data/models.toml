@@ -25,6 +25,47 @@ python = "3.13"
 index = "https://download.pytorch.org/whl/rocm7.2"
 packages = ["torch==2.14.1+rocm7.2", "torchvision==0.29.1+rocm7.2", "torchaudio==2.11.0+rocm7.2"]
 
+# AMD en Windows: paquetes de AMD, no de PyTorch. Su índice tiene también las
+# dependencias, y cada arquitectura gfx lleva su extra [device-...]. Sin probar en
+# una Radeon; resuelto con uv para Windows y Python 3.13. El tamaño se estima con
+# los wheels (1,5 GB de descarga) y no está medido.
+
+[pytorch.rocm-win-gfx1200]
+python = "3.13"
+index = "https://stable.repo.amd.com/rocm/whl-next/"
+packages = ["torch[device-gfx1200]==2.14.0+rocm10.1.0", "torchvision[device-gfx1200]==0.29.0a0+rocm10.1.0", "torchaudio==2.11.0.3+rocm10.1.0"]
+install_bytes = 5000000000
+
+[pytorch.rocm-win-gfx1201]
+python = "3.13"
+index = "https://stable.repo.amd.com/rocm/whl-next/"
+packages = ["torch[device-gfx1201]==2.14.0+rocm10.1.0", "torchvision[device-gfx1201]==0.29.0a0+rocm10.1.0", "torchaudio==2.11.0.3+rocm10.1.0"]
+install_bytes = 5000000000
+
+[pytorch.rocm-win-gfx1100]
+python = "3.13"
+index = "https://stable.repo.amd.com/rocm/whl-next/"
+packages = ["torch[device-gfx1100]==2.14.0+rocm10.1.0", "torchvision[device-gfx1100]==0.29.0a0+rocm10.1.0", "torchaudio==2.11.0.3+rocm10.1.0"]
+install_bytes = 5000000000
+
+[pytorch.rocm-win-gfx1101]
+python = "3.13"
+index = "https://stable.repo.amd.com/rocm/whl-next/"
+packages = ["torch[device-gfx1101]==2.14.0+rocm10.1.0", "torchvision[device-gfx1101]==0.29.0a0+rocm10.1.0", "torchaudio==2.11.0.3+rocm10.1.0"]
+install_bytes = 5000000000
+
+[pytorch.rocm-win-gfx1102]
+python = "3.13"
+index = "https://stable.repo.amd.com/rocm/whl-next/"
+packages = ["torch[device-gfx1102]==2.14.0+rocm10.1.0", "torchvision[device-gfx1102]==0.29.0a0+rocm10.1.0", "torchaudio==2.11.0.3+rocm10.1.0"]
+install_bytes = 5000000000
+
+[pytorch.rocm-win-gfx1103]
+python = "3.13"
+index = "https://stable.repo.amd.com/rocm/whl-next/"
+packages = ["torch[device-gfx1103]==2.14.0+rocm10.1.0", "torchvision[device-gfx1103]==0.29.0a0+rocm10.1.0", "torchaudio==2.11.0.3+rocm10.1.0"]
+install_bytes = 5000000000
+
 [pytorch.xpu]
 python = "3.13"
 index = "https://download.pytorch.org/whl/xpu"
