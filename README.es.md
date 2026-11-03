@@ -31,7 +31,7 @@ Si también usas modelos de lenguaje locales, ImageHearth los libera de la memor
 
 | | |
 |---|---|
-| **GPU** | NVIDIA serie 20 o posterior con un controlador actual. Solo medido en una RTX 4090 de 24 GB; consulta las [mediciones](#requisitos-medidos). Con menos memoria puede ir lento o fallar con los modelos FLUX |
+| **GPU** | NVIDIA serie 20 o posterior con un controlador actual (AMD Radeon RX 7000 y 9000 es experimental en Windows; consulta [Soporte](#soporte)). Solo medido en una RTX 4090 de 24 GB; consulta las [mediciones](#requisitos-medidos). Con menos memoria puede ir lento o fallar con los modelos FLUX |
 | **Disco** | 7,2 GB para ComfyUI y su entorno, más el perfil que elijas |
 | **Software** | Nada que instalar antes: el script instala [uv](https://docs.astral.sh/uv/), que trae su propio Python. No hace falta Git. [Ollama](https://ollama.com/download) es opcional |
 
@@ -43,7 +43,10 @@ Solo se anuncia como soportado lo que se ha ejecutado en hardware real.
 |---|---|
 | Linux, NVIDIA serie 20 o posterior | **Soportado.** Probado en hardware real |
 | Windows 11, NVIDIA serie 20 o posterior | **Objetivo de esta beta.** Falta verificarlo en máquinas limpias |
-| NVIDIA serie 10 o anterior, AMD, Intel Arc, solo CPU | **Experimental.** Se detecta y se ofrece con un aviso, sin haberse probado. Solo con CPU funciona `fast` |
+| Windows 11, AMD Radeon RX 7000 y 9000 | **Experimental.** Se instala sola con los paquetes ROCm de AMD (unos 5 GB, estimados), sin probar en una Radeon real. Necesita un controlador de AMD actual. Tarjetas: RX 9060 (gfx1200), RX 9070 (gfx1201), RX 7900 (gfx1100), RX 7800/7700 (gfx1101), RX 7600 (gfx1102), Radeon 780M/760M/740M (gfx1103) |
+| Linux, AMD | **Experimental.** Paquetes ROCm 7.2 de PyTorch, sin probar |
+| Windows, otras AMD (RX 6000 y anteriores) | **Setup no las instala.** Instala ComfyUI a mano y usa `--attach` |
+| NVIDIA serie 10 o anterior, Intel Arc, solo CPU | **Experimental.** Se detecta y se ofrece con un aviso, sin haberse probado. Solo con CPU funciona `fast` |
 | macOS con Apple Silicon | **Sin probar.** Preparado tras `--experimental`: consulta [más abajo](#macos-sin-probar) |
 
 ### Requisitos medidos

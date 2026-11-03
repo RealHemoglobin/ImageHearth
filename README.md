@@ -33,7 +33,7 @@ If you also run local language models, ImageHearth frees them from GPU memory wh
 
 | | |
 |---|---|
-| **GPU** | NVIDIA series 20 or newer with a current driver. Only measured on an RTX 4090 with 24 GB; see the [measurements](#measured-requirements). Less memory may be slow or fail with the FLUX models |
+| **GPU** | NVIDIA series 20 or newer with a current driver (AMD Radeon RX 7000 and 9000 series is experimental on Windows; see [Support](#support)). Only measured on an RTX 4090 with 24 GB; see the [measurements](#measured-requirements). Less memory may be slow or fail with the FLUX models |
 | **Disk** | 7.2 GB for ComfyUI and its environment, plus the profile you choose |
 | **Software** | Nothing to install first: the script installs [uv](https://docs.astral.sh/uv/), which brings its own Python. Git isn't needed. [Ollama](https://ollama.com/download) is optional |
 
@@ -45,7 +45,10 @@ Only what has run on real hardware is announced as supported.
 |---|---|
 | Linux, NVIDIA series 20 or newer | **Supported.** Tested on real hardware |
 | Windows 11, NVIDIA series 20 or newer | **Target of this beta.** Its verification on clean machines is pending |
-| NVIDIA series 10 or older, AMD, Intel Arc, CPU only | **Experimental.** Detected and offered with a warning, never tested. CPU only runs `fast` |
+| Windows 11, AMD Radeon RX 7000 and 9000 series | **Experimental.** Installed automatically with AMD's own ROCm packages (about 5 GB, estimated), never tested on a real Radeon. Needs a current AMD driver. Cards: RX 9060 (gfx1200), RX 9070 (gfx1201), RX 7900 (gfx1100), RX 7800/7700 (gfx1101), RX 7600 (gfx1102), Radeon 780M/760M/740M (gfx1103) |
+| Linux, AMD | **Experimental.** ROCm 7.2 packages from PyTorch, never tested |
+| Windows, other AMD cards (RX 6000 and older) | **Not installed by setup.** Install ComfyUI by hand and use `--attach` |
+| NVIDIA series 10 or older, Intel Arc, CPU only | **Experimental.** Detected and offered with a warning, never tested. CPU only runs `fast` |
 | macOS on Apple Silicon | **Untested.** Prepared behind `--experimental`: see [below](#macos-untested) |
 
 ### Measured requirements
