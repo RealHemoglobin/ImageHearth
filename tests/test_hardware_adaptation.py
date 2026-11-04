@@ -1,5 +1,6 @@
 """Fase 7: PATH en doctor y llama-server de un solo modelo que se para y vuelve."""
 
+import shutil
 import socket
 import subprocess
 import sys
@@ -62,7 +63,10 @@ def test_installers_update_the_shell_without_root_or_licenses():
         assert "sudo" not in text.replace("never uses root", "")
         assert "--accept-licenses" not in text
 
-    subprocess.run(["sh", "-n", str(ROOT / "install.sh")], check=True)
+    # Windows has no `sh` unless Git Bash is on the PATH; the syntax check is for POSIX hosts.
+    sh = shutil.which("sh")
+    if sh:
+        subprocess.run([sh, "-n", str(ROOT / "install.sh")], check=True)
 
 
 def test_doctor_path_ok_when_the_command_is_found():
