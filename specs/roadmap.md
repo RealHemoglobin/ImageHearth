@@ -27,7 +27,8 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 | 4. Perfiles y macOS | Modelos según hardware; macOS preparado sin probar | L | 3 |
 | 5. Agentes | Conexión con un comando y generaciones largas fiables | M | 2 |
 | 6. Beta pública | v0.1 en PyPI y en el registro MCP | M | 3, 5 |
-| 7. v1.0 | macOS experimental y matriz de pruebas completa | M | 4, 6 |
+| 7. Adaptación al hardware | La mejor calidad que cabe en cada equipo y modelos de lenguaje que se paran y vuelven | L | 4, 5, 6 |
+| 8. v1.0 | macOS experimental y matriz de pruebas completa | M | 6, 7 |
 
 **macOS no bloquea ninguna fase:** no hay Mac disponible, así que se deja preparado sin probar y sin anunciarlo como soportado. Solo sube de nivel cuando se pruebe con hardware real. La fase 5 se puede hacer en paralelo a la 3.
 
@@ -183,7 +184,58 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 **Listo cuando:** al menos 3 personas externas instalan y generan sin ayuda, y los fallos de instalación se pueden diagnosticar con `doctor --json`.
 
-## Fase 7: v1.0
+## Fase 7: Adaptación al hardware
+
+**Objetivo:** cada equipo obtiene la mejor calidad que cabe en su hardware, aunque vaya más lento, y los modelos de lenguaje del usuario se apartan y vuelven sin intervención.
+
+**Contexto (2026-11-04):** en una AMD de 16 GB en Windows, FLUX Dev fp8 (12 GB de modelo y 5 GB de T5) va muy justo. Con un `llama-server` de un solo modelo, el motor solo avisa y genera compartiendo la GPU, porque su API no permite descargarlo.
+
+### Instalación
+
+- [ ] **`imagehearth-mcp` queda en el PATH tras instalar** en Linux, Windows y macOS. Los instaladores ejecutan `uv tool update-shell` (con aviso) en lugar de solo sugerirlo, y comprueban en un shell nuevo que el comando se encuentra. Cubrir zsh, bash, fish y PowerShell, y `uv` instalado por el instalador oficial, por el gestor del sistema o ya presente.
+- [ ] `doctor` comprueba que el comando está en el PATH y, si no, da la orden exacta para arreglarlo.
+
+### Memoria de ComfyUI
+
+- [ ] **Descarga parcial a RAM:** medir cómo carga ComfyUI FLUX en 16 GB y menos (`NORMAL_VRAM` ya carga por partes) y ajustar los argumentos de arranque según el hardware: `--reserve-vram`, `--lowvram` o `--novram`, y el comportamiento en ROCm Windows.
+- [ ] Opción `comfy_args` en `config.toml` para añadir argumentos propios, y que `doctor` muestre los que se usan.
+- [ ] Revisar las comprobaciones de memoria del motor (`min_vram_mib` y `_check_free_memory`) para que no rechacen un modelo que cabe con descarga parcial; usar la RAM libre como segundo límite.
+- [ ] Reproducir una tarjeta de 16 GB en la RTX 4090 con `--reserve-vram` y medir tiempo y memoria de cada variante.
+
+### Variantes de `quality` según el hardware
+
+- [ ] **Escalera de variantes** elegida por VRAM y RAM, tanto en `setup` como al generar:
+  - 20 GB o más: FLUX Dev fp8 (actual).
+  - De 12 a 20 GB: FLUX Dev GGUF Q5 con T5 GGUF (los workflows ya existen para Mac) y descarga parcial si hace falta.
+  - De 8 a 12 GB: **SDXL 1.0 afinado con LoRAs** de detalle, sin T5.
+- [ ] Elegir el checkpoint SDXL y las LoRAs por licencia (preferir OpenRAIL++ o similar, que permiten uso comercial), calidad y origen estable en Hugging Face, con revisión y SHA-256 fijados en `models.toml`.
+- [ ] Crear el workflow `sdxl_quality` (checkpoint, LoRAs, más pasos y resolución nativa de 1024) e incluirlo en `VARIANTS["high"]`.
+- [ ] Perfiles nuevos o variantes de `quality`/`full` para NVIDIA y AMD con poca VRAM, con `min_vram_mib` medido.
+- [ ] Comparar la calidad de las tres variantes con los mismos prompts y documentarla en el README.
+
+### Modelos de lenguaje que se paran y vuelven
+
+- [ ] **llama.cpp de un solo modelo:** si la API no permite descargar, localizar el proceso `llama-server` que escucha en el puerto, guardar su línea de comandos, directorio y entorno, pararlo y rearrancarlo igual al terminar. Funciona en Linux, Windows y macOS con `psutil` y `spawn`.
+- [ ] Solo se para un proceso del mismo usuario e identificado como `llama-server`; si no se puede reproducir su arranque (servicio del sistema, contenedor, otro usuario), se avisa como ahora.
+- [ ] Guardar la línea de arranque en el estado de sesión, para que `recover_engine` lo rearranque tras una caída del motor.
+- [ ] Probar con un `llama-server` real y un modelo pequeño en Linux; Windows con el binario oficial; macOS sin probar.
+- [ ] Valorar el mismo enfoque para LM Studio sin API de descarga y para vLLM sin modo de reposo.
+
+**Spike de llama.cpp (2026-11-04, Linux, build b12101 Vulkan, Qwen2.5-0.5B Q4_K_M):**
+- Un solo modelo: el proveedor actual devuelve `unloadable: False` y el motor solo avisa; ese es el fallo observado.
+- Prototipo con `psutil`: localizar `llama-server` del mismo usuario por el puerto en escucha, guardar `exe()`, `cmdline()`, `cwd()` y `environ()`, `terminate()` y relanzar con `spawn.detached_options()`. Libera la VRAM al instante y vuelve en 0,5 s con la misma línea, directorio, modelo y `n_ctx`, y responde.
+- Usar `exe()` y no `cmdline()[0]`, que puede ser relativo (`./llama-server`). La salida del relanzado va a un log propio, porque la terminal original ya no existe.
+- Modo router (`--models-dir`): el proveedor actual descarga y restaura correctamente contra un servidor real, no solo en tests simulados.
+- Riesgos por cubrir: en macOS `environ()` puede dar `AccessDenied` (usar el entorno propio y avisar); un servicio de systemd o un contenedor no se debe relanzar desde aquí; en Windows, ocultar la consola al relanzar.
+- El puerto 8080 por defecto estaba ocupado por otro programa (SearXNG): la identificación por `/props` lo descartó correctamente.
+
+**Listo cuando:**
+- Tras `install.sh` o `install.ps1`, `imagehearth-mcp` funciona en una terminal nueva sin pasos manuales.
+- En una tarjeta de 16 GB (real o simulada) `quality` genera sin quedarse sin memoria, aunque tarde más.
+- En una de 8 GB `quality` genera con la variante SDXL.
+- Con un `llama-server` de un solo modelo cargado, una generación lo para, genera y lo deja respondiendo con el mismo modelo y los mismos parámetros.
+
+## Fase 8: v1.0
 
 **Objetivo:** cumplir todos los criterios de la [misión](mission.md).
 
@@ -197,7 +249,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 
 ## Después de la v1
 
-Por valorar según la demanda, sin compromiso: workflows personalizados, LoRAs, upscaling, otros modelos, conexión a un ComfyUI en otra máquina y más agentes y editores según se pida.
+Por valorar según la demanda, sin compromiso: workflows personalizados, LoRAs elegidas por el usuario, upscaling, otros modelos, conexión a un ComfyUI en otra máquina y más agentes y editores según se pida.
 
 ---
 
