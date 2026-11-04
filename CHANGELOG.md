@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-04
+
+- Bumped the version to `0.1.0b2` (package, installers, `server.json` and docs).
+- Hardware adaptation: `doctor` checks the PATH, and llama.cpp runs a single model that is stopped and restored around image generation. The installer test no longer needs `sh` on Windows.
+
 ## 2026-10-31
 
 - Prepared the public beta `0.1.0b1`: `install.sh` and `install.ps1`, package metadata, `server.json` for the MCP Registry, rewritten READMEs, troubleshooting, release and beta testing guides, contribution and security policies, and issue templates.

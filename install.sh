@@ -9,7 +9,7 @@
 #
 # Everything is inside main(), so a cut-off download can't run half a script.
 
-VERSION="0.1.0b1"
+VERSION="0.1.0b2"
 DOCS="https://github.com/RealHemoglobin/ImageHearth"
 
 fail() {

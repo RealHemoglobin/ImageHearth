@@ -1,6 +1,6 @@
 [project]
 name = "imagehearth-mcp"
-version = "0.1.0b1"
+version = "0.1.0b2"
 description = "MCP server that lets AI agents generate and edit images locally through ComfyUI"
 readme = "README.md"
 license = "MIT AND GPL-3.0-only"

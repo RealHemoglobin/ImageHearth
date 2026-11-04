@@ -100,7 +100,7 @@ Without Git, download the ZIP from GitHub and run the same script inside the fol
 **Most advanced: by hand.** With [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
 
 ```bash
-uv tool install --python 3.13 imagehearth-mcp==0.1.0b1
+uv tool install --python 3.13 imagehearth-mcp==0.1.0b2
 imagehearth-mcp setup
 imagehearth-mcp connect --detect
 ```
