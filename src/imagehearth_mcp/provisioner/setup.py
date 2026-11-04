@@ -21,7 +21,17 @@ from imagehearth_mcp.provisioner.manifest import format_size
 
 ATTACHED = "attached"
 MANAGED = preflight.MANAGED
-PROFILE_ORDER = ("fast", "quality", "full", "mac-fast", "mac-quality", "mac-full")
+PROFILE_ORDER = (
+    "fast",
+    "quality-sdxl",
+    "quality-gguf",
+    "quality",
+    "full-gguf",
+    "full",
+    "mac-fast",
+    "mac-quality",
+    "mac-full",
+)
 UNTESTED_MACOS = (
     "macOS is prepared but has never been run on a real Mac: ComfyUI, ComfyUI-GGUF, "
     "FLUX and Kontext may not work on MPS."
@@ -44,7 +54,7 @@ def propose_profile(detection, catalog):
     proposed = next(iter(profiles), "fast")
 
     for name, profile in profiles.items():
-        if vram >= profile.min_vram_mib and detection.disk_free_bytes > profile.bytes:
+        if vram >= catalog.min_vram_mib(profile) and detection.disk_free_bytes > profile.bytes:
             proposed = name
 
     return proposed
@@ -297,6 +307,11 @@ def _setup(args):
 
     mode, comfy_dir, default_port = choose_mode(args, detection, records, interactive)
     profile = choose_profile(args, detection, catalog, interactive)
+    profile = catalog.resolve(profile, gpu.vram_mib if gpu else 0, getattr(args, "variant", None))
+
+    if profile.variant_of:
+        print(f"\nFor {gpu.vram_mib} MiB of GPU memory the {profile.variant_of} profile uses its {profile.name} variant.")
+
     port = args.port or default_port
     models_dir = Path(args.models_dir).expanduser().resolve() if args.models_dir else None
     models_dir = models_dir or models.resolve_dir(records, comfy_dir)

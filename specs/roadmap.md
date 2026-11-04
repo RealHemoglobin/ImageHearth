@@ -193,14 +193,14 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 ### Instalación
 
 - [ ] **`imagehearth-mcp` queda en el PATH tras instalar** en Linux, Windows y macOS. Los instaladores ejecutan `uv tool update-shell` (con aviso) en lugar de solo sugerirlo, y comprueban en un shell nuevo que el comando se encuentra. Cubrir zsh, bash, fish y PowerShell, y `uv` instalado por el instalador oficial, por el gestor del sistema o ya presente.
-- [ ] `doctor` comprueba que el comando está en el PATH y, si no, da la orden exacta para arreglarlo.
+- [x] `doctor` comprueba que el comando está en el PATH y, si no, da la orden exacta para arreglarlo.
 
 ### Memoria de ComfyUI
 
 - [ ] **Descarga parcial a RAM:** medir cómo carga ComfyUI FLUX en 16 GB y menos (`NORMAL_VRAM` ya carga por partes) y ajustar los argumentos de arranque según el hardware: `--reserve-vram`, `--lowvram` o `--novram`, y el comportamiento en ROCm Windows.
-- [ ] Opción `comfy_args` en `config.toml` para añadir argumentos propios, y que `doctor` muestre los que se usan.
-- [ ] Revisar las comprobaciones de memoria del motor (`min_vram_mib` y `_check_free_memory`) para que no rechacen un modelo que cabe con descarga parcial; usar la RAM libre como segundo límite.
-- [ ] Reproducir una tarjeta de 16 GB en la RTX 4090 con `--reserve-vram` y medir tiempo y memoria de cada variante.
+- [x] Opción `comfy_args` en `config.toml` para añadir argumentos propios, y que `doctor` muestre los que se usan.
+- [x] Revisar las comprobaciones de memoria del motor (`min_vram_mib` y `_check_free_memory`) para que no rechacen un modelo que cabe con descarga parcial; usar la RAM libre como segundo límite.
+- [x] Reproducir una tarjeta de 16 GB en la RTX 4090 con `--reserve-vram` y medir tiempo y memoria de cada variante.
 
 ### Variantes de `quality` según el hardware
 
@@ -208,18 +208,18 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
   - 20 GB o más: FLUX Dev fp8 (actual).
   - De 12 a 20 GB: FLUX Dev GGUF Q5 con T5 GGUF (los workflows ya existen para Mac) y descarga parcial si hace falta.
   - De 8 a 12 GB: **SDXL 1.0 afinado con LoRAs** de detalle, sin T5.
-- [ ] Elegir el checkpoint SDXL y las LoRAs por licencia (preferir OpenRAIL++ o similar, que permiten uso comercial), calidad y origen estable en Hugging Face, con revisión y SHA-256 fijados en `models.toml`.
-- [ ] Crear el workflow `sdxl_quality` (checkpoint, LoRAs, más pasos y resolución nativa de 1024) e incluirlo en `VARIANTS["high"]`.
+- [x] Elegir el checkpoint SDXL y las LoRAs por licencia (preferir OpenRAIL++ o similar, que permiten uso comercial), calidad y origen estable en Hugging Face, con revisión y SHA-256 fijados en `models.toml`.
+- [x] Crear el workflow `sdxl_quality` (checkpoint, LoRAs, más pasos y resolución nativa de 1024) e incluirlo en `VARIANTS["high"]`.
 - [ ] Perfiles nuevos o variantes de `quality`/`full` para NVIDIA y AMD con poca VRAM, con `min_vram_mib` medido.
 - [ ] Comparar la calidad de las tres variantes con los mismos prompts y documentarla en el README.
 
 ### Modelos de lenguaje que se paran y vuelven
 
 - [ ] **llama.cpp de un solo modelo:** si la API no permite descargar, localizar el proceso `llama-server` que escucha en el puerto, guardar su línea de comandos, directorio y entorno, pararlo y rearrancarlo igual al terminar. Funciona en Linux, Windows y macOS con `psutil` y `spawn`.
-- [ ] Solo se para un proceso del mismo usuario e identificado como `llama-server`; si no se puede reproducir su arranque (servicio del sistema, contenedor, otro usuario), se avisa como ahora.
-- [ ] Guardar la línea de arranque en el estado de sesión, para que `recover_engine` lo rearranque tras una caída del motor.
+- [x] Solo se para un proceso del mismo usuario e identificado como `llama-server`; si no se puede reproducir su arranque (servicio del sistema, contenedor, otro usuario), se avisa como ahora.
+- [x] Guardar la línea de arranque en el estado de sesión, para que `recover_engine` lo rearranque tras una caída del motor.
 - [ ] Probar con un `llama-server` real y un modelo pequeño en Linux; Windows con el binario oficial; macOS sin probar.
-- [ ] Valorar el mismo enfoque para LM Studio sin API de descarga y para vLLM sin modo de reposo.
+- [x] Valorar el mismo enfoque para LM Studio sin API de descarga y para vLLM sin modo de reposo.
 
 **Spike de llama.cpp (2026-11-04, Linux, build b12101 Vulkan, Qwen2.5-0.5B Q4_K_M):**
 - Un solo modelo: el proveedor actual devuelve `unloadable: False` y el motor solo avisa; ese es el fallo observado.

@@ -101,8 +101,24 @@ function Install-ImageHearth {
     Write-Host "Done. Restart your agent and ask it for an image."
     Write-Host "Check the installation at any time with: & `"$Command`" doctor"
 
+    # A new session reads the saved user PATH, not this window's.
+    $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if (($UserPath -split ";") -notcontains $BinDir) {
+        Write-Host ""
+        Write-Host "$BinDir is not in your PATH. Running: uv tool update-shell"
+        uv tool update-shell
+        $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+        if (($UserPath -split ";") -notcontains $BinDir) {
+            Write-Host "A new terminal may still not find imagehearth-mcp. Add the directory yourself:"
+            Write-Host "  [Environment]::SetEnvironmentVariable('Path', `"`$([Environment]::GetEnvironmentVariable('Path', 'User'));$BinDir`", 'User')"
+            return
+        }
+    }
+
     if (($env:Path -split ";") -notcontains $BinDir) {
-        Write-Host "To use imagehearth-mcp by name, run: uv tool update-shell"
+        Write-Host ""
+        Write-Host "Open a new PowerShell window to use imagehearth-mcp by name."
     }
 }
 

@@ -121,11 +121,14 @@ Setup detecta tu hardware y cualquier ComfyUI existente, propone un perfil y mue
 | `quality` | `fast` + FLUX Dev | 24,6 GB |
 | `full` | `quality` + edición con FLUX Kontext | 36,5 GB |
 
+`quality` y `full` se adaptan a la memoria de la GPU: con 20 GB o más usan FLUX Dev fp8; con 12 a 20 GB, `setup` instala en su lugar FLUX Dev GGUF Q5 (más pequeño; ComfyUI pasa a la RAM del sistema lo que no cabe, y eso es más lento). Con 8 a 12 GB, `quality` instala un SDXL afinado (RealVisXL V5.0, CreativeML Open RAIL++-M, que permite uso comercial) con una LoRA de detalle, 13,9 GB en total incluido `fast`; ahí la edición no está disponible (necesita 12 GB) y por debajo de 8 GB solo se ofrece `fast`. Las variantes pequeñas se han simulado a propósito, y aún no se han medido en una tarjeta real de 12 a 20 GB. Para forzar una, usa `--variant fp8|gguf|sdxl`.
+
 Puedes empezar con `fast` y ejecutar `setup --profile full` más adelante: lo que ya está no se vuelve a descargar. ImageHearth solo ofrece lo instalado: `list_workflows` lo muestra, un `setup` posterior se nota sin reiniciar nada, y pedir algo que falta da un error con el comando de `setup` exacto, nunca otro modelo en su lugar.
 
 | Opción | Uso |
 |---|---|
 | `--profile fast\|quality\|full` | Elige el perfil sin preguntar. En macOS: `mac-fast\|mac-quality\|mac-full` |
+| `--variant fp8\|gguf\|sdxl` | Fuerza una variante de `quality` o `full` en vez de la que cabe en la memoria de tu GPU |
 | `--experimental` | Obligatorio en macOS, que está sin probar |
 | `--accept-licenses` | Acepta las licencias sin preguntar. Obligatoria con `--non-interactive` |
 | `--non-interactive` | No pregunta nunca: falla si falta una decisión |
@@ -146,7 +149,7 @@ Define `HF_TOKEN` si Hugging Face restringe el acceso a un modelo.
 
 ### 3. Compruébalo, actualízalo o elimínalo
 
-El instalador no cambia tu `PATH`. Si no encuentra `imagehearth-mcp`, ejecuta `uv tool update-shell` y abre otra terminal.
+El instalador ejecuta `uv tool update-shell` si una terminal nueva no encontraría `imagehearth-mcp`; abre otra terminal después. `imagehearth-mcp doctor` lo comprueba y, si aún falta algo, imprime el comando exacto para tu shell.
 
 ```bash
 imagehearth-mcp doctor
@@ -158,7 +161,7 @@ Comprueba cada capa e indica cómo arreglar lo que falle. Añade `--json` para u
 imagehearth-mcp update
 ```
 
-Aplica la versión de ComfyUI y los modelos que fija esta versión de ImageHearth. Un ComfyUI adjunto no se toca, salvo el nodo de estado que haya instalado setup.
+**Para tener una versión nueva de ImageHearth**, ejecuta de nuevo el instalador: sustituye la versión instalada por la que fija, conserva tu configuración, tus modelos y los agentes conectados, y no descarga lo que ya está. Luego reinicia tu agente. (A mano: `uv tool install --python 3.13 --force imagehearth-mcp`.) Este comando aplica la versión de ComfyUI y los modelos que fija la versión instalada de ImageHearth. Un ComfyUI adjunto no se toca, salvo el nodo de estado que haya instalado setup.
 
 ```bash
 imagehearth-mcp uninstall

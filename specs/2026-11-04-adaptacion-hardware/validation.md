@@ -109,17 +109,17 @@ Los tests deben cubrir:
 | Comprobación | Resultado | Fecha |
 |---|---|---|
 | `scripts/check.sh` en Linux | | |
-| Prueba de contrato `/object_info` | | |
-| `install.sh` y `PATH` (zsh, bash, fish) | | |
-| `doctor` sin `PATH` | | |
-| `llama-server` de un solo modelo en Linux | | |
+| Prueba de contrato `/object_info` | `scripts/contract.sh` en verde: existen los 20 tipos de nodo, con `sdxl_quality` | 2026-11-04 |
+| `install.sh` y `PATH` (zsh, bash, fish) | `ensure_in_path` con `HOME` aislado y la herramienta fuera del `PATH`: en bash crea `.bash_profile` y `.bashrc`, en zsh `.zshenv`, y un shell de login nuevo encuentra el comando. Probada la función con un `imagehearth-mcp` de mentira, no el instalador completo. fish 4.9.3 (binario oficial, SHA-256 verificado): crea `config.fish` y un fish de login nuevo encuentra el comando | 2026-11-04 |
+| `doctor` sin `PATH` | Con `PATH=/usr/bin:/bin` el check `path` da WARN con la orden `uv tool update-shell` y abrir un terminal nuevo. Con el comando en el `PATH` da OK | 2026-11-04 |
+| `llama-server` de un solo modelo en Linux | `llama-server` b12110 (build CPU, SHA-256 verificado) con Qwen2.5-0.5B Q4_K_M en el puerto 8099: `loaded()` lee la línea de comandos, el directorio y el entorno; `unload` lo para al instante y `restore` lo vuelve a lanzar en 2 s con los mismos argumentos, directorio y variable de entorno, y responde. Build CPU, no CUDA. Descubrió un fallo: un servidor lanzado desde una terminal que corre como servicio de systemd heredaba `INVOCATION_ID` y se tomaba por servicio; ahora se distingue por el cgroup (`.service` frente a `.scope`) | 2026-11-04 |
 | Recuperación con `llama-server` parado | | |
-| LM Studio y vLLM: conclusión | | |
-| Mediciones RTX 4090 nativa | | |
-| Mediciones simulando 16 GB | | |
-| Mediciones simulando 8 GB | | |
-| Elección de SDXL y LoRAs (candidatos, licencias, motivo) | | |
-| Comparación de calidad | | |
+| LM Studio y vLLM: conclusión | **No se implementa el relanzado.** LM Studio: con su API REST v1 ya se descarga y se recarga por HTTP; sin ella, la salida es `lms unload --all`, porque matar el proceso de LM Studio cerraría su interfaz y sus sesiones, y no es un servidor que se relance sin más. vLLM: el modo de reposo (`/sleep`, `/wake_up`) ya libera la GPU y es la vía soportada; relanzarlo cuesta minutos (carga de pesos y grafos CUDA) y suele correr en contenedor, que el método del proceso por puerto no ve. En ambos casos se mantiene el aviso con el consejo exacto. Valorado leyendo el código y la API, sin probarlo con LM Studio ni vLLM reales | 2026-11-04 |
+| Mediciones RTX 4090 nativa | `flux_dev` (fp8): pico 19352 MiB con 3175 de base (≈16,2 GB propios), 2,2 GB de RAM, 15,1 s en frío y 11,1 s en caliente. `flux_dev_gguf` (Q5): pico 14395 con 3129 de base (≈11,3 GB), 6,8 GB de RAM, 27,4 s en frío y 24,5 s en caliente. `sdxl_quality` (1024×1024, 2 pasadas): pico 9584 MiB con 3146 de base (≈6,4 GB propios), 2826 MiB de RAM, 6,3 s en frío y 4,8 s en caliente. 1024×1024, 2 pasadas | 2026-11-04 |
+| Mediciones simulando 16 GB | Con `--reserve-vram=8` (tope ≈16,5 GB): fp8 pico 16572 MiB y 11,1 s (sin cambio); GGUF pico 10950 MiB y 25,3 s. Aún no se ha probado un caso en el que fp8 no quepa y desborde a RAM | 2026-11-04 |
+| Mediciones simulando 8 GB | `sdxl_quality` con `--reserve-vram=16`: pico 8327 MiB, 4,8 s en caliente. `--reserve-vram` no limita el uso real de una tarjeta que tiene memoria libre, así que esto prueba que cabe en 8 GB, no el comportamiento con desbordamiento a RAM | 2026-11-04 |
+| Elección de SDXL y LoRAs (candidatos, licencias, motivo) | RealVisXL V5.0 fp16 (openrail++) y LoRA offset oficial de SDXL 1.0 (openrail++). Descartados: Juggernaut XL v9 (OpenRAIL-M original), Playground v2.5 (licencia propia), slider de ntc-ai (terceros). Descargados con SHA-256 verificado; `sdxl_quality` genera 1024×1024 en la RTX 4090 (16 s en total con el arranque de ComfyUI). Sin comparar aún con FLUX | 2026-11-04 |
+| Comparación de calidad | Mismas 3 indicaciones y semilla 42, 1024×1024: `comparison.jpg` (filas fp8, GGUF Q5, SDXL). fp8 y GGUF Q5 son casi indistinguibles (composición y texto «OPEN» correctos en ambos); GGUF tarda 2,2 veces más. SDXL RealVisXL es más rápido (4,8 s) y fotográfico, pero con menos detalle y peor texto (letras deformadas en el segundo cartel). Juicio visual de una sola persona, sin métrica | 2026-11-04 |
 | `scripts\check.ps1` y `scripts\contract.ps1` en Windows | | |
 | `install.ps1` y `PATH` en Windows | | |
 | `llama-server` en Windows | | |

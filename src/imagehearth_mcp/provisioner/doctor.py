@@ -1,8 +1,11 @@
 """Subcomando `doctor`: comprueba cada capa y dice cómo arreglar lo que falle."""
 
 import json
+import os
 import re
+import shutil
 import subprocess
+import sys
 from dataclasses import asdict, dataclass, field
 from importlib.metadata import PackageNotFoundError, version
 
@@ -18,6 +21,7 @@ TORCH_TIMEOUT = 120
 LAYERS = (
     "package",
     "config",
+    "path",
     "comfyui",
     "environment",
     "node",
@@ -58,6 +62,62 @@ def check_package():
         )
 
     return Check("package", OK, f"imagehearth-mcp {package_version}"), catalog
+
+
+def tool_bin_dir(run=subprocess.run):
+    """Directory where uv puts the command, or None if uv can't say."""
+    try:
+        result = run(
+            ["uv", "tool", "dir", "--bin"], capture_output=True, text=True, timeout=15
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    return result.stdout.strip() or None if result.returncode == 0 else None
+
+
+def path_fix_command(bin_dir, system=sys.platform, shell=None):
+    """The exact command that puts `bin_dir` in the PATH of new terminals."""
+    if system == "win32":
+        return (
+            "[Environment]::SetEnvironmentVariable('Path', "
+            f"\"$([Environment]::GetEnvironmentVariable('Path', 'User'));{bin_dir}\", 'User')"
+        )
+
+    name = os.path.basename(shell or os.environ.get("SHELL", ""))
+
+    if name == "fish":
+        return f'fish_add_path "{bin_dir}"'
+
+    rc = "~/.zshenv" if name == "zsh" else "~/.profile"
+    return f"echo 'export PATH=\"{bin_dir}:$PATH\"' >> {rc}"
+
+
+def check_path(run=subprocess.run, which=shutil.which, system=sys.platform):
+    """The command must be found by name from a new terminal, not only by absolute path."""
+    found = which("imagehearth-mcp")
+
+    if found:
+        return Check("path", OK, f"imagehearth-mcp is in the PATH ({found}).")
+
+    bin_dir = tool_bin_dir(run)
+
+    if bin_dir is None:
+        return Check(
+            "path",
+            WARN,
+            "imagehearth-mcp is not in the PATH.",
+            "Run `uv tool update-shell` and open a new terminal.",
+        )
+
+    return Check(
+        "path",
+        WARN,
+        f"imagehearth-mcp is not in the PATH; {bin_dir} is missing. Agents are unaffected: "
+        "they use the absolute path.",
+        f"Run `uv tool update-shell` and open a new terminal, or: {path_fix_command(bin_dir, system)}",
+        details={"bin_dir": bin_dir},
+    )
 
 
 def check_config():
@@ -304,6 +364,14 @@ def check_gpu(detection):
     )
 
 
+def comfy_arguments(config, detection):
+    """The memory arguments ComfyUI starts with here: chosen for the hardware, then comfy_args."""
+    from imagehearth_mcp.engine import comfy_args
+
+    gpu = detection.primary_gpu
+    return comfy_args.effective((detection.system, gpu.vram_mib if gpu else 0, detection.ram_mib))
+
+
 def check_port(config, session):
     from imagehearth_mcp.provisioner.preflight import port_is_open
 
@@ -360,6 +428,7 @@ def collect(verify_hashes=False, session=requests, run=subprocess.run, detection
     checks["package"] = package
     configuration, config = check_config()
     checks["config"] = configuration
+    checks["path"] = check_path(run)
 
     if config is not None:
         from imagehearth_mcp.provisioner import ProvisionError, detect
@@ -388,6 +457,7 @@ def collect(verify_hashes=False, session=requests, run=subprocess.run, detection
             )
 
         checks["gpu"] = check_gpu(detection)
+        checks["gpu"].details["comfy_args"] = comfy_arguments(config, detection)
         checks["port"] = check_port(config, session)
         checks["ollama"] = check_ollama(config, session)
         checks["memory"] = check_memory()

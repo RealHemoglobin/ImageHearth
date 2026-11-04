@@ -12,10 +12,10 @@ ImageHearth is the centralized image generation and editing engine shared by all
 It uses:
 - ComfyUI as the image generation backend.
 - SDXL Turbo for fast generation.
-- FLUX Dev for high-quality generation.
+- FLUX Dev for high-quality generation, or a fine-tuned SDXL (RealVisXL) on GPUs with less memory.
 - FLUX Kontext for image editing and multi-reference composition.
 
-What is available depends on the profile the user installed. Only SDXL Turbo is present with `fast`; `quality` adds FLUX Dev and `full` adds FLUX Kontext.
+What is available depends on the profile the user installed. Only SDXL Turbo is present with `fast`; `quality` adds FLUX Dev (or the fine-tuned SDXL if the GPU has less than 12 GB) and `full` adds FLUX Kontext, which needs at least 12 GB of GPU memory.
 
 - A centralized orchestration layer for GPU memory management.
 - MCP as the agent-independent interface.
@@ -39,7 +39,7 @@ Parameters:
 - `workflow` (string, optional): Explicit generation workflow override.
 - `width` (integer, optional): Output width. Default: automatic.
 - `height` (integer, optional): Output height. Default: automatic.
-- `negative_prompt` (string, optional): Elements to avoid during generation. Only SDXL Turbo applies it; other backends return a warning.
+- `negative_prompt` (string, optional): Elements to avoid during generation. SDXL models apply it; other backends return a warning.
 - `include_image` (boolean, optional): Also return the picture, for models with vision. Default: false, because it uses context. The path stays on the first line.
 
 ### Automatic routing
@@ -65,7 +65,7 @@ When `mode="edit"`:
 For generation without references:
 
 - `fast`: SDXL Turbo.
-- `high`: FLUX Dev.
+- `high`: FLUX Dev, or the fine-tuned SDXL on GPUs with less memory.
 
 Quality does not change the editing backend. Image editing always uses FLUX Kontext.
 

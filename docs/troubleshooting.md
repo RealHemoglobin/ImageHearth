@@ -16,6 +16,7 @@ If the command isn't found, it may not be in your `PATH` yet: run `uv tool updat
 | `Can't install uv` | Check your network and proxy. Or [install uv by hand](https://docs.astral.sh/uv/getting-started/installation/) and run the script again |
 | `Can't install imagehearth-mcp==...` | Read uv's error above it. It's usually the network. If an older executable is in the way, run `uv tool install --force imagehearth-mcp` |
 | `macOS is prepared but has never been run` | macOS isn't supported. To try it anyway, see the [README](../README.md#macos-untested) |
+| `imagehearth-mcp: command not found` in a new terminal | The installer runs `uv tool update-shell`; open a new terminal after it. `imagehearth-mcp doctor` (the `path` check) prints the exact command for your shell. Agents are not affected: `connect` writes the absolute path |
 | `Setup did not finish` | Read the error above it, fix it and run the command it prints. It continues where it stopped |
 
 ## Setup
@@ -71,6 +72,8 @@ Ask your agent to *"check the ImageHearth status"*:
 | Tool calls stop after a few minutes | Raise the client's tool timeout. See [long generations](agents.md#long-generations) |
 | Error about a model that isn't installed | Run the `imagehearth-mcp setup --profile ...` command in the error |
 | ComfyUI doesn't start | Read `comfyui.log` in the logs folder below |
+| The generation is slow on a card with little memory | ComfyUI moves what doesn't fit into system RAM. `doctor` shows the memory arguments it starts with; add your own with `comfy_args` in `config.toml` (they win over the automatic ones) |
+| `llama-server` stopped and came back | With a one-model `llama-server` and `memory_mode = "auto"`, ImageHearth stops it to free the GPU and starts it again with the same command line, directory and environment. Its output goes to `llama-server.log` in the logs folder. A server run by another user, a system service or a container is never touched: use `memory_mode = "manual"` or `off` to stop it from being considered |
 | Out of GPU memory with a language model loaded | Use `memory_mode = "auto"`, or free the memory yourself. See the [README](../README.md#settings-optional) |
 
 ## Logs

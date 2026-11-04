@@ -39,6 +39,11 @@ def _build_parser():
         help="What to install. The mac-* profiles are only for macOS.",
     )
     setup.add_argument(
+        "--variant",
+        choices=("fp8", "gguf", "sdxl"),
+        help="Force a variant of quality or full instead of the one that fits the GPU memory.",
+    )
+    setup.add_argument(
         "--experimental",
         action="store_true",
         help="Required on macOS, which is prepared but untested.",

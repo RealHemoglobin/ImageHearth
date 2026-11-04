@@ -124,6 +124,7 @@ class PackageData(unittest.TestCase):
                 "flux_kontext_dev_basic.json",
                 "flux_dev_gguf.json",
                 "flux_kontext_dev_gguf.json",
+                "sdxl_quality.json",
             },
         )
 

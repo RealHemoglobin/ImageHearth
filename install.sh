@@ -112,10 +112,38 @@ main() {
     printf '\nDone. Restart your agent and ask it for an image.\n'
     printf 'Check the installation at any time with: "%s" doctor\n' "$command"
 
+    ensure_in_path "$bin_dir"
+}
+
+# Puts the tool directory in the PATH of new shells, and checks that a new shell finds the command.
+ensure_in_path() {
+    bin_dir="$1"
+    login_shell="${SHELL:-/bin/sh}"
+
+    if ! shell_finds_command "$login_shell"; then
+        printf '\n%s is not in the PATH of new shells. Running: uv tool update-shell\n' "$bin_dir"
+        uv tool update-shell || printf 'uv tool update-shell failed.\n' >&2
+
+        if ! shell_finds_command "$login_shell"; then
+            printf 'A new terminal may still not find imagehearth-mcp. Add the directory yourself:\n'
+            case "$(basename "$login_shell")" in
+                fish) printf '  fish_add_path "%s"\n' "$bin_dir" ;;
+                zsh) printf '  echo '"'"'export PATH="%s:$PATH"'"'"' >> ~/.zshenv\n' "$bin_dir" ;;
+                *) printf '  echo '"'"'export PATH="%s:$PATH"'"'"' >> ~/.profile\n' "$bin_dir" ;;
+            esac
+            return
+        fi
+    fi
+
     case ":$PATH:" in
         *":$bin_dir:"*) ;;
-        *) printf 'To use imagehearth-mcp by name, run: uv tool update-shell\n' ;;
+        *) printf '\nOpen a new terminal to use imagehearth-mcp by name.\n' ;;
     esac
+}
+
+# True if a fresh login shell finds imagehearth-mcp (fresh = reads the startup files, ignores this PATH).
+shell_finds_command() {
+    env -i HOME="$HOME" USER="${USER:-}" "$1" -lc 'command -v imagehearth-mcp' >/dev/null 2>&1
 }
 
 main "$@"

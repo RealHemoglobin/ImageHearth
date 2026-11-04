@@ -53,6 +53,12 @@ class Profile:
     models: tuple[Model, ...]
     platforms: tuple[str, ...] = DESKTOP_PLATFORMS
     nodes: tuple[NodePin, ...] = ()
+    # A variant is the same profile with other models, for a range of VRAM.
+    variant_of: str | None = None
+
+    @property
+    def base(self):
+        return self.variant_of or self.name
 
     @property
     def bytes(self):
@@ -96,12 +102,64 @@ class Manifest:
         return [self.licenses[key] for key in keys]
 
     def profiles_for(self, system):
-        """Los perfiles de un sistema, de menor a mayor."""
+        """Los perfiles de un sistema, de menor a mayor. Sin variantes."""
         return {
             name: profile
             for name, profile in self.profiles.items()
-            if system in profile.platforms
+            if system in profile.platforms and profile.variant_of is None
         }
+
+    def variants_of(self, profile):
+        """The profile itself followed by its variants, from most to least VRAM."""
+        found = [
+            item
+            for item in self.profiles.values()
+            if item.variant_of == profile.name and set(profile.platforms) & set(item.platforms)
+        ]
+        return [profile, *sorted(found, key=lambda item: -item.min_vram_mib)]
+
+    def min_vram_mib(self, profile):
+        """The least VRAM at which the profile or any of its variants works."""
+        return min(item.min_vram_mib for item in self.variants_of(profile))
+
+    def resolve(self, profile, vram_mib, forced=None):
+        """The variant of `profile` that fits `vram_mib` (0 = unknown: the base one).
+
+        `forced` is a variant name such as "fp8" or "gguf". Raises ProvisionError if
+        nothing fits, saying what to use instead.
+        """
+        options = self.variants_of(profile)
+
+        if forced:
+            name = profile.name if forced == "fp8" else f"{profile.name}-{forced}"
+            match = next((item for item in options if item.name == name), None)
+
+            if match is None:
+                available = ["fp8" if item is profile else item.name.removeprefix(f"{profile.name}-") for item in options]
+                raise ProvisionError(
+                    f"The {profile.name} profile has no {forced} variant. Choose one of: "
+                    f"{', '.join(available)}."
+                )
+
+            return match
+
+        # Without variants, the preflight checks decide whether the profile fits.
+        if not vram_mib or len(options) == 1:
+            return profile
+
+        for item in options:
+            if vram_mib >= item.min_vram_mib:
+                return item
+
+        raise ProvisionError(
+            f"The {profile.name} profile needs at least {self.min_vram_mib(profile)} MiB of "
+            f"GPU memory and this machine has {vram_mib} MiB. Use --profile fast instead."
+            + (
+                " Image editing isn't available below that."
+                if profile.name == "full"
+                else ""
+            )
+        )
 
     def install_bytes(self, torch):
         """Lo que ocupan ComfyUI y su entorno, que depende de PyTorch."""
@@ -120,8 +178,8 @@ class Manifest:
         if not required:
             return None
 
-        for profile in self.profiles_for(system).values():
-            if required <= set(profile.models):
+        for profile in self.profiles.values():
+            if system in profile.platforms and required <= set(profile.models):
                 return profile
 
         return None
@@ -193,9 +251,14 @@ def parse(values):
                 tuple(models[item] for item in entry["models"]),
                 tuple(entry["platforms"]),
                 tuple(nodes[item] for item in entry.get("nodes", ())),
+                entry.get("variant_of"),
             )
             for name, entry in values["profiles"].items()
         }
+        for profile in profiles.values():
+            if profile.variant_of is not None and profile.variant_of not in profiles:
+                raise ValueError(f"{profile.name}: unknown base profile {profile.variant_of}")
+
         comfy = values["comfyui"]
         comfyui = ComfyPin(
             comfy["version"],

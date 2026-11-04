@@ -1,6 +1,6 @@
 import re
 
-from imagehearth_mcp.engine import catalog, config
+from imagehearth_mcp.engine import catalog, config, gpu
 
 
 def validate_prompt(prompt):
@@ -69,7 +69,16 @@ def require_installed(name, what=None):
 
 
 def resolve_edit_workflow():
-    name = catalog.choose("edit")
+    smallest = min(catalog.minimum_vram_mib(name) for name in catalog.VARIANTS["edit"])
+    total = gpu.total_mib()
+
+    if total is not None and total < smallest:
+        raise ValueError(
+            f"Image editing is not available: it needs at least {smallest} MiB of GPU "
+            f"memory and this GPU has {total} MiB. Image generation still works."
+        )
+
+    name = catalog.choose("edit", total)
     require_installed(name, "Image editing")
     return name
 

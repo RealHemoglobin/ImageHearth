@@ -2,6 +2,7 @@ import time
 import uuid
 from contextlib import contextmanager
 
+import psutil
 import requests
 
 from imagehearth_mcp.engine import (
@@ -40,15 +41,40 @@ def _movable(models):
     return [model for model in models if model.get("unloadable", True)]
 
 
-def _check_free_memory(required, advice):
-    """Falla antes de generar si no cabe; sin dato de memoria libre, no bloquea."""
+def _free_ram_mib():
+    return psutil.virtual_memory().available // MIB
+
+
+def _check_free_memory(required, advice, session=None):
+    """Falla antes de generar si no cabe; sin dato de memoria libre, no bloquea.
+
+    ComfyUI carga por partes en la RAM lo que no cabe en la VRAM: cabe si la VRAM
+    libre más la RAM libre llegan. Solo entonces avisa de que irá más lento.
+    """
     free = gpu.free_mib()
 
-    if free is not None and free < required:
-        raise MemoryError(
-            f"Only {free} MiB of GPU memory are free and this image needs about "
-            f"{required} MiB. {advice}"
+    if free is None or free >= required:
+        return
+
+    ram = _free_ram_mib()
+
+    if free + ram >= required:
+        message = (
+            f"Only {free} MiB of GPU memory are free and this image needs about {required} MiB, "
+            f"so ComfyUI will use system RAM ({ram} MiB free) and it will be slower."
         )
+
+        if session is not None:
+            session.warn(message)
+        else:
+            log.warning(message)
+
+        return
+
+    raise MemoryError(
+        f"Only {free} MiB of GPU memory and {ram} MiB of RAM are free and this image needs "
+        f"about {required} MiB; {required - free - ram} MiB are missing. {advice}"
+    )
 
 
 class Session:
@@ -317,6 +343,7 @@ def _free_server_memory(session):
             "memory_mode is manual, so ImageHearth does not touch your models: "
             "unload them yourself and try again, or set memory_mode to auto in "
             f"{config.CONFIG_FILE}.",
+            session,
         )
         return
 
@@ -329,10 +356,18 @@ def _free_server_memory(session):
         session.add_models(movable)
         memory.get_provider().unload(movable)
 
+        for model in movable:
+            if model.get("launch"):
+                note = " It was started with your own environment, since its own could not be read." if model["launch"].get("env_inherited") else ""
+                session.warn(
+                    f"{model['name']} was stopped to free the GPU and is restarted afterwards "
+                    f"with the same command line.{note}"
+                )
+
     for model in loaded:
         if model not in movable:
             advice = model.get("advice", "")
-            _check_free_memory(session.required_mib, advice)
+            _check_free_memory(session.required_mib, advice, session)
             session.warn(
                 f"{model['name']} stays loaded because its server can't unload it, "
                 f"so generation shares the GPU with it. {advice}"

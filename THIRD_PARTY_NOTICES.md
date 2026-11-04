@@ -13,6 +13,8 @@ Last reviewed: 2026-10-31. This is a summary, **not legal advice**: the linked l
 | T5-XXL in GGUF, `mac-*` profiles only | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0), as declared by `city96/t5-v1_1-xxl-encoder-gguf` | Yes | 2026-10-31 |
 | FLUX.1 Kontext Dev | [FLUX [dev] Non-Commercial License v2.0](https://bfl.ai/legal/non-commercial-license-terms), which names this model | Same as FLUX.1 Dev | 2026-10-31 |
 | T5-XXL, CLIP-L and the FLUX VAE | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0), as declared by `comfyanonymous/flux_text_encoders` and `Comfy-Org/Lumina-Image-2` | Yes | 2026-10-31 |
+| RealVisXL V5.0 (fine-tuned SDXL, `quality-sdxl` variant) | [CreativeML Open RAIL++-M](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/LICENSE.md), as declared by `SG161222/RealVisXL_V5.0` | **Yes**, with use restrictions that must be passed on | 2026-11-04 |
+| SDXL offset LoRA (`sd_xl_offset_example-lora_1.0`, from the SDXL 1.0 base repository) | [CreativeML Open RAIL++-M](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/LICENSE.md), as declared by `stabilityai/stable-diffusion-xl-base-1.0` | **Yes**, with the same restrictions | 2026-11-04 |
 | SDXL Turbo | [Stability AI Community License](https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md) (updated 2024-07-05) | **Yes, with limits:** requires registering with Stability AI, and an enterprise license above USD 1M in annual revenue | 2026-10-31 |
 
 Notes:

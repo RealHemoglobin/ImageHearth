@@ -108,15 +108,16 @@ async def create_image(
     Only prompt is required. To edit, put the existing files in image_paths.
 
     prompt: What to draw, or the change to make.
-    quality: "fast" (SDXL Turbo, seconds) for drafts, "high" (FLUX Dev, slower)
-      when the user wants a detailed result. Ignored when editing.
+    quality: "fast" (SDXL Turbo, seconds) for drafts, "high" (FLUX Dev, or a
+      fine-tuned SDXL on GPUs with less memory) when the user wants a detailed
+      result. Ignored when editing.
     image_paths: Up to six existing image files. Giving any makes this an edit
       with FLUX Kontext.
     width, height: Size in pixels, 64 to 4096. Default 1024x1024; editing keeps
       the size of the first image.
     mode: Leave as "auto". "generate" or "edit" force one of them.
     workflow: Leave empty. Only for a name returned by list_workflows.
-    negative_prompt: What to avoid. Only SDXL Turbo applies it.
+    negative_prompt: What to avoid. SDXL models apply it; FLUX ignores it.
     include_image: true also returns the picture to you, for models with vision.
       It uses context, so leave it false unless you need to look at the result.
 

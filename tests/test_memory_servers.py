@@ -215,6 +215,7 @@ class Providers(EngineTestCase):
 
         with (
             mock.patch("imagehearth_mcp.engine.gpu._from_comfyui", return_value=100),
+            mock.patch.object(orchestrator, "_free_ram_mib", return_value=100),
             self.assertRaisesRegex(MemoryError, "--sleep-idle-seconds"),
         ):
             self.generate()
@@ -285,6 +286,7 @@ class Providers(EngineTestCase):
         with (
             mock.patch.object(config, "MEMORY_MODE", "manual"),
             mock.patch("imagehearth_mcp.engine.gpu.free_mib", return_value=100),
+            mock.patch.object(orchestrator, "_free_ram_mib", return_value=100),
             self.assertRaisesRegex(MemoryError, "memory_mode is manual"),
         ):
             self.generate()

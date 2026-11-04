@@ -1,4 +1,5 @@
 import os
+import shlex
 import tomllib
 from importlib import resources
 from pathlib import Path
@@ -91,6 +92,25 @@ def _choice_setting(values, key, env, choices, default):
     return value
 
 
+def _args_setting(values, key, env):
+    """Extra command-line arguments: a string (split like a shell) or a list of strings."""
+    value, source = _lookup(values, key, env)
+
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        try:
+            return shlex.split(value)
+        except ValueError as error:
+            raise ConfigError(f"{source} is not valid: {error}.") from error
+
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return value
+
+    raise ConfigError(f"{source} must be a string or a list of strings.")
+
+
 def _url_setting(values, key, env, default):
     value, source = _lookup(values, key, env)
 
@@ -126,6 +146,8 @@ OUTPUT_DIR = _path_setting(
 COMFY_HOST = "127.0.0.1"
 COMFY_PORT = _port_setting(_values, "comfy_port", "IMAGEHEARTH_COMFY_PORT", 8188)
 COMFY_API = f"http://{COMFY_HOST}:{COMFY_PORT}"
+# Added after the arguments ImageHearth chooses, so they win.
+COMFY_ARGS = _args_setting(_values, "comfy_args", "IMAGEHEARTH_COMFY_ARGS")
 OLLAMA_API = _url_setting(
     _values, "ollama_url", "IMAGEHEARTH_OLLAMA_URL", "http://127.0.0.1:11434"
 )

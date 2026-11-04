@@ -5,7 +5,7 @@ import time
 
 import requests
 
-from imagehearth_mcp.engine import config
+from imagehearth_mcp.engine import comfy_args, config
 from imagehearth_mcp.engine.log import get_logger
 from imagehearth_mcp.platform import files, paths, processes, spawn
 
@@ -121,6 +121,7 @@ def start():
                 config.COMFY_HOST,
                 "--port",
                 str(config.COMFY_PORT),
+                *comfy_args.effective(),
             ],
             cwd=config.COMFY_DIR,
             stdin=subprocess.DEVNULL,

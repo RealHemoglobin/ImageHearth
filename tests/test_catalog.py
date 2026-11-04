@@ -15,7 +15,11 @@ import pytest
 from imagehearth_mcp.engine import catalog as engine_catalog
 from imagehearth_mcp.engine import config, gpu, kontext
 from imagehearth_mcp.engine.image_router import create_image
-from imagehearth_mcp.engine.validation import available_workflows, resolve_workflow
+from imagehearth_mcp.engine.validation import (
+    available_workflows,
+    resolve_edit_workflow,
+    resolve_workflow,
+)
 from imagehearth_mcp.engine.workflow_runner import run_workflow
 from imagehearth_mcp.provisioner import (
     ProvisionError,
@@ -117,7 +121,10 @@ def test_minimum_profile_of_each_workflow(tiny):
     assert {name: entry.profile for name, entry in entries.items()} == {
         "sdxl_turbo": "fast",
         "flux_dev": "quality",
+        "flux_dev_gguf": "quality",
+        "sdxl_quality": "quality",
         "flux_kontext_dev_basic": "full",
+        "flux_kontext_dev_gguf": "full",
     }
 
 
@@ -232,12 +239,35 @@ def test_server_does_not_import_huggingface_hub():
 # Variantes por plataforma
 
 
-def test_linux_never_offers_gguf_even_if_present(tiny):
+def test_linux_picks_the_best_installed_variant_that_fits(tiny):
     install(models_dir(), tiny, "mac-full")
-    assert "flux_dev_gguf" not in engine_catalog.entries()
+    install(models_dir(), tiny, "full")
+    assert engine_catalog.choose("high", 24000) == "flux_dev"
+    assert engine_catalog.choose("high", 16000) == "flux_dev_gguf"
+    assert engine_catalog.choose("high", None) == "flux_dev"
+    assert engine_catalog.choose("edit", 24000) == "flux_kontext_dev_basic"
+    assert engine_catalog.choose("edit", 16000) == "flux_kontext_dev_gguf"
 
-    with pytest.raises(ValueError, match="not available on this system"):
-        resolve_workflow("flux_dev_gguf", "fast")
+
+def test_linux_uses_fp8_when_it_is_the_only_one_installed(tiny):
+    install(models_dir(), tiny, "full")
+    assert engine_catalog.choose("high", 16000) == "flux_dev"
+
+
+def test_editing_is_unavailable_below_12_gb(tiny):
+    install(models_dir(), tiny, "full")
+
+    with (
+        monkeypatch_gpu(8000),
+        pytest.raises(ValueError, match=r"Image editing is not available.*12000 MiB"),
+    ):
+        resolve_edit_workflow()
+
+
+def monkeypatch_gpu(total):
+    from unittest import mock
+
+    return mock.patch("imagehearth_mcp.engine.gpu.total_mib", return_value=total)
 
 
 def test_mac_resolves_to_gguf_variants(tiny, monkeypatch):

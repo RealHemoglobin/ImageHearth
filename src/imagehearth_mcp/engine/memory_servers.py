@@ -6,13 +6,16 @@ descargar se marca con `unloadable: False` y un `advice` para el usuario.
 """
 
 import os
+import subprocess
 import time
+from urllib.parse import urlparse
 
 import requests
 
 from imagehearth_mcp.engine import config
 from imagehearth_mcp.engine.log import get_logger
 from imagehearth_mcp.engine.memory import MemoryProvider, ProviderUnavailable
+from imagehearth_mcp.platform import processes, spawn
 
 log = get_logger("memory")
 
@@ -220,14 +223,33 @@ class LlamaCppProvider(MemoryProvider):
             return []
 
         path = props.get("model_path") or "model"
-        return [
-            {
-                "name": f"llamacpp/{path.replace(chr(92), '/').rsplit('/', 1)[-1]}",
-                "provider": self.name,
-                "unloadable": False,
-                "advice": self.NO_UNLOAD,
-            }
-        ]
+        entry = {
+            "name": f"llamacpp/{path.replace(chr(92), '/').rsplit('/', 1)[-1]}",
+            "provider": self.name,
+        }
+        entry.update(self._single_model_launch())
+        return [entry]
+
+    def _single_model_launch(self):
+        """Fields that let a one-model server be stopped and started again, or why it can't."""
+        reason = None
+
+        if config.memory_mode() == "auto":
+            port = urlparse(config.LLAMACPP_API).port or 80
+            pid = processes.listener_pid(port)
+
+            if pid is None:
+                reason = "Its process isn't visible from here (a container or another machine?)."
+            else:
+                try:
+                    return {"launch": processes.launch_info(pid, "llama-server")}
+                except processes.LaunchUnavailable as error:
+                    reason = str(error)
+
+        return {
+            "unloadable": False,
+            "advice": self.NO_UNLOAD + (f" It can't be restarted automatically: {reason}" if reason else ""),
+        }
 
     def _post(self, path, model, timeout):
         response = requests.post(
@@ -236,21 +258,82 @@ class LlamaCppProvider(MemoryProvider):
         response.raise_for_status()
 
     def unload(self, models):
-        _unload_each(
-            self,
-            models,
-            lambda model: self._post("/models/unload", model, config.UNLOAD_TIMEOUT),
-        )
+        stopped = [model for model in models if model.get("launch")]
+        routed = [model for model in models if not model.get("launch")]
+
+        for model in stopped:
+            self._stop(model)
+
+        if routed:
+            _unload_each(
+                self,
+                routed,
+                lambda model: self._post("/models/unload", model, config.UNLOAD_TIMEOUT),
+            )
+
+    def _stop(self, model):
+        launch = model["launch"]
+        pid = launch["pid"]
+
+        # The PID could have been reused since it was read.
+        if not processes.is_same_process(pid, launch.get("create_time")):
+            raise TimeoutError(f"{model['name']} is no longer the process that was read; not stopping it.")
+
+        log.info("Stopping llama-server (pid %s) to free the GPU", pid)
+
+        if not processes.terminate(pid, config.UNLOAD_TIMEOUT):
+            processes.kill(pid)
+
+        if not _wait_until(lambda: not self._responds(), config.UNLOAD_TIMEOUT):
+            raise TimeoutError(f"llama-server did not stop within {config.UNLOAD_TIMEOUT}s.")
+
+    def _responds(self):
+        try:
+            return _get(self._url("/props"), "llama-server") is not None
+        except ProviderUnavailable:
+            return False
+
+    def _start(self, model):
+        launch = model["launch"]
+        config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log.info("Starting llama-server again: %s %s", launch["exe"], launch["args"])
+
+        with (config.LOG_DIR / "llama-server.log").open("ab") as output:
+            subprocess.Popen(
+                [launch["exe"], *launch["args"]],
+                cwd=launch["cwd"],
+                env=launch.get("env"),
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                **spawn.detached_options(),
+            )
 
     def restore(self, models):
         def load(model):
-            self._post("/models/load", model, config.RESTORE_TIMEOUT)
+            if model.get("launch"):
+                # Someone may have started it again already.
+                if not self._responds():
+                    try:
+                        self._start(model)
+                    except OSError as error:
+                        log.error("Could not start llama-server again: %s", error)
+                        return
+            else:
+                self._post("/models/load", model, config.RESTORE_TIMEOUT)
+
             _wait_until(
-                lambda: model["name"] in {m["name"] for m in self.loaded()},
+                lambda: model["name"] in {m["name"] for m in self._safe_loaded()},
                 config.RESTORE_TIMEOUT,
             )
 
         return _restore_each(self, models, load)
+
+    def _safe_loaded(self):
+        try:
+            return self.loaded()
+        except ProviderUnavailable:
+            return []
 
 
 class VllmProvider(MemoryProvider):

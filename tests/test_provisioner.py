@@ -360,7 +360,7 @@ def test_every_workflow_has_its_models(catalog):
 def test_profiles_are_cumulative(catalog):
     fast, quality, full = (catalog.profiles[n] for n in ("fast", "quality", "full"))
     assert set(fast.models) < set(quality.models) < set(full.models)
-    gguf = {"flux_dev_gguf", "flux_kontext_gguf", "t5xxl_gguf"}
+    gguf = {"flux_dev_gguf", "flux_kontext_gguf", "t5xxl_gguf", "realvisxl", "sdxl_offset_lora"}
     assert {m.name for m in full.models} == set(catalog.models) - gguf
 
 
@@ -1067,7 +1067,7 @@ def test_summary_lists_licenses_and_links(capsys, tmp_path):
     output = capsys.readouterr().out
     assert "36.5 GB" in output
 
-    for entry in catalog.licenses.values():
+    for entry in catalog.licenses_for(full):
         assert entry.name in output
         assert entry.url in output
 
@@ -1185,7 +1185,8 @@ def test_propose_profile(catalog):
         return setup_command.propose_profile(detection, catalog)
 
     assert proposal(24000) == "full"
-    assert proposal(8000) == "fast"
+    assert proposal(8000) == "quality"  # the SDXL variant
+    assert proposal(7000) == "fast"
     assert proposal(2000) == "fast"
     assert proposal(24000, disk=10 * GB) == "fast"
 

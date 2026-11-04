@@ -7,12 +7,12 @@ posterior se note sin reiniciar el servidor.
 import sys
 from dataclasses import dataclass
 
-from imagehearth_mcp.engine import config
+from imagehearth_mcp.engine import config, gpu
 
 # Cada capacidad con sus variantes: se usa la que exista para el sistema.
 VARIANTS = {
     "fast": ("sdxl_turbo",),
-    "high": ("flux_dev", "flux_dev_gguf"),
+    "high": ("flux_dev", "flux_dev_gguf", "sdxl_quality"),
     "edit": ("flux_kontext_dev_basic", "flux_kontext_dev_gguf"),
 }
 
@@ -61,18 +61,49 @@ def entries():
         states = models.inspect(catalog.models_for(path.stem), folder, extra_paths)
         result[path.stem] = Entry(
             path.stem,
-            profile.name,
+            profile.base,
             all(item.state == models.PRESENT for item in states),
         )
 
     return result
 
 
-def choose(capability):
-    """La variante de una capacidad que corresponde a este sistema."""
+def choose(capability, total_vram_mib=None):
+    """The best variant of a capability that is installed and fits this GPU.
+
+    If none is installed, the first one this system has: the error then says what to install.
+    """
     variants = VARIANTS[capability]
     known = entries()
-    return next((name for name in variants if name in known), variants[0])
+    candidates = [name for name in variants if name in known]
+
+    if not candidates:
+        return variants[0]
+
+    total = total_vram_mib if total_vram_mib is not None else gpu.total_mib()
+    installed = [name for name in candidates if known[name].installed]
+    fitting = [
+        name
+        for name in installed
+        if total is None or total >= minimum_vram_mib(name)
+    ]
+
+    return (fitting or installed or candidates)[0]
+
+
+def minimum_vram_mib(workflow):
+    """Least VRAM at which any profile with that workflow works; 0 if unknown."""
+    from imagehearth_mcp.provisioner import manifest
+
+    system = current_system()
+    catalog = manifest.load()
+    required = set(catalog.models_for(workflow))
+    fits = [
+        profile.min_vram_mib
+        for profile in catalog.profiles.values()
+        if system in profile.platforms and required <= set(profile.models)
+    ]
+    return min(fits, default=0)
 
 
 def required_vram_mib(workflow):

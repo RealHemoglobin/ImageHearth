@@ -52,6 +52,9 @@ Se resuelven con `platformdirs` desde `src/imagehearth_mcp/` (paquete `imagehear
 | Servidores de modelos | Opcionales y autodetectados; solo se actúa sobre un servidor que se identifica como tal | No participan en la generación; solo se gestionan para liberar memoria | Instalarlos |
 | Herramientas MCP | `create_image` como única vía de generación y edición; sin `generate_image` ni `edit_image` | Medido con 9B: ~750 tokens más por petición y nunca elegidas | Mantenerlos como alias |
 | Plazos de los clientes | Progreso cada 5 s y plazo de 1800 s en la entrada de Codex y Hermes | Medido con una herramienta de 330 s: basta para todos los clientes probados | `start_image_job` y `get_job` |
+| Memoria de ComfyUI | `engine/comfy_args.py` elige `--reserve-vram`, `--lowvram` o `--novram` según VRAM; `comfy_args` del usuario se añade al final y prevalece. Umbrales sin medir | ComfyUI ya carga por partes; solo se mueven los umbrales | Rechazar lo que no cabe en VRAM aunque quepa con RAM |
+| Variantes de `quality` | Perfiles `quality-gguf` y `full-gguf` (`variant_of`) por tramo de VRAM; `setup` y `catalog.choose` eligen | El perfil sigue siendo uno para el usuario | Un perfil por tarjeta |
+| llama-server de un solo modelo | Se localiza por puerto con `psutil`, se para y se relanza con `exe`, `args`, `cwd` y `environ` guardados en el estado | Su API no permite descargar | Avisar y compartir GPU |
 | Idioma | Inglés en la interfaz, la herramienta y el README principal, con README en español | Máximo alcance | Solo español |
 
 ## Matriz de PyTorch
