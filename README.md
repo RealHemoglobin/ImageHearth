@@ -123,11 +123,14 @@ Setup detects your hardware and any existing ComfyUI, proposes a profile, and sh
 | `quality` | `fast` + FLUX Dev | 24.6 GB |
 | `full` | `quality` + editing with FLUX Kontext | 36.5 GB |
 
+`quality` and `full` adapt to the GPU memory: with 20 GB or more they use FLUX Dev fp8; with 12 to 20 GB, `setup` installs FLUX Dev GGUF Q5 instead (smaller, and ComfyUI moves what doesn't fit to system RAM, which is slower). With 8 to 12 GB, `quality` installs a fine-tuned SDXL (RealVisXL V5.0, CreativeML Open RAIL++-M, which allows commercial use) with a detail LoRA, 13.9 GB in total including `fast`; editing is unavailable there (it needs 12 GB), and below 8 GB only `fast` is offered. These smaller variants are simulated by design, not yet measured on a real 12 to 20 GB card. Force one with `--variant fp8|gguf|sdxl`.
+
 You can start with `fast` and run `setup --profile full` later: what's already there isn't downloaded again. ImageHearth only offers what's installed: `list_workflows` shows it, a later `setup` is noticed without restarting anything, and asking for something missing fails with the exact `setup` command, never with another model instead.
 
 | Option | Use |
 |---|---|
 | `--profile fast\|quality\|full` | Choose the profile without asking. On macOS: `mac-fast\|mac-quality\|mac-full` |
+| `--variant fp8\|gguf\|sdxl` | Force a variant of `quality` or `full` instead of the one that fits your GPU memory |
 | `--experimental` | Required on macOS, which is untested |
 | `--accept-licenses` | Accept the licenses without asking. Required with `--non-interactive` |
 | `--non-interactive` | Never ask: fail if a decision is missing |
@@ -148,7 +151,7 @@ Set `HF_TOKEN` if Hugging Face restricts access to a model.
 
 ### 3. Check, update or remove it
 
-The installer doesn't change your `PATH`. If `imagehearth-mcp` isn't found, run `uv tool update-shell` and open a new terminal.
+The installer runs `uv tool update-shell` if a new terminal wouldn't find `imagehearth-mcp`; open a new terminal afterwards. `imagehearth-mcp doctor` checks it and prints the exact command for your shell if something is still missing.
 
 ```bash
 imagehearth-mcp doctor
@@ -160,7 +163,7 @@ It checks each layer and says how to fix what fails. Add `--json` for a stable f
 imagehearth-mcp update
 ```
 
-It applies the ComfyUI version and models pinned by this version of ImageHearth. An attached ComfyUI is left alone, except for a status node that setup installed.
+**To get a new version of ImageHearth itself**, run the installer again: it replaces the installed version with the one it pins, keeps your configuration, models and connected agents, and doesn't download what is already there. Then restart your agent. (By hand: `uv tool install --python 3.13 --force imagehearth-mcp`.) This command applies the ComfyUI version and models pinned by the installed version of ImageHearth. An attached ComfyUI is left alone, except for a status node that setup installed.
 
 ```bash
 imagehearth-mcp uninstall
