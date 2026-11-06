@@ -313,6 +313,7 @@ def run_in_session(session, prepared, timeout=config.KONTEXT_TIMEOUT):
         workflow,
         timeout,
         config.OUTPUT_DIR / f"{prepared.image_id}.png",
+        prepared.workflow_name.removesuffix(".json"),
     )
 
     return ImageResult(destination, list(prepared.warnings))

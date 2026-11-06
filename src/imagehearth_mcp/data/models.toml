@@ -102,6 +102,7 @@ url = "https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md"
 summary = "Commercial use requires registering with Stability AI and an enterprise license above USD 1M in annual revenue."
 
 [licenses.flux-dev-non-commercial]
+commercial = false
 name = "FLUX [dev] Non-Commercial License v2.0"
 url = "https://bfl.ai/legal/non-commercial-license-terms"
 summary = "Non-commercial use of the model. Commercial use of its images is unresolved: check with Black Forest Labs."
@@ -127,8 +128,12 @@ sha256 = "e869ac7d6942cb327d68d5ed83a40447aadf20e0c3358d98b2cc9e270db0da26"
 license = "sai-community"
 workflows = ["sdxl_turbo"]
 
+# RealVisXL was the SDXL of the quality profile before SDXL 1.0 base. It is no longer
+# installed or offered: the entry stays only so that an installation that has it keeps
+# generating with the sdxl_quality workflow until `setup` moves it to SDXL 1.0.
 [[models]]
 name = "realvisxl"
+legacy = true
 repo = "SG161222/RealVisXL_V5.0"
 revision = "ac93e0dda1f6d448cae19bbfab8c5e720a5e48bc"
 filename = "RealVisXL_V5.0_fp16.safetensors"
@@ -139,6 +144,21 @@ license = "openrail-pp"
 workflows = ["sdxl_quality"]
 
 [[models]]
+name = "sdxl_base"
+repo = "stabilityai/stable-diffusion-xl-base-1.0"
+revision = "462165984030d82259a11f4367a4eed129e94a7b"
+filename = "sd_xl_base_1.0.safetensors"
+dest = "checkpoints/sd_xl_base_1.0.safetensors"
+bytes = 6938078334
+sha256 = "31e35c80fc4829d14f90153f4c74cd59c90b779f6afe05a74cd6120b893f7e5b"
+license = "openrail-pp"
+workflows = ["sdxl_base"]
+requires = ["sdxl_offset_lora"]
+
+# No refiner: on the RTX 4090, base + LoRA with and without stabilityai/stable-diffusion-xl-refiner-1.0
+# (same prompts and seed) gave practically the same image (specs/2026-11-06-eleccion-modelo-quality).
+
+[[models]]
 name = "sdxl_offset_lora"
 repo = "stabilityai/stable-diffusion-xl-base-1.0"
 revision = "462165984030d82259a11f4367a4eed129e94a7b"
@@ -147,7 +167,7 @@ dest = "loras/sd_xl_offset_example-lora_1.0.safetensors"
 bytes = 49553604
 sha256 = "4852686128f953d0277d0793e2f0335352f96a919c9c16a09787d77f55cbdf6f"
 license = "openrail-pp"
-workflows = ["sdxl_quality"]
+workflows = ["sdxl_base", "sdxl_quality"]
 
 [[models]]
 name = "flux_dev"
@@ -159,6 +179,21 @@ bytes = 11901607560
 sha256 = "358fff9355c962532593898b10436f13e6f9bfb0389f36df03c6e55fe7c9cbfe"
 license = "flux-dev-non-commercial"
 workflows = ["flux_dev"]
+requires = ["t5xxl", "clip_l", "flux_vae"]
+
+# FLUX.1 Schnell fp8 (Apache-2.0) as the diffusion model alone, so it shares the text
+# encoders and the VAE with the other FLUX models. Public, no token needed.
+[[models]]
+name = "flux_schnell"
+repo = "Kijai/flux-fp8"
+revision = "2ef6f85f9f4b94634f995ba0bfa84fd3ab865c1d"
+filename = "flux1-schnell-fp8-e4m3fn.safetensors"
+dest = "diffusion_models/flux1-schnell-fp8-e4m3fn.safetensors"
+bytes = 11891329784
+sha256 = "bbdfba27fed8ff3be237523fb37b83821a6c4bbaa1db43ef9288767d0e4042fb"
+license = "apache-2"
+workflows = ["flux_schnell"]
+requires = ["t5xxl", "clip_l", "flux_vae"]
 
 [[models]]
 name = "flux_kontext"
@@ -170,6 +205,7 @@ bytes = 11904640136
 sha256 = "630ba795ec64283b4230ea23cf79406c2c68b7c578229ed139f30043eadb30a2"
 license = "flux-dev-non-commercial"
 workflows = ["flux_kontext_dev_basic"]
+requires = ["t5xxl", "clip_l", "flux_vae"]
 
 [[models]]
 name = "t5xxl"
@@ -180,7 +216,7 @@ dest = "text_encoders/t5xxl_fp8_e4m3fn_scaled.safetensors"
 bytes = 5157348688
 sha256 = "a498f0485dc9536735258018417c3fd7758dc3bccc0a645feaa472b34955557a"
 license = "apache-2"
-workflows = ["flux_dev", "flux_kontext_dev_basic"]
+workflows = ["flux_dev", "flux_schnell", "flux_kontext_dev_basic"]
 
 [[models]]
 name = "clip_l"
@@ -191,7 +227,7 @@ dest = "text_encoders/clip_l.safetensors"
 bytes = 246144152
 sha256 = "660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd"
 license = "apache-2"
-workflows = ["flux_dev", "flux_kontext_dev_basic", "flux_dev_gguf", "flux_kontext_dev_gguf"]
+workflows = ["flux_dev", "flux_schnell", "flux_kontext_dev_basic", "flux_dev_gguf", "flux_kontext_dev_gguf"]
 
 [[models]]
 name = "flux_vae"
@@ -202,7 +238,7 @@ dest = "vae/ae.safetensors"
 bytes = 335304388
 sha256 = "afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38"
 license = "apache-2"
-workflows = ["flux_dev", "flux_kontext_dev_basic", "flux_dev_gguf", "flux_kontext_dev_gguf"]
+workflows = ["flux_dev", "flux_schnell", "flux_kontext_dev_basic", "flux_dev_gguf", "flux_kontext_dev_gguf"]
 
 # El repositorio de FLUX Dev no publica Q5_K_M: Q5_K_S es lo más cercano.
 [[models]]
@@ -215,6 +251,7 @@ bytes = 8285267232
 sha256 = "aa76146ca0f1b09c67e0c3fcef18be3a375837ecd5aaa021d3e9ebc558bd68f9"
 license = "flux-dev-non-commercial"
 workflows = ["flux_dev_gguf"]
+requires = ["t5xxl_gguf", "clip_l", "flux_vae"]
 
 [[models]]
 name = "flux_kontext_gguf"
@@ -226,6 +263,7 @@ bytes = 8419501344
 sha256 = "7f7b98b1d496176cb0b0c8b12edb35cc6a1a467a9809d7372242a117484ad422"
 license = "flux-dev-non-commercial"
 workflows = ["flux_kontext_dev_gguf"]
+requires = ["t5xxl_gguf", "clip_l", "flux_vae"]
 
 [[models]]
 name = "t5xxl_gguf"
@@ -244,41 +282,77 @@ platforms = ["linux", "windows"]
 min_vram_mib = 8000
 models = ["sdxl_turbo"]
 
+# `quality` and `full` don't name a quality model: the user picks one of [quality_models.*]
+# (or setup recommends it for the GPU) and `full` adds the editing model of [edit].
 [profiles.quality]
-description = "fast + high-quality generation with FLUX Dev"
+description = "fast + high-quality generation"
 platforms = ["linux", "windows"]
-min_vram_mib = 20000
-models = ["sdxl_turbo", "flux_dev", "t5xxl", "clip_l", "flux_vae"]
+min_vram_mib = 8000
+models = ["sdxl_turbo"]
+quality = true
 
 [profiles.full]
 description = "quality + image editing with FLUX Kontext"
 platforms = ["linux", "windows"]
-min_vram_mib = 20000
-models = ["sdxl_turbo", "flux_dev", "t5xxl", "clip_l", "flux_vae", "flux_kontext"]
-
-# Variants for less VRAM. `setup` picks the one that fits; ComfyUI loads by parts into RAM what
-# doesn't fit. The minimums are a starting point until they are measured on a smaller card.
-[profiles.quality-gguf]
-description = "fast + high-quality generation with FLUX Dev GGUF Q5, for 12 to 20 GB of VRAM"
-platforms = ["linux", "windows"]
-variant_of = "quality"
 min_vram_mib = 12000
-models = ["sdxl_turbo", "flux_dev_gguf", "t5xxl_gguf", "clip_l", "flux_vae"]
+models = ["sdxl_turbo"]
+quality = true
+edit = true
+
+# Models of the quality profile. Only one is installed at a time. Each has options by
+# precision, from most to least VRAM; `setup` picks the one that fits. The minimums are
+# a starting point until they are measured on a smaller card (phase 9, task 10.5).
+# `recommended_from_mib` is the GPU memory from which setup recommends the model.
+[quality_models.flux-dev]
+title = "FLUX.1 Dev"
+license = "flux-dev-non-commercial"
+recommended_from_mib = 20000
+
+[[quality_models.flux-dev.options]]
+precision = "fp8"
+min_vram_mib = 20000
+workflow = "flux_dev"
+models = ["flux_dev"]
+
+[[quality_models.flux-dev.options]]
+precision = "gguf"
+min_vram_mib = 12000
+workflow = "flux_dev_gguf"
+models = ["flux_dev_gguf"]
 nodes = ["comfyui-gguf"]
 
-[profiles.quality-sdxl]
-description = "fast + high-quality generation with a fine-tuned SDXL (RealVisXL) and a detail LoRA, for 8 to 12 GB of VRAM"
-platforms = ["linux", "windows"]
-variant_of = "quality"
-min_vram_mib = 8000
-models = ["sdxl_turbo", "realvisxl", "sdxl_offset_lora"]
+[quality_models.flux-schnell]
+title = "FLUX.1 Schnell"
+license = "apache-2"
+recommended_from_mib = 12000
 
-[profiles.full-gguf]
-description = "quality + image editing with FLUX Kontext GGUF Q5, for 12 to 20 GB of VRAM"
-platforms = ["linux", "windows"]
-variant_of = "full"
+[[quality_models.flux-schnell.options]]
+precision = "fp8"
 min_vram_mib = 12000
-models = ["sdxl_turbo", "flux_dev_gguf", "t5xxl_gguf", "clip_l", "flux_vae", "flux_kontext_gguf"]
+workflow = "flux_schnell"
+models = ["flux_schnell"]
+
+[quality_models.sdxl]
+title = "SDXL 1.0"
+license = "openrail-pp"
+recommended_from_mib = 0
+
+[[quality_models.sdxl.options]]
+precision = "fp16"
+min_vram_mib = 8000
+workflow = "sdxl_base"
+models = ["sdxl_base"]
+
+# Image editing of the `full` profile.
+[[edit.options]]
+precision = "fp8"
+min_vram_mib = 20000
+models = ["flux_kontext"]
+
+[[edit.options]]
+precision = "gguf"
+min_vram_mib = 12000
+models = ["flux_kontext_gguf"]
 nodes = ["comfyui-gguf"]
 
 # Preparados sin probar: la memoria es unificada y los mínimos, orientativos.

@@ -54,7 +54,7 @@ Se resuelven con `platformdirs` desde `src/imagehearth_mcp/` (paquete `imagehear
 | Generación por lotes | `create_image` acepta un prompt o una lista (única herramienta; una segunda `create_images` se descartó porque el agente seguía llamando a `create_image` una vez por imagen), con una sola `generation_session` para el lote; homogéneo (solo generar o solo editar), validado entero antes de tocar la GPU, límite de 20 (`batch_limit`) | Evita repetir descarga de modelos, arranque de ComfyUI y restauración por imagen; una sola herramienta evita elegir mal | Una herramienta `create_images` aparte; un parámetro `count`; lotes mezclados; trabajos asíncronos |
 | Plazos de los clientes | Progreso cada 5 s y plazo de 1800 s en la entrada de Codex y Hermes | Medido con una herramienta de 330 s: basta para todos los clientes probados | `start_image_job` y `get_job` |
 | Memoria de ComfyUI | `engine/comfy_args.py` elige `--reserve-vram`, `--lowvram` o `--novram` según VRAM; `comfy_args` del usuario se añade al final y prevalece. Umbrales sin medir | ComfyUI ya carga por partes; solo se mueven los umbrales | Rechazar lo que no cabe en VRAM aunque quepa con RAM |
-| Variantes de `quality` | Perfiles `quality-gguf` y `full-gguf` (`variant_of`) por tramo de VRAM; `setup` y `catalog.choose` eligen | El perfil sigue siendo uno para el usuario | Un perfil por tarjeta |
+| Perfil y modelo de `quality` | El perfil (`fast`, `quality`, `full`) dice qué capacidades se instalan; el modelo de `quality` (`flux-dev`, `flux-schnell`, `sdxl`) lo elige el usuario o se recomienda por VRAM. `Manifest.resolve(perfil, modelo, vram)` compone modelos, nodos y licencias; la precisión (fp8, GGUF) se elige por VRAM dentro del modelo. Cada modelo declara sus dependencias (`requires`). Solo hay uno instalado y el cambio descarga antes de borrar | Las licencias del consentimiento son solo las de lo que se descarga, y un modelo se cambia sin reinstalar | Un perfil por tarjeta (fase 7); un perfil por modelo; varios modelos a la vez |
 | llama-server de un solo modelo | Se localiza por puerto con `psutil`, se para y se relanza con `exe`, `args`, `cwd` y `environ` guardados en el estado | Su API no permite descargar | Avisar y compartir GPU |
 | Idioma | Inglés en la interfaz, la herramienta y el README principal, con README en español | Máximo alcance | Solo español |
 
@@ -100,8 +100,8 @@ Tamaños medidos. La VRAM mínima sigue siendo orientativa: los picos son de una
 | Perfil | Capacidades | Descarga | VRAM orientativa | Pico medido | Tiempo por imagen |
 |---|---|---|---|---|---|
 | `fast` | Generación rápida con SDXL Turbo | 6,9 GB | Desde 8 GB | 7,0 GB | 1,0 s |
-| `quality` | `fast` + FLUX Dev | 24,6 GB | Desde 16 GB | 17,8 GB | 10,4 s |
-| `full` | `quality` + edición con Kontext | 36,5 GB | Desde 16 GB | 19,3 GB | 18,6 s |
+| `quality` | `fast` + modelo de `quality` a elegir (`flux-dev`, `flux-schnell` o `sdxl`) | 24,6 GB (`flux-dev`, `flux-schnell`); 13,9 GB (`sdxl`) | Desde 20, 12 y 8 GB respectivamente (12 GB de `flux-schnell` simulado limitando la 4090) | 19,4 GB (`flux-dev`, `flux-schnell`); 9,6 GB (`sdxl`) | 10,3 s (`flux-dev`); 2,8 s (`flux-schnell`); 4,0 s (`sdxl`) |
+| `full` | `quality` + edición con Kontext | 36,5 GB con FLUX; 31,6 GB con `sdxl` | Desde 12 GB (GGUF) | 19,3 GB | 18,6 s |
 | `mac-fast` | SDXL Turbo, sin probar | 6,9 GB | Sin medir en MPS | — | — |
 | `mac-quality` | `mac-fast` + FLUX Dev GGUF `Q5_K_S`, sin probar | 19,2 GB | Sin medir en MPS | 14,4 GB en NVIDIA | 23,8 s en NVIDIA |
 | `mac-full` | `mac-quality` + Kontext GGUF `Q5_K_M`, sin probar | 27,6 GB | Sin medir en MPS | 12,9 GB en NVIDIA | 30,1 s en NVIDIA |

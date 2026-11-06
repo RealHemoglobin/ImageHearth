@@ -10,7 +10,7 @@ You are helping a user install ImageHearth, an MCP server that generates and edi
 ## 2. Install the command
 
 ```bash
-uv tool install --python 3.13 imagehearth-mcp==0.1.0b2
+uv tool install --python 3.13 imagehearth-mcp==0.1.0b3
 ```
 
 If `imagehearth-mcp` isn't found afterwards, use the path from `uv tool dir --bin`, or run `uv tool update-shell` and open a new terminal.
@@ -29,19 +29,20 @@ It makes a backup first and keeps the other entries. If your client isn't listed
 Call the `setup_status` tool, or run `imagehearth-mcp setup --non-interactive` to see the profiles. Tell the user:
 
 - The profiles that suit their GPU, and each download size.
-- The licenses of the profile, with their links. FLUX models are non-commercial.
+- For `quality` and `full`, the quality models in `quality_models` (FLUX Dev, FLUX Schnell, SDXL 1.0) with size, minimum GPU memory, license and commercial use. Say which one is recommended and warn about any that doesn't fit the GPU (its `warning`). Let the user choose.
+- The licenses of what will be downloaded, with their links. FLUX Dev and FLUX Kontext (editing in `full`) are non-commercial; FLUX Schnell and SDXL 1.0 allow commercial use.
 - Any existing ComfyUI found, which avoids downloading it again.
 
-Wait for a clear answer naming the profile and accepting the licenses.
+Wait for a clear answer naming the profile and the quality model and accepting the licenses.
 
 ## 5. Install
 
-Call `setup_start` with that `profile` and `accept_licenses: true`. Pass `existing_comfyui` only if the user chose to reuse one. It returns at once and continues if you disconnect. Check `setup_status` from time to time: `installation.state` becomes `finished` or `failed`, and `installation.log_tail` shows the latest output. If it is `interrupted`, call `setup_start` again and it continues where it stopped.
+Call `setup_start` with that `profile`, the `quality_model` the user chose and `accept_licenses: true`. Pass `existing_comfyui` only if the user chose to reuse one. It returns at once and continues if you disconnect. Check `setup_status` from time to time: `installation.state` becomes `finished` or `failed`, and `installation.log_tail` shows the latest output. If it is `interrupted`, call `setup_start` again and it continues where it stopped.
 
 Without the tools, run this instead, after the user's answer:
 
 ```bash
-imagehearth-mcp setup --profile <profile> --accept-licenses --non-interactive --managed
+imagehearth-mcp setup --profile <profile> --quality-model <flux-dev|flux-schnell|sdxl> --accept-licenses --non-interactive --managed
 ```
 
 ## 6. Verify

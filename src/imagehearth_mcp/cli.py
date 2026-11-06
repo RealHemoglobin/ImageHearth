@@ -39,9 +39,24 @@ def _build_parser():
         help="What to install. The mac-* profiles are only for macOS.",
     )
     setup.add_argument(
+        "--quality-model",
+        choices=("flux-dev", "flux-schnell", "sdxl"),
+        help="Model for quality or full. flux-dev: best detail, non-commercial license, "
+        "20 GB of VRAM recommended. flux-schnell: fast, Apache-2.0, 12 GB. sdxl: SDXL 1.0, "
+        "OpenRAIL++, 8 GB. Without it a new install uses the one recommended for the GPU "
+        "and an existing install keeps its model. Choosing another replaces the current "
+        "one: it is downloaded first and the old one deleted afterwards.",
+    )
+    setup.add_argument(
         "--variant",
-        choices=("fp8", "gguf", "sdxl"),
-        help="Force a variant of quality or full instead of the one that fits the GPU memory.",
+        choices=("fp8", "gguf"),
+        help="Force the precision of the quality model (and of image editing in full) "
+        "instead of the one that fits the GPU memory.",
+    )
+    setup.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm switching the quality model without asking.",
     )
     setup.add_argument(
         "--experimental",

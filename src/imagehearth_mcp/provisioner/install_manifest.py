@@ -27,9 +27,28 @@ class InstallManifest:
         self.models_dir = values.get("models_dir")
         self.comfyui_version = values.get("comfyui_version")
         self.profile = values.get("profile")
+        # Model of the quality profile and the precision installed. Missing in records
+        # from before phase 9: `quality.current` deduces the model from the files.
+        self.quality_model = values.get("quality_model")
+        self.precision = values.get("precision")
+        self.edit_precision = values.get("edit_precision")
+        self._normalize_legacy_profile()
         self.entries = values.get("entries", [])
         self.settings = values.get("settings", [])
         self.connections = values.get("connections", [])
+
+    def _normalize_legacy_profile(self):
+        """Records used to name the variant (quality-gguf); now profile and precision apart."""
+        for suffix, precision in (("-gguf", "gguf"), ("-sdxl", None)):
+            base = (self.profile or "").removesuffix(suffix)
+
+            if base in ("quality", "full") and base != self.profile:
+                self.profile = base
+                self.precision = self.precision or precision
+                self.edit_precision = self.edit_precision or (
+                    precision if base == "full" else None
+                )
+                return
 
     @classmethod
     def load(cls, path):
@@ -67,6 +86,9 @@ class InstallManifest:
                     "models_dir": self.models_dir,
                     "comfyui_version": self.comfyui_version,
                     "profile": self.profile,
+                    "quality_model": self.quality_model,
+                    "precision": self.precision,
+                    "edit_precision": self.edit_precision,
                     "entries": self.entries,
                     "settings": self.settings,
                     "connections": self.connections,

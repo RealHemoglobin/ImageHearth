@@ -12,7 +12,8 @@ from imagehearth_mcp.engine import config, gpu
 # Cada capacidad con sus variantes: se usa la que exista para el sistema.
 VARIANTS = {
     "fast": ("sdxl_turbo",),
-    "high": ("flux_dev", "flux_dev_gguf", "sdxl_quality"),
+    # sdxl_quality (RealVisXL) is only for installations that predate SDXL 1.0.
+    "high": ("flux_dev", "flux_dev_gguf", "flux_schnell", "sdxl_base", "sdxl_quality"),
     "edit": ("flux_kontext_dev_basic", "flux_kontext_dev_gguf"),
 }
 
@@ -22,6 +23,8 @@ class Entry:
     name: str
     profile: str
     installed: bool
+    # Quality model the workflow belongs to ("flux-dev"...), for the high-quality ones.
+    quality_model: str | None = None
 
 
 def current_system():
@@ -63,9 +66,46 @@ def entries():
             path.stem,
             profile.base,
             all(item.state == models.PRESENT for item in states),
+            quality_model_of(path.stem, catalog),
         )
 
     return result
+
+
+def quality_model_of(workflow, catalog=None):
+    """The quality model a workflow generates with, or None for the other workflows."""
+    if workflow == "sdxl_quality":
+        return "sdxl"
+
+    from imagehearth_mcp.provisioner import manifest
+
+    found = (catalog or manifest.load()).quality_workflows().get(workflow)
+    return found[0] if found else None
+
+
+def active_quality_model():
+    """The quality model that `quality="high"` generates with, or None if none is installed.
+
+    Comes from the installed files, like the catalog, so a `setup` shows at once.
+    """
+    from imagehearth_mcp.provisioner import manifest
+
+    known = entries()
+    name = next((w for w in VARIANTS["high"] if w in known and known[w].installed), None)
+
+    if name is None:
+        return None
+
+    catalog = manifest.load()
+    model = catalog.quality_model(known[name].quality_model)
+    license = catalog.licenses[model.license]
+    return {
+        "name": model.name,
+        "title": model.title,
+        "workflow": name,
+        "license": license.name,
+        "commercial_use": license.commercial,
+    }
 
 
 def choose(capability, total_vram_mib=None):
@@ -100,8 +140,8 @@ def minimum_vram_mib(workflow):
     required = set(catalog.models_for(workflow))
     fits = [
         profile.min_vram_mib
-        for profile in catalog.profiles.values()
-        if system in profile.platforms and required <= set(profile.models)
+        for profile in catalog.combinations(system)
+        if required <= set(profile.models)
     ]
     return min(fits, default=0)
 

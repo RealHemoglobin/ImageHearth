@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-06
+
+- Bumped the version to `0.1.0b3` (package, installers, `server.json` and docs).
+- Choice of the quality model: `quality` and `full` now install FLUX.1 Dev, FLUX.1 Schnell (Apache-2.0) or SDXL 1.0 (OpenRAIL++), chosen in `setup` (`--quality-model`) or by an agent (`setup_start(quality_model)`), recommended by GPU memory. Changing it downloads the new model first and then deletes the old one. RealVisXL is no longer offered; older installations keep generating and `doctor` says how to move to SDXL 1.0.
+- The active quality model and its license show in `list_workflows`, `get_engine_status` and `doctor`, and each PNG records the model and workflow.
+- Added the `style` option of `create_image`: with FLUX Schnell and SDXL 1.0, `auto` adds photographic cues (and, for SDXL, a negative prompt against illustration) unless the prompt asks for another medium, because short prompts came out painterly.
+
 ## 2026-11-04
 
 - Bumped the version to `0.1.0b2` (package, installers, `server.json` and docs).

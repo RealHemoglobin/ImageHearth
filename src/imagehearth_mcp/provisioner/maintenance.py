@@ -16,6 +16,7 @@ from imagehearth_mcp.provisioner import (
     manifest,
     models,
     preflight,
+    quality,
     settings,
 )
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
@@ -39,9 +40,9 @@ def _update(args):
         )
 
     catalog = manifest.load()
-    profile = catalog.profiles[records.profile or "fast"]
     comfy_dir = Path(records.comfy_dir)
     models_dir = Path(records.models_dir)
+    profile = quality.resolve_installed(catalog, records, models_dir) or catalog.profiles["fast"]
     pending = [
         item
         for item in models.inspect(profile.models, models_dir)

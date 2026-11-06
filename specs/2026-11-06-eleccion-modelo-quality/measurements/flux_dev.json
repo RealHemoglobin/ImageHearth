@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-06",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "vram_total_mib": 24564,
+  "driver": "580.178.04",
+  "system": "Linux 7.0.0-42-generic",
+  "ram_total_mib": 60898,
+  "comfyui_version": "0.43.0",
+  "results": [
+    {
+      "workflow": "flux_dev",
+      "width": 1024,
+      "height": 1024,
+      "references": 0,
+      "baseline_vram_mib": 2585,
+      "peak_vram_mib": 19366,
+      "peak_ram_mib": 2248,
+      "cold_seconds": 12.8,
+      "warm_seconds": 10.3,
+      "warm_runs": [
+        10.3,
+        10.3
+      ],
+      "images": [
+        "specs/2026-11-06-eleccion-modelo-quality/comparison/flux_dev-1.png",
+        "specs/2026-11-06-eleccion-modelo-quality/comparison/flux_dev-2.png",
+        "specs/2026-11-06-eleccion-modelo-quality/comparison/flux_dev-3.png"
+      ]
+    }
+  ]
+}

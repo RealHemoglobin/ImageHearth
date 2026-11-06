@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-06",
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "vram_total_mib": 24564,
+  "driver": "580.178.04",
+  "system": "Linux 7.0.0-42-generic",
+  "ram_total_mib": 60898,
+  "comfyui_version": "0.43.0",
+  "results": [
+    {
+      "workflow": "flux_kontext_dev_basic",
+      "width": 1024,
+      "height": 1024,
+      "references": 1,
+      "baseline_vram_mib": 2585,
+      "peak_vram_mib": 18694,
+      "peak_ram_mib": 2314,
+      "cold_seconds": 19.6,
+      "warm_seconds": 18.4,
+      "warm_runs": [
+        18.4
+      ]
+    }
+  ]
+}

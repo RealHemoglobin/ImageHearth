@@ -32,7 +32,7 @@ from imagehearth_mcp.provisioner import models as model_files
 from imagehearth_mcp.provisioner import setup as setup_command
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
 from imagehearth_mcp.server import list_workflows
-from tests.harness import EngineTestCase
+from tests.harness import EngineTestCase, swap_models
 from tests.test_provisioner import machine, setup_args, torch_ok  # noqa: F401
 
 DATA = Path(__file__).parent / "data"
@@ -41,24 +41,19 @@ DATA = Path(__file__).parent / "data"
 def tiny_catalog():
     """El manifiesto real con modelos de pocos bytes."""
     real = manifest.load()
-    small = {
-        name: dataclasses.replace(model, bytes=len(name))
-        for name, model in real.models.items()
-    }
-    return dataclasses.replace(
+    return swap_models(
         real,
-        models=small,
-        profiles={
-            name: dataclasses.replace(
-                profile, models=tuple(small[m.name] for m in profile.models)
-            )
-            for name, profile in real.profiles.items()
+        {
+            name: dataclasses.replace(model, bytes=len(name))
+            for name, model in real.models.items()
         },
     )
 
 
-def install(folder, tiny, profile):
-    for model in tiny.profiles[profile].models:
+def install(folder, tiny, profile, quality_model="flux-dev", vram=24564, forced=None):
+    resolved = tiny.resolve(tiny.profiles[profile], quality_model, vram, forced)
+
+    for model in resolved.models:
         path = Path(folder) / model.dest
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(model.name.encode())
@@ -122,6 +117,8 @@ def test_minimum_profile_of_each_workflow(tiny):
         "sdxl_turbo": "fast",
         "flux_dev": "quality",
         "flux_dev_gguf": "quality",
+        "flux_schnell": "quality",
+        "sdxl_base": "quality",
         "sdxl_quality": "quality",
         "flux_kontext_dev_basic": "full",
         "flux_kontext_dev_gguf": "full",
@@ -405,11 +402,14 @@ def test_find_node_fails_clearly():
 
 def test_existing_profiles_do_not_change():
     catalog = manifest.load()
-    names = {n: [m.name for m in p.models] for n, p in catalog.profiles_for("linux").items()}
+    names = {
+        n: [m.name for m in catalog.resolve(p, "flux-dev", 24564).models]
+        for n, p in catalog.profiles_for("linux").items()
+    }
     assert names == {
         "fast": ["sdxl_turbo"],
         "quality": ["sdxl_turbo", "flux_dev", "t5xxl", "clip_l", "flux_vae"],
-        "full": ["sdxl_turbo", "flux_dev", "t5xxl", "clip_l", "flux_vae", "flux_kontext"],
+        "full": ["sdxl_turbo", "flux_dev", "flux_kontext", "t5xxl", "clip_l", "flux_vae"],
     }
     assert list(catalog.profiles_for("windows")) == list(names)
     assert all(not p.nodes for p in catalog.profiles_for("linux").values())

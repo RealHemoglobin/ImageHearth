@@ -31,6 +31,7 @@ from imagehearth_mcp.provisioner import (
 )
 from imagehearth_mcp.provisioner import setup as setup_command
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
+from tests.harness import swap_models
 
 GB = 1_000_000_000
 
@@ -333,7 +334,8 @@ def test_profile_sizes_match_documentation(catalog):
     documented = {"fast": 6.9, "quality": 24.5, "full": 36.5}
 
     for name, size in documented.items():
-        assert catalog.profiles[name].bytes / GB == pytest.approx(size, abs=0.1)
+        resolved = catalog.resolve(catalog.profiles[name], "flux-dev", 24564)
+        assert resolved.bytes / GB == pytest.approx(size, abs=0.1)
 
 
 def test_every_workflow_has_its_models(catalog):
@@ -358,10 +360,17 @@ def test_every_workflow_has_its_models(catalog):
 
 
 def test_profiles_are_cumulative(catalog):
-    fast, quality, full = (catalog.profiles[n] for n in ("fast", "quality", "full"))
+    fast, quality, full = (
+        catalog.resolve(catalog.profiles[n], "flux-dev", 24564) for n in ("fast", "quality", "full")
+    )
     assert set(fast.models) < set(quality.models) < set(full.models)
-    gguf = {"flux_dev_gguf", "flux_kontext_gguf", "t5xxl_gguf", "realvisxl", "sdxl_offset_lora"}
-    assert {m.name for m in full.models} == set(catalog.models) - gguf
+    # What no profile installs: the GGUF files, the other quality models, the legacy
+    # RealVisXL.
+    unused = {
+        "flux_dev_gguf", "flux_kontext_gguf", "t5xxl_gguf", "realvisxl", "sdxl_offset_lora",
+        "flux_schnell", "sdxl_base",
+    }
+    assert {m.name for m in full.models} == set(catalog.models) - unused
 
 
 def test_pytorch_matches_platform_matrix(catalog):
@@ -922,8 +931,10 @@ def test_cpu_only_allows_fast(catalog):
 
 def test_low_vram_and_old_driver_warn(catalog):
     gpu = detect.Gpu("nvidia", "RTX 3060", "550.1", 12000)
-    issues = preflight.check_gpu(fake_detection([gpu]), catalog.profiles["full"], TORCH, "managed")
+    full = catalog.resolve(catalog.profiles["full"], "flux-dev", 24564)
+    issues = preflight.check_gpu(fake_detection([gpu]), full, TORCH, "managed")
     assert codes(issues, preflight.WARNING) == ["low_vram", "old_driver"]
+    assert "full profile with flux-dev needs 20000 MiB" in issues[0].message
     assert codes(issues, preflight.ERROR) == []
 
 
@@ -975,6 +986,10 @@ def machine(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "COMFY_PORT", 8188)
     monkeypatch.setattr(config, "INSTALL_MANIFEST", data / "install.json")
     monkeypatch.setattr(config, "SETUP_LOCK", data / "setup.lock")
+    # Nunca el trabajo de instalación de la máquina real.
+    monkeypatch.setattr(config, "SETUP_JOB_LOCK", data / "state" / "job.lock")
+    monkeypatch.setattr(config, "SETUP_JOB_FILE", data / "state" / "job.json")
+    monkeypatch.setattr(config, "SETUP_JOB_LOG", data / "logs" / "job.log")
     monkeypatch.setattr(config, "PID_FILE", data / "state" / "comfyui.pid")
 
     state = SimpleNamespace(
@@ -1012,27 +1027,15 @@ def machine(tmp_path, monkeypatch):
     monkeypatch.setattr(comfyui, "install_managed", fake_managed)
 
     small = {
-        name: make_model(name, name.encode(), dest=model.dest)
+        name: dataclasses.replace(
+            model,
+            bytes=len(name),
+            sha256=hashlib.sha256(name.encode()).hexdigest(),
+            license="apache-2",
+        )
         for name, model in manifest.load().models.items()
     }
-    small = {
-        name: manifest.Model(**{**model.__dict__, "license": "apache-2"})
-        for name, model in small.items()
-    }
-    catalog = manifest.load()
-    fake_catalog = manifest.Manifest(
-        catalog.comfyui,
-        catalog.pytorch,
-        catalog.licenses,
-        small,
-        {
-            name: dataclasses.replace(
-                profile, models=tuple(small[m.name] for m in profile.models)
-            )
-            for name, profile in catalog.profiles.items()
-        },
-        catalog.nodes,
-    )
+    fake_catalog = swap_models(manifest.load(), small)
     monkeypatch.setattr(manifest, "load", lambda: fake_catalog)
 
     real_ensure = models.ensure_models
@@ -1063,7 +1066,7 @@ def test_non_interactive_without_licenses_downloads_nothing(machine, capsys):
 
 def test_summary_lists_licenses_and_links(capsys, tmp_path):
     catalog = manifest.load()
-    full = catalog.profiles["full"]
+    full = catalog.resolve(catalog.profiles["full"], "flux-dev", 24564)
     setup_command.show_summary(catalog, full, "managed", tmp_path, tmp_path, full.bytes)
     output = capsys.readouterr().out
     assert "36.5 GB" in output

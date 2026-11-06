@@ -65,6 +65,13 @@ def _status_node_issue():
     return None
 
 
+def _quality_model():
+    try:
+        return catalog.active_quality_model()
+    except Exception:  # noqa: BLE001 - un manifiesto ilegible no debe ocultar el resto del estado.
+        return None
+
+
 def get_status():
     comfy = _comfyui_status()
     ollama = _ollama_status()
@@ -101,6 +108,7 @@ def get_status():
         "status": overall,
         "gpu_free_mib": gpu.free_mib(),
         "issues": issues,
+        "quality_model": _quality_model(),
     }
 
     if pending:

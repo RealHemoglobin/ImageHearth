@@ -2,6 +2,7 @@
 
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from imagehearth_mcp.engine import comfyui_manager, config
@@ -13,6 +14,7 @@ from imagehearth_mcp.provisioner import (
     manifest,
     models,
     preflight,
+    quality,
     settings,
     smoke,
 )
@@ -23,10 +25,7 @@ ATTACHED = "attached"
 MANAGED = preflight.MANAGED
 PROFILE_ORDER = (
     "fast",
-    "quality-sdxl",
-    "quality-gguf",
     "quality",
-    "full-gguf",
     "full",
     "mac-fast",
     "mac-quality",
@@ -54,10 +53,21 @@ def propose_profile(detection, catalog):
     proposed = next(iter(profiles), "fast")
 
     for name, profile in profiles.items():
-        if vram >= catalog.min_vram_mib(profile) and detection.disk_free_bytes > profile.bytes:
+        size = catalog.resolve(profile, None, vram).bytes if _fits_resolve(catalog, profile, vram) else 0
+
+        if vram >= catalog.min_vram_mib(profile) and detection.disk_free_bytes > size:
             proposed = name
 
     return proposed
+
+
+def _fits_resolve(catalog, profile, vram):
+    try:
+        catalog.resolve(profile, None, vram)
+    except ProvisionError:
+        return False
+
+    return True
 
 
 def choose_profile(args, detection, catalog, interactive):
@@ -84,7 +94,8 @@ def choose_profile(args, detection, catalog, interactive):
     print("\nProfiles:")
 
     for name, profile in profiles.items():
-        print(f"  {name:8} {format_size(profile.bytes):>8}  {profile.description}")
+        size = format_size(profile.bytes)
+        print(f"  {name:8} {('from ' if profile.quality else '') + size:>13}  {profile.description}")
 
     answer = input(f"Profile [{proposed}]: ").strip().lower() or proposed
 
@@ -92,6 +103,73 @@ def choose_profile(args, detection, catalog, interactive):
         raise ProvisionError(f"Unknown profile {answer!r}.")
 
     return profiles[answer]
+
+
+@dataclass(frozen=True)
+class Selection:
+    """El modelo de `quality` elegido. `legacy`: se mantiene RealVisXL."""
+
+    name: str | None = None
+    legacy: bool = False
+
+
+def choose_quality_model(args, catalog, profile, vram, installed, interactive):
+    """Qué modelo de `quality` se instala. Los perfiles sin `quality` no tienen."""
+    asked = getattr(args, "quality_model", None)
+
+    if not profile.quality:
+        if asked:
+            raise ProvisionError(
+                f"The {profile.name} profile has no quality model: --quality-model "
+                "only applies to quality and full."
+            )
+
+        return Selection()
+
+    names = ", ".join(catalog.quality_models)
+
+    if asked:
+        if asked not in catalog.quality_models:
+            raise ProvisionError(f"Unknown quality model {asked!r}. Choose one of: {names}.")
+
+        return Selection(asked)
+
+    if installed is not None and installed.legacy:
+        # Nada destructivo sin que el usuario lo pida: RealVisXL sigue generando.
+        sdxl = catalog.quality_models["sdxl"].title
+        print(f"\nThis installation uses {quality.LEGACY}, which is no longer offered.")
+
+        if interactive and ask(f"Switch to {sdxl} and delete {quality.LEGACY}?"):
+            return Selection("sdxl")
+
+        print(f"Keeping {quality.LEGACY}. To switch: imagehearth-mcp setup --quality-model sdxl")
+        return Selection("sdxl", legacy=True)
+
+    if installed is not None and not interactive:
+        return Selection(installed.name)
+
+    recommended = catalog.recommend(vram)
+    default = installed.name if installed else recommended
+
+    if not interactive:
+        print(
+            f"\nQuality model: {catalog.quality_model(recommended).title}, recommended for "
+            f"{vram or 'unknown'} MiB of GPU memory. Choose another with --quality-model "
+            f"({names})."
+        )
+        return Selection(recommended)
+
+    print("\nQuality models (only one is installed at a time):")
+
+    for info in quality.choices(catalog, vram, installed):
+        print(f"  {quality.format_choice(info)}")
+
+    answer = input(f"Quality model [{default}]: ").strip().lower() or default
+
+    if answer not in catalog.quality_models:
+        raise ProvisionError(f"Unknown quality model {answer!r}. Choose one of: {names}.")
+
+    return Selection(answer)
 
 
 def choose_mode(args, detection, records, interactive):
@@ -149,6 +227,10 @@ def choose_mode(args, detection, records, interactive):
 
 def show_summary(catalog, profile, mode, comfy_dir, models_dir, pending, torch=None):
     print(f"\nProfile: {profile.name} ({profile.description})")
+
+    if profile.quality_model:
+        print(f"Quality model: {profile.quality_model} ({profile.precision})")
+
     print(f"ComfyUI: {mode}, {comfy_dir}")
     print(f"Models:  {models_dir}")
     print("\nDownloads:")
@@ -294,6 +376,36 @@ def apply_config(args, mode, comfy_dir, port, records):
         )
 
 
+def _plan_change(args, catalog, records, models_dir, base, profile, installed, selection, vram, interactive):
+    """El cambio de modelo de `quality` que pide esta ejecución, confirmado; o None."""
+    if not profile.quality or installed is None or selection.legacy:
+        return None
+
+    if not installed.legacy and installed.name == selection.name:
+        return None
+
+    effective = catalog.profiles[_higher_profile(records.profile, base.name)]
+    old = quality.resolve_for(
+        catalog, effective, installed, vram, records.precision, records.edit_precision
+    )
+    keep = catalog.resolve(effective, selection.name, vram, getattr(args, "variant", None))
+    change = quality.plan_change(catalog, records, models_dir, old, profile, keep, installed)
+    quality.show_change(change, catalog)
+
+    if not getattr(args, "yes", False):
+        if not interactive:
+            raise ProvisionError(
+                "Nothing was changed. Non-interactive mode needs --yes to switch the "
+                "quality model."
+            )
+
+        if not ask("Switch the quality model?"):
+            raise ProvisionError("Nothing was changed: the switch was not confirmed.")
+
+    quality.require_idle()
+    return change
+
+
 def _setup(args):
     # Before anything is downloaded.
     if getattr(args, "batch_limit", None) is not None and args.batch_limit < 1:
@@ -321,15 +433,24 @@ def _setup(args):
     require_experimental(args, detection)
 
     mode, comfy_dir, default_port = choose_mode(args, detection, records, interactive)
-    profile = choose_profile(args, detection, catalog, interactive)
-    profile = catalog.resolve(profile, gpu.vram_mib if gpu else 0, getattr(args, "variant", None))
-
-    if profile.variant_of:
-        print(f"\nFor {gpu.vram_mib} MiB of GPU memory the {profile.variant_of} profile uses its {profile.name} variant.")
-
+    base = choose_profile(args, detection, catalog, interactive)
+    vram = gpu.vram_mib if gpu else 0
     port = args.port or default_port
     models_dir = Path(args.models_dir).expanduser().resolve() if args.models_dir else None
     models_dir = models_dir or models.resolve_dir(records, comfy_dir)
+    installed = quality.current(catalog, records, models_dir)
+    selection = choose_quality_model(args, catalog, base, vram, installed, interactive)
+    forced = getattr(args, "variant", None)
+
+    if selection.legacy:
+        profile = catalog.legacy_profile(base, vram, forced)
+    else:
+        profile = catalog.resolve(base, selection.name, vram, forced)
+
+    if profile.variant_of:
+        print(f"\nFor {vram} MiB of GPU memory the {profile.variant_of} profile uses its gguf variant.")
+
+    change = _plan_change(args, catalog, records, models_dir, base, profile, installed, selection, vram, interactive)
     pending = models.pending_bytes(profile.models, models_dir)
     torch = catalog.pytorch.get(detection.platform.index)
 
@@ -362,8 +483,21 @@ def _setup(args):
     apply_config(args, mode, comfy_dir, port, records)
 
     models.ensure_models(profile.models, models_dir, records)
-    records.profile = _higher_profile(records.profile, profile.name)
+    records.profile = _higher_profile(records.profile, profile.base)
+
+    if profile.quality and not selection.legacy:
+        # Only now that the model is verified: until then the previous one is the record.
+        records.quality_model = profile.quality_model
+        records.precision = profile.precision
+        records.edit_precision = profile.edit_precision
+
     records.save()
+
+    if change is not None:
+        for failure in quality.delete_old(change, records):
+            print(f"WARNING: could not delete {failure}")
+
+        quality.restart_comfyui()
 
     if args.skip_smoke_test:
         print("\nDone. Test image skipped.")

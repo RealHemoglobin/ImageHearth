@@ -10,7 +10,7 @@
 # It uses return instead of exit, which would close the window with `irm | iex`.
 
 function Install-ImageHearth {
-    $Version = "0.1.0b2"
+    $Version = "0.1.0b3"
     $Docs = "https://github.com/RealHemoglobin/ImageHearth"
 
     function Show-Failure($Message) {

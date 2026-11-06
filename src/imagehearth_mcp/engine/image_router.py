@@ -7,7 +7,7 @@ from imagehearth_mcp.engine.validation import (
     validate_dimensions,
     validate_prompt,
 )
-from imagehearth_mcp.engine.workflow_runner import run_workflow
+from imagehearth_mcp.engine.workflow_runner import STYLES, run_workflow
 
 DEFAULT_WIDTH = 1024
 DEFAULT_HEIGHT = 1024
@@ -28,6 +28,7 @@ class Request:
     width: int = 0
     height: int = 0
     negative_prompt: str = ""
+    style: str = "auto"
 
 
 def plan_request(
@@ -39,6 +40,7 @@ def plan_request(
     width=0,
     height=0,
     negative_prompt="",
+    style="auto",
 ):
     """Check one image request and resolve its mode. Shared by create_image and batches."""
     validate_prompt(prompt)
@@ -48,6 +50,9 @@ def plan_request(
 
     if quality not in ("fast", "high"):
         raise ValueError("quality must be fast or high.")
+
+    if style not in STYLES:
+        raise ValueError("style must be auto, photo or none.")
 
     references = list(image_paths or [])
 
@@ -86,6 +91,7 @@ def plan_request(
         width or DEFAULT_WIDTH,
         height or DEFAULT_HEIGHT,
         negative_prompt,
+        style,
     )
 
 
@@ -98,6 +104,7 @@ def create_image(
     width: int = 0,
     height: int = 0,
     negative_prompt: str = "",
+    style: str = "auto",
 ):
     """
     Central image generation and editing router.
@@ -109,7 +116,7 @@ def create_image(
 
     quality:
         fast: SDXL Turbo.
-        high: FLUX Dev.
+        high: the installed quality model.
 
     Dimensions:
         Generation defaults to 1024x1024.
@@ -119,7 +126,7 @@ def create_image(
     """
 
     request = plan_request(
-        prompt, mode, quality, image_paths, workflow, width, height, negative_prompt
+        prompt, mode, quality, image_paths, workflow, width, height, negative_prompt, style
     )
 
     if request.mode == "edit":
@@ -142,5 +149,6 @@ def create_image(
             width=request.width,
             height=request.height,
             negative_prompt=request.negative_prompt,
+            style=request.style,
         )
     )

@@ -47,10 +47,11 @@ def available_workflows():
     )
 
 
-def not_installed_error(what, profile):
+def not_installed_error(what, profile, quality_model=None):
+    option = f" --quality-model {quality_model}" if quality_model else ""
     return ValueError(
         f"{what} is not installed: its models are missing or incomplete. "
-        f"Install them with `imagehearth-mcp setup --profile {profile}`."
+        f"Install them with `imagehearth-mcp setup --profile {profile}{option}`."
     )
 
 
@@ -65,7 +66,9 @@ def require_installed(name, what=None):
         )
 
     if not entry.installed:
-        raise not_installed_error(what or f"Workflow '{name}'", entry.profile)
+        raise not_installed_error(
+            what or f"Workflow '{name}'", entry.profile, entry.quality_model
+        )
 
 
 def resolve_edit_workflow():

@@ -27,6 +27,7 @@ ITEM_FIELDS = (
     "image_paths",
     "workflow",
     "mode",
+    "style",
 )
 
 
@@ -80,6 +81,7 @@ def validate(
     image_paths=None,
     workflow="",
     mode="auto",
+    style="auto",
 ):
     """Check the whole batch and prepare every item, or raise with all the problems.
 
@@ -106,6 +108,7 @@ def validate(
         "image_paths": image_paths or None,
         "workflow": workflow,
         "mode": mode,
+        "style": style,
     }
     errors = []
     requests_ = {}
@@ -186,6 +189,7 @@ def _prepare(request):
         request.negative_prompt,
         request.width,
         request.height,
+        request.style,
     )
 
 

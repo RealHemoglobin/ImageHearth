@@ -141,7 +141,9 @@ def check_gpu(detection, profile, torch, mode):
                     WARNING,
                     "low_vram",
                     f"{gpu.name} has {gpu.vram_mib} MiB of memory and the "
-                    f"{profile.name} profile suggests {profile.min_vram_mib} MiB. "
+                    f"{profile.name} profile"
+                    + (f" with {profile.quality_model}" if profile.quality_model else "")
+                    + f" needs {profile.min_vram_mib} MiB. "
                     "Generation may be slow or fail.",
                 )
             )

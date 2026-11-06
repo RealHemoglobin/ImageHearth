@@ -27,6 +27,7 @@ LAYERS = (
     "node",
     "custom_nodes",
     "models",
+    "quality_model",
     "gpu",
     "port",
     "ollama",
@@ -262,9 +263,11 @@ def check_node(config, session):
 
 def check_custom_nodes(config, records, catalog):
     """Nodos que pide el perfil instalado, como ComfyUI-GGUF en los perfiles mac-*."""
-    from imagehearth_mcp.provisioner import comfyui
+    from imagehearth_mcp.provisioner import comfyui, models, quality
 
-    profile = catalog.profiles.get(records.profile)
+    profile = quality.resolve_installed(
+        catalog, records, models.resolve_dir(records, config.COMFY_DIR)
+    )
     nodes = profile.nodes if profile else ()
 
     if not nodes:
@@ -305,16 +308,20 @@ def check_custom_nodes(config, records, catalog):
 
 
 def check_models(config, records, catalog, verify_hashes, system):
-    from imagehearth_mcp.provisioner import models
+    from imagehearth_mcp.provisioner import models, quality
 
     models_dir = models.resolve_dir(records, config.COMFY_DIR)
     profiles = catalog.profiles_for(system)
     extra_paths = models.extra_search_paths(config.COMFY_DIR)
     expected = records.profile or next(iter(profiles), "fast")
+    installed = quality.current(catalog, records, models_dir)
     problems = {}
     complete = {}
 
-    for name, profile in profiles.items():
+    for name, base in profiles.items():
+        profile = quality.resolve_for(
+            catalog, base, installed, 0, records.precision, records.edit_precision
+        )
         states = models.inspect(profile.models, models_dir, extra_paths)
         bad = [item for item in states if item.state != models.PRESENT]
 
@@ -345,6 +352,46 @@ def check_models(config, records, catalog, verify_hashes, system):
     method = "SHA-256" if verify_hashes else "size"
     return Check(
         "models", OK, f"Profile {expected} complete (checked by {method}).", details=details
+    )
+
+
+def check_quality_model(config, records, catalog):
+    """Modelo de `quality` activo con su licencia, y si la instalación es de antes de la fase 9."""
+    from imagehearth_mcp.provisioner import models, quality
+
+    installed = quality.current(
+        catalog, records, models.resolve_dir(records, config.COMFY_DIR)
+    )
+
+    if installed is None:
+        return Check("quality_model", SKIP, "The installed profile has no quality model.")
+
+    model = catalog.quality_model(installed.name)
+    license = catalog.licenses[model.license]
+    details = {
+        "name": installed.name,
+        "title": model.title,
+        "license": license.name,
+        "commercial_use": license.commercial,
+        "legacy": installed.legacy,
+    }
+
+    if installed.legacy:
+        return Check(
+            "quality_model",
+            WARN,
+            f"{quality.LEGACY} is no longer offered; it still generates. Moving to "
+            f"{model.title} downloads it and deletes {quality.LEGACY}.",
+            "Run `imagehearth-mcp setup --quality-model sdxl`.",
+            details,
+        )
+
+    use = "commercial use allowed" if license.commercial else "non-commercial license"
+    return Check(
+        "quality_model",
+        OK,
+        f"{model.title} ({license.name}, {use}).",
+        details=details,
     )
 
 
@@ -467,6 +514,7 @@ def collect(verify_hashes=False, session=requests, run=subprocess.run, detection
             checks["models"] = check_models(
                 config, records, catalog, verify_hashes, detection.system
             )
+            checks["quality_model"] = check_quality_model(config, records, catalog)
 
         checks["gpu"] = check_gpu(detection)
         checks["gpu"].details["comfy_args"] = comfy_arguments(config, detection)

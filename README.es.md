@@ -21,7 +21,7 @@ irm https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.ps
 ## Qué le puedes pedir a tu agente
 
 - *"Genera un póster de una ciudad futurista de noche"*: borrador rápido con SDXL Turbo.
-- *"Haz una imagen de alta calidad de 1536x1024 de un castillo medieval"*: FLUX Dev.
+- *"Haz una imagen de alta calidad de 1536x1024 de un castillo medieval"*: el modelo de calidad que instalaste (FLUX Dev, FLUX Schnell o SDXL 1.0).
 - *"Cambia el fondo de `foto.png` por una montaña nevada"*: FLUX Kontext.
 - *"Combina estas tres fotos en una sola escena"*: hasta seis imágenes de referencia.
 
@@ -74,10 +74,13 @@ Medido con `scripts/measure_profiles.py` a 1024x1024 (Kontext con una referencia
 |---|---|---|---|---|---|
 | SDXL Turbo | `fast` | 7,0 GB | 2,6 GB | 3,6 s | 1,0 s |
 | FLUX Dev | `quality` | 17,8 GB | 2,3 GB | 13,8 s | 10,4 s |
+| FLUX Schnell | `quality` | 19,4 GB | 2,3 GB | 5,2 s | 2,8 s |
+| SDXL 1.0 | `quality` | 9,6 GB | 2,7 GB | 5,7 s | 4,0 s |
 | FLUX Kontext | `full` | 19,3 GB | 2,4 GB | 21,0 s | 18,6 s |
 
 - Son picos en una tarjeta de 24 GB, no mínimos: ComfyUI usa la memoria que encuentra y puede descargar parte en tarjetas menores. Los mínimos para otras GPU son solo orientativos.
 - La «primera generación» es tras descargar los modelos de la GPU, con los archivos aún en la caché de disco del sistema. Cargar desde un disco en frío tarda más.
+- FLUX Schnell y SDXL 1.0 se midieron el 2026-11-06 en la misma tarjeta (FLUX Dev de nuevo ese día: 19,4 GB, 12,8 s y 10,3 s; la fila anterior tenía un escritorio más ligero). FLUX Schnell con ComfyUI limitado a unos 12 GB (`--reserve-vram 12`) llegó a 12,3 GB y mantuvo 2,8 s por imagen, así que con 12 GB cabe; se simuló reservando memoria en la tarjeta de 24 GB, no se midió en una tarjeta real de 12 GB.
 - Las mediciones de Windows siguen pendientes.
 
 > **Nota:** los servidores de modelos locales son opcionales. Si uno no está en marcha, ImageHearth lo ignora y el estado sigue siendo `ready`. Consulta `memory_mode` en los ajustes.
@@ -115,7 +118,7 @@ Sin Git, descarga el ZIP desde GitHub y ejecuta el mismo script dentro de la car
 **Lo más avanzado: a mano.** Con [uv](https://docs.astral.sh/uv/getting-started/installation/) instalado:
 
 ```bash
-uv tool install --python 3.13 imagehearth-mcp==0.1.0b2
+uv tool install --python 3.13 imagehearth-mcp==0.1.0b3
 imagehearth-mcp setup
 imagehearth-mcp connect --detect
 ```
@@ -135,17 +138,44 @@ Setup detecta tu hardware y cualquier ComfyUI existente, propone un perfil y mue
 | Perfil | Qué incluye | Modelos |
 |---|---|---|
 | `fast` | Generación rápida con SDXL Turbo | 6,9 GB |
-| `quality` | `fast` + FLUX Dev | 24,6 GB |
-| `full` | `quality` + edición con FLUX Kontext | 36,5 GB |
+| `quality` | `fast` + un modelo de alta calidad **a tu elección** (abajo) | 13,9 a 24,6 GB |
+| `full` | `quality` + edición con FLUX Kontext | 31,6 a 36,5 GB |
 
-`quality` y `full` se adaptan a la memoria de la GPU: con 20 GB o más usan FLUX Dev fp8; con 12 a 20 GB, `setup` instala en su lugar FLUX Dev GGUF Q5 (más pequeño; ComfyUI pasa a la RAM del sistema lo que no cabe, y eso es más lento). Con 8 a 12 GB, `quality` instala un SDXL afinado (RealVisXL V5.0, CreativeML Open RAIL++-M, que permite uso comercial) con una LoRA de detalle, 13,9 GB en total incluido `fast`; ahí la edición no está disponible (necesita 12 GB) y por debajo de 8 GB solo se ofrece `fast`. Las variantes pequeñas se han simulado a propósito, y aún no se han medido en una tarjeta real de 12 a 20 GB. Para forzar una, usa `--variant fp8|gguf|sdxl`.
+#### Elegir el modelo de calidad
+
+Con `quality` o `full`, setup pregunta qué modelo instalar para la generación de alta calidad. Solo hay uno instalado a la vez. Muestra de cada uno el tamaño de descarga, la memoria de GPU mínima, la licencia y si permite uso comercial, marca el recomendado para tu GPU y avisa de los que no caben. En modo no interactivo, pasa `--quality-model`; sin él, setup usa el recomendado y lo indica.
+
+| Modelo | `--quality-model` | Licencia | Uso comercial | Descarga | Memoria de GPU | Recomendado desde |
+|---|---|---|---|---|---|---|
+| FLUX.1 Dev | `flux-dev` | [FLUX [dev] Non-Commercial](https://bfl.ai/legal/non-commercial-license-terms) | **No** | 17,6 GB (fp8) o 12,2 GB (GGUF Q5) | 20 GB (12 GB con GGUF) | 20 GB |
+| FLUX.1 Schnell | `flux-schnell` | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) | Sí | 17,6 GB | 12 GB (simulado limitando la tarjeta de 24 GB) | 12 GB |
+| SDXL 1.0 | `sdxl` | [CreativeML Open RAIL++-M](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/LICENSE.md) | Sí, con restricciones de uso | 7,0 GB | 8 GB | cualquiera |
+
+- FLUX Dev da más detalle; FLUX Schnell genera la imagen en 4 pasos; SDXL 1.0 es el más ligero y admite prompt negativo. Aunque un modelo no quepa en tu GPU puedes instalarlo: setup avisa con el mínimo y la memoria que ha detectado, y la última palabra es tuya.
+- Las licencias que setup te pide aceptar son solo las de lo que descarga. Con `flux-schnell` o `sdxl` en `quality` no se descarga ningún archivo de FLUX [dev]. **La edición con FLUX Kontext en `full` es no comercial sea cual sea el modelo de calidad.**
+- FLUX Dev usa fp8 con 20 GB o más y GGUF Q5 con 12 a 20 GB (ComfyUI pasa a la RAM del sistema lo que no cabe, y eso es más lento). Fuerza una con `--variant fp8|gguf`. Estas opciones pequeñas se han simulado a propósito y aún no se han medido en una tarjeta real de 12 a 20 GB.
+- La edición necesita 12 GB: `full` no está disponible por debajo.
+
+**Cambiar de modelo más adelante.** Ejecuta `imagehearth-mcp setup --quality-model flux-schnell` (o elige otro cuando pregunte). Setup muestra lo que va a descargar y a borrar y te pide confirmar (`--yes` en modo no interactivo). El modelo nuevo se descarga y se verifica **antes** de borrar nada, así que si se interrumpe sigues generando con el anterior; vuelve a ejecutar el comando para terminar. Solo se borran los archivos que instaló ImageHearth y que nada más necesita: tus modelos, los de un ComfyUI adjunto y lo compartido (como los codificadores de texto que usa Kontext) se conservan. Se rechaza mientras se genera una imagen. Desde un agente, `setup_start` con otro `quality_model` hace lo mismo.
+
+**Instalaciones anteriores.** Una instalación hecha antes de esta elección sigue generando: se reconoce como `flux-dev` (fp8 o GGUF) o, si tiene RealVisXL, como un SDXL antiguo. RealVisXL ya no se ofrece; `imagehearth-mcp doctor` te dice cómo pasar a SDXL 1.0 (`setup --quality-model sdxl`), que lo descarga y borra RealVisXL si lo instaló ImageHearth.
+
+Cada imagen generada guarda el modelo de calidad y el workflow en el texto del PNG (`ImageHearth-Quality-Model`, `ImageHearth-Workflow`), junto a lo que escribe ComfyUI. `list_workflows`, `get_engine_status` y `doctor` muestran el modelo activo y su licencia.
+
+Comparativa en la RTX 4090 con los mismos tres prompts y la misma semilla (columnas: FLUX Dev, FLUX Schnell, SDXL 1.0), [imágenes completas](https://github.com/RealHemoglobin/ImageHearth/tree/main/specs/2026-11-06-eleccion-modelo-quality/comparison):
+
+![FLUX Dev, FLUX Schnell y SDXL 1.0 con los mismos prompts y semilla](https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/specs/2026-11-06-eleccion-modelo-quality/comparison/grid.jpg)
+
+FLUX Dev y Schnell dibujan el cartel que dice OPEN; SDXL 1.0 no representa el texto. También se probó el refiner de SDXL (base con la LoRA de detalle, con y sin refiner, misma semilla): las imágenes fueron prácticamente idénticas, así que no se instala.
 
 Puedes empezar con `fast` y ejecutar `setup --profile full` más adelante: lo que ya está no se vuelve a descargar. ImageHearth solo ofrece lo instalado: `list_workflows` lo muestra, un `setup` posterior se nota sin reiniciar nada, y pedir algo que falta da un error con el comando de `setup` exacto, nunca otro modelo en su lugar.
 
 | Opción | Uso |
 |---|---|
 | `--profile fast\|quality\|full` | Elige el perfil sin preguntar. En macOS: `mac-fast\|mac-quality\|mac-full` |
-| `--variant fp8\|gguf\|sdxl` | Fuerza una variante de `quality` o `full` en vez de la que cabe en la memoria de tu GPU |
+| `--quality-model flux-dev\|flux-schnell\|sdxl` | Modelo de calidad de `quality` o `full`. Sin él, una instalación nueva usa el recomendado y una existente conserva el suyo |
+| `--variant fp8\|gguf` | Fuerza la precisión en vez de la que cabe en la memoria de tu GPU |
+| `--yes` | Confirma el cambio de modelo de calidad sin preguntar |
 | `--experimental` | Obligatorio en macOS, que está sin probar |
 | `--accept-licenses` | Acepta las licencias sin preguntar. Obligatoria con `--non-interactive` |
 | `--non-interactive` | No pregunta nunca: falla si falta una decisión |

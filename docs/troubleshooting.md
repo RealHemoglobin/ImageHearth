@@ -28,7 +28,9 @@ Nothing is downloaded until these checks pass. If setup is interrupted, run it a
 | `Not enough disk space` | Free some space, choose a smaller profile with `--profile`, or keep the models on another disk with `--models-dir` |
 | `An NVIDIA GPU is present but nvidia-smi does not work` | Install the [current driver](https://www.nvidia.com/drivers), reboot and run setup again |
 | `NVIDIA driver ... may be too old` | A warning. Update the driver if ComfyUI can't use the GPU |
-| `has ... MiB of memory and the ... profile suggests` | A warning: generation may be slow or fail. Choose a smaller profile if it does |
+| `has ... MiB of memory and the ... profile ... needs` | A warning: the quality model doesn't fit this GPU, and generation may be slow or fail. It's installed anyway; switch to a lighter one with `setup --quality-model flux-schnell` or `sdxl` if it does |
+| `Nothing was changed. Non-interactive mode needs --yes to switch the quality model` | Switching replaces the current model. Add `--yes` after reading the plan it printed |
+| `An image is being generated, or a session needs recover_engine` | A model switch is refused meanwhile. Wait for the image, or call `recover_engine`, and run the command again |
 | `Port ... is already in use` | Close whatever uses it or choose another with `--port`. If it's a ComfyUI you want to use, run setup with `--attach PATH` |
 | `Port ... is in use, but it does not respond like ComfyUI` | Close it, or give your ComfyUI's port with `--port` |
 | `uv was not found in PATH` | [Install uv](https://docs.astral.sh/uv/getting-started/installation/) and open a new terminal |
@@ -36,6 +38,8 @@ Nothing is downloaded until these checks pass. If setup is interrupted, run it a
 | `Non-interactive mode needs ...` | Add the option named in the message. Read the licenses before adding `--accept-licenses` |
 | `Nothing was downloaded: the licenses were not accepted` | You answered no. Nothing changed |
 | `Another setup, update or uninstall is running` | Wait for it to finish |
+
+**A model switch was interrupted.** The previous model is deleted only after the new one is downloaded and verified, so you keep generating with the previous one (`imagehearth-mcp doctor` shows which is active). Run the same command again: the download resumes and the switch finishes. **Disk space during a switch:** both models are on disk at the same time, so setup needs room for the new one before it frees the old one; if it says `Not enough disk space`, free some or keep the models on another disk with `--models-dir`.
 
 If Hugging Face restricts access to a model, set `HF_TOKEN` and run setup again.
 
@@ -70,6 +74,7 @@ Ask your agent to *"check the ImageHearth status"*:
 |---|---|
 | The agent doesn't see the tools | Restart it. Then run `imagehearth-mcp connect --print <client>` and compare it with its configuration. See [agents](agents.md) |
 | Tool calls stop after a few minutes | Raise the client's tool timeout. See [long generations](agents.md#long-generations) |
+| Images with FLUX Schnell or SDXL 1.0 look like paintings or cartoons | Short prompts come out painterly with these models. `style="auto"` (default) adds photographic cues unless the prompt names another medium; use `style="photo"` to force it, and describe the scene like a photograph (subject, light, lens). FLUX Dev needs no help |
 | Error about a model that isn't installed | Run the `imagehearth-mcp setup --profile ...` command in the error |
 | ComfyUI doesn't start | Read `comfyui.log` in the logs folder below |
 | The generation is slow on a card with little memory | ComfyUI moves what doesn't fit into system RAM. `doctor` shows the memory arguments it starts with; add your own with `comfy_args` in `config.toml` (they win over the automatic ones) |

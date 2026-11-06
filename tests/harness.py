@@ -359,3 +359,30 @@ class EngineTestCase(unittest.TestCase):
 
     def outputs(self):
         return list(config.OUTPUT_DIR.glob("*")) if config.OUTPUT_DIR.exists() else []
+
+
+def swap_models(real, replacements):
+    """The manifest with `replacements` (name -> Model) instead of those models everywhere."""
+    import dataclasses
+
+    models = {name: replacements.get(name, model) for name, model in real.models.items()}
+
+    def pick(items):
+        return tuple(models[item.name] for item in items)
+
+    def options(found):
+        return tuple(dataclasses.replace(item, models=pick(item.models)) for item in found)
+
+    return dataclasses.replace(
+        real,
+        models=models,
+        profiles={
+            name: dataclasses.replace(profile, models=pick(profile.models))
+            for name, profile in real.profiles.items()
+        },
+        quality_models={
+            name: dataclasses.replace(model, options=options(model.options))
+            for name, model in real.quality_models.items()
+        },
+        edit_options=options(real.edit_options),
+    )

@@ -43,7 +43,7 @@ class FakeProcess:
 def spawned(paths, monkeypatch):
     calls = []
 
-    def spawn(profile, existing):
+    def spawn(profile, existing, quality_model=""):
         calls.append((profile, existing))
         return FakeProcess()
 
@@ -170,6 +170,48 @@ def test_dead_process_is_reported_as_interrupted(paths, monkeypatch):
     job = status(paths, monkeypatch)["installation"]
     assert job["state"] == "interrupted"
     assert "setup_start" in job["error"]
+
+
+def test_next_step_while_installing_says_to_wait(paths, monkeypatch):
+    agent_setup._write_job(state="running", profile="full", pid=4242, create_time=1.0)
+    monkeypatch.setattr(agent_setup.processes, "is_same_process", lambda pid, created: True)
+    result = status(paths, monkeypatch)
+    assert result["installation"]["state"] == "running"
+    assert "in progress" in result["next_step"]
+    assert "Installed" not in result["next_step"]
+    assert "do not call setup_start" in result["next_step"]
+
+
+def test_next_step_while_replacing_quality_model_says_to_wait(paths, monkeypatch):
+    agent_setup._write_job(state="running", profile="full", pid=4242, create_time=1.0)
+    monkeypatch.setattr(agent_setup.processes, "is_same_process", lambda pid, created: True)
+    monkeypatch.setattr(agent_setup.detect, "is_comfy_dir", lambda path: True)
+    monkeypatch.setattr(
+        agent_setup.models, "inspect",
+        lambda wanted, *args: [models.ModelState(m, paths, models.PRESENT) for m in wanted],
+    )
+    result = status(paths, monkeypatch)
+    assert all(profile["installed"] for profile in result["profiles"])
+    assert "in progress" in result["next_step"]
+
+
+@pytest.mark.parametrize("state", ["failed", "interrupted"])
+def test_next_step_after_unfinished_installation_says_to_retry(paths, monkeypatch, state):
+    agent_setup._write_job(state=state, profile="fast", pid=None, error="no space")
+    result = status(paths, monkeypatch)
+    assert result["installation"]["error"] == "no space"
+    assert "installation.error" in result["next_step"]
+    assert "setup_start" in result["next_step"]
+
+
+def test_next_step_when_installed(paths, monkeypatch):
+    agent_setup._write_job(state="finished", profile="fast", pid=None)
+    monkeypatch.setattr(agent_setup.detect, "is_comfy_dir", lambda path: True)
+    monkeypatch.setattr(
+        agent_setup.models, "inspect",
+        lambda wanted, *args: [models.ModelState(m, paths, models.PRESENT) for m in wanted],
+    )
+    assert status(paths, monkeypatch)["next_step"] == "Installed. Use create_image."
 
 
 def test_failure_midway_is_recorded(paths, monkeypatch, capsys):

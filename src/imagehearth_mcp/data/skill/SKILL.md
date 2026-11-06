@@ -12,10 +12,10 @@ ImageHearth is the centralized image generation and editing engine shared by all
 It uses:
 - ComfyUI as the image generation backend.
 - SDXL Turbo for fast generation.
-- FLUX Dev for high-quality generation, or a fine-tuned SDXL (RealVisXL) on GPUs with less memory.
+- One high-quality model of the user's choice: FLUX Dev (non-commercial license), FLUX Schnell (Apache-2.0, 4 steps) or SDXL 1.0 (OpenRAIL++, takes negative prompts).
 - FLUX Kontext for image editing and multi-reference composition.
 
-What is available depends on the profile the user installed. Only SDXL Turbo is present with `fast`; `quality` adds FLUX Dev (or the fine-tuned SDXL if the GPU has less than 12 GB) and `full` adds FLUX Kontext, which needs at least 12 GB of GPU memory.
+What is available depends on the profile the user installed. Only SDXL Turbo is present with `fast`; `quality` adds the quality model the user chose with `imagehearth-mcp setup --quality-model flux-dev|flux-schnell|sdxl` (`list_workflows` and `get_engine_status` say which is active and whether its license allows commercial use) and `full` adds FLUX Kontext, which needs at least 12 GB of GPU memory and is non-commercial. Only one quality model is installed at a time; changing it is `setup` again, or `setup_start` with another `quality_model`: tell the user it replaces the current one.
 
 - A centralized orchestration layer for GPU memory management.
 - MCP as the agent-independent interface.
@@ -65,7 +65,7 @@ When `mode="edit"`:
 For generation without references:
 
 - `fast`: SDXL Turbo.
-- `high`: FLUX Dev, or the fine-tuned SDXL on GPUs with less memory.
+- `high`: the quality model the user installed (FLUX Dev, FLUX Schnell or SDXL 1.0). Negative prompts only apply to SDXL 1.0. FLUX Schnell and SDXL 1.0 draw painterly unless told otherwise: `style="auto"` (default) adds photographic cues unless the prompt names another medium, but for realism still write the prompt like a photograph (subject, light, lens).
 
 Quality does not change the editing backend. Image editing always uses FLUX Kontext.
 

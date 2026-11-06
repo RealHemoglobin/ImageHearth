@@ -42,9 +42,12 @@ ComfyUI: call ensure_comfyui. If it still fails, report the actual error.
 must free GPU memory.
 
 Installing: setup_status shows what is missing, sizes and licenses. setup_start \
-downloads many GB. Before calling it you MUST tell the user the profile, download \
-size and licenses, ask them, and wait for a clear yes. Never accept licenses on \
-their behalf.
+downloads many GB. Before calling it you MUST tell the user the profile, the quality \
+model (for quality and full), the download size, the licenses and any warning that \
+the model doesn't fit their GPU, let them choose the model (say which one is \
+recommended), ask them, and wait for a clear yes. Never accept licenses or choose a \
+model on their behalf. Changing the quality model later is also setup_start with \
+another quality_model: tell the user it replaces the current one.
 """
 
 mcp = FastMCP("imagehearth", instructions=INSTRUCTIONS)
@@ -108,6 +111,7 @@ async def create_image(
     height: int = 0,
     negative_prompt: str = "",
     include_image: bool = False,
+    style: str = "auto",
     ctx: Context = None,
 ):
     """Create or edit images. If you need more than one image, make ONE call with
@@ -123,18 +127,23 @@ async def create_image(
       Several images: a list with one string per image (up to 20 unless the user
       changed it), generated together in a single session. A list item can also be
       an object {"prompt": ..., "quality": ..., "width": ..., "height": ...,
-      "negative_prompt": ..., "image_paths": ...} to differ from the common
+      "negative_prompt": ..., "style": ..., "image_paths": ...} to differ from the common
       values below. Items are independent: none can use the result of another
       (editing a result is a later call), and a list is all new images or all
       edits, never both.
-    quality: "fast" (SDXL Turbo, seconds) for drafts, "high" (FLUX Dev, or a
-      fine-tuned SDXL on GPUs with less memory) when the user wants a detailed
-      result. Ignored when editing.
+    quality: "fast" (SDXL Turbo, seconds) for drafts, "high" (the quality model
+      the user installed: FLUX Dev, FLUX Schnell or SDXL 1.0) when the user wants a
+      detailed result. Ignored when editing.
     image_paths: Up to six existing image files. Giving any makes this an edit
       with FLUX Kontext.
     width, height: Size in pixels, 64 to 4096. Default 1024x1024; editing keeps
       the size of the first image.
     mode: Leave as "auto". "generate" or "edit" force one of them.
+    style: "auto" (default) adds photographic cues for the FLUX Schnell and SDXL 1.0
+      quality models, which otherwise draw in a painterly way, unless the prompt asks
+      for another medium (painting, anime, illustration...). "photo" always adds
+      them; "none" sends the prompt as written. Other models are never changed. For
+      realism, still describe the scene like a photograph: subject, light, lens.
     workflow: Leave empty. Only for a name returned by list_workflows.
     negative_prompt: What to avoid. SDXL models apply it; FLUX ignores it.
     include_image: true also returns the picture to you, for models with vision.
@@ -166,6 +175,7 @@ async def create_image(
             image_paths=image_paths,
             workflow=workflow,
             mode=mode,
+            style=style,
         )
         return str(result)
 
@@ -180,6 +190,7 @@ async def create_image(
         width=width,
         height=height,
         negative_prompt=negative_prompt,
+        style=style,
     )
 
     if not include_image:
@@ -198,12 +209,29 @@ def list_workflows() -> list:
     """List the installed generation workflows. create_image doesn't need this.
 
     It is checked on every call, so a later setup shows up without a restart.
-    If none is installed, the only item has a next_step saying what to do.
+    The item of the quality model that quality="high" uses has active=true, its
+    quality_model (flux-dev, flux-schnell or sdxl), its license and whether it allows
+    commercial use. If none is installed, the only item has a next_step saying what to do.
     """
     workflows = [
         {"name": name, "file": f"{name}.json"} for name in available_workflows()
     ]
-    return workflows or [{"next_step": catalog.missing_installation()}]
+
+    if not workflows:
+        return [{"next_step": catalog.missing_installation()}]
+
+    active = catalog.active_quality_model()
+
+    for item in workflows:
+        if active and item["name"] == active["workflow"]:
+            item.update(
+                quality_model=active["name"],
+                license=active["license"],
+                commercial_use=active["commercial_use"],
+                active=True,
+            )
+
+    return workflows
 
 
 @mcp.tool()
@@ -215,6 +243,8 @@ async def get_engine_status() -> dict:
     not_installed: see imageengine.issues, or call setup_status.
     degraded: a problem, see imageengine.issues.
     recovery_required: call recover_engine.
+    imageengine.quality_model is the model quality="high" generates with, its license
+    and whether it allows commercial use (null if none is installed).
     memory.mode says how local models are handled: auto, off or manual.
     """
     return await asyncio.to_thread(get_status)
@@ -246,7 +276,9 @@ async def setup_status() -> dict:
     """Show what is installed, what is missing, and the progress of an installation.
 
     Lists each profile with its download size, licenses and whether it suits this
-    hardware. Nothing is changed or downloaded.
+    hardware, and the quality models (FLUX Dev, FLUX Schnell, SDXL 1.0) with size,
+    minimum VRAM, license, commercial use, whether they fit this GPU, which one is
+    recommended and which one is installed. Nothing is changed or downloaded.
     """
     # Se importa al usarse: el arranque del servidor no carga el provisioner.
     from imagehearth_mcp.provisioner import agent_setup
@@ -259,6 +291,7 @@ async def setup_start(
     profile: str,
     accept_licenses: bool,
     existing_comfyui: str = "",
+    quality_model: str = "",
 ) -> dict:
     """Install ComfyUI and models. Downloads many GB: ask the user first.
 
@@ -268,11 +301,16 @@ async def setup_start(
     accept_licenses: true only if the user accepted the licenses.
     existing_comfyui: Folder of a ComfyUI to reuse, if setup_status found one and
       the user wants it. Empty installs a separate one.
-    Returns at once. The installation continues even if you disconnect; follow it
+    quality_model: For quality and full: flux-dev, flux-schnell or sdxl, as the user
+      chose from setup_status. Empty uses the recommended one for this GPU (or keeps
+      the installed one). On an existing installation a different one replaces the
+      current model: it is downloaded first and the old one deleted afterwards.
+    Returns at once, with the quality model used and a warning if it doesn't fit the
+    GPU: tell the user. The installation continues even if you disconnect; follow it
     with setup_status.
     """
     from imagehearth_mcp.provisioner import agent_setup
 
     return await asyncio.to_thread(
-        agent_setup.start, profile, accept_licenses, existing_comfyui
+        agent_setup.start, profile, accept_licenses, existing_comfyui, quality_model
     )

@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 import psutil
+import pytest
 import requests
 
 from imagehearth_mcp.engine import config, memory_servers, orchestrator, state
@@ -374,90 +375,165 @@ def _catalog():
     return manifest.load()
 
 
-def test_the_ladder_picks_the_variant_that_fits_the_vram():
+def test_the_ladder_picks_the_precision_that_fits_the_vram():
     catalog = _catalog()
     quality = catalog.profiles["quality"]
     full = catalog.profiles["full"]
 
-    assert catalog.resolve(quality, 24564).name == "quality"
-    assert catalog.resolve(quality, 20480).name == "quality"
-    assert catalog.resolve(quality, 16384).name == "quality-gguf"
-    assert catalog.resolve(quality, 12288).name == "quality-gguf"
-    assert catalog.resolve(full, 16384).name == "full-gguf"
-    assert catalog.resolve(quality, 0).name == "quality"
-    assert catalog.resolve(quality, 24564, "gguf").name == "quality-gguf"
-    assert catalog.resolve(quality, 11000).name == "quality-sdxl"
-    assert catalog.resolve(quality, 8192).name == "quality-sdxl"
-    assert catalog.resolve(quality, 24564, "sdxl").name == "quality-sdxl"
-    assert catalog.resolve(quality, 8192, "gguf").name == "quality-gguf"
-    assert catalog.resolve(quality, 8192, "fp8").name == "quality"
-    # Profiles with no variants are left to the preflight checks.
-    assert catalog.resolve(catalog.profiles["fast"], 1000).name == "fast"
+    def resolved(profile, model, vram, forced=None):
+        item = catalog.resolve(profile, model, vram, forced)
+        return item.name, item.precision
+
+    assert resolved(quality, "flux-dev", 24564) == ("quality", "fp8")
+    assert resolved(quality, "flux-dev", 20480) == ("quality", "fp8")
+    assert resolved(quality, "flux-dev", 16384) == ("quality-gguf", "gguf")
+    assert resolved(quality, "flux-dev", 12288) == ("quality-gguf", "gguf")
+    assert resolved(full, "flux-dev", 16384) == ("full-gguf", "gguf")
+    assert resolved(quality, "flux-dev", 0) == ("quality", "fp8")
+    assert resolved(quality, "flux-dev", 24564, "gguf") == ("quality-gguf", "gguf")
+    assert resolved(quality, "flux-schnell", 24564) == ("quality", "fp8")
+    assert resolved(quality, "sdxl", 8192) == ("quality", "fp16")
+    # SDXL with editing: Kontext still picks its precision by memory.
+    assert catalog.resolve(full, "sdxl", 16384).edit_precision == "gguf"
+    assert catalog.resolve(full, "sdxl", 24564).edit_precision == "fp8"
+    # Profiles with no quality model are left to the preflight checks.
+    assert catalog.resolve(catalog.profiles["fast"], None, 1000).name == "fast"
+    # Without a model, the recommended one.
+    assert catalog.resolve(quality, None, 24564).quality_model == "flux-dev"
+    assert catalog.resolve(quality, None, 16000).quality_model == "flux-schnell"
+    assert catalog.resolve(quality, None, 8192).quality_model == "sdxl"
 
 
-def test_where_nothing_fits_the_error_says_what_to_use_instead():
+def test_recommendation_follows_the_vram_bands():
+    catalog = _catalog()
+    assert catalog.recommend(24564) == "flux-dev"
+    assert catalog.recommend(20000) == "flux-dev"
+    assert catalog.recommend(19999) == "flux-schnell"
+    assert catalog.recommend(12000) == "flux-schnell"
+    assert catalog.recommend(11999) == "sdxl"
+    assert catalog.recommend(4000) == "sdxl"
+    assert catalog.recommend(0) == "flux-dev"
+
+
+def test_a_model_that_does_not_fit_is_resolved_with_a_warning():
+    catalog = _catalog()
+    quality = catalog.profiles["quality"]
+
+    assert catalog.fits("flux-dev", 24564) and catalog.warning("flux-dev", 24564) is None
+    assert catalog.fits("flux-dev", 0)
+    # FLUX Dev still resolves, to its leanest option, and says what it needs.
+    resolved = catalog.resolve(quality, "flux-dev", 8192)
+    assert resolved.precision == "gguf"
+    warning = catalog.warning("flux-dev", 8192)
+    assert "12000 MiB" in warning and "8192 MiB" in warning
+    assert "flux-schnell" not in str(catalog.warning("sdxl", 8192))
+
+
+def test_where_nothing_fits_editing_says_what_to_use_instead():
     from imagehearth_mcp.provisioner import ProvisionError
 
     catalog = _catalog()
-    cases = {"quality": (6144, "8000 MiB", False), "full": (10240, "12000 MiB", True)}
 
-    for name, (vram, minimum, editing) in cases.items():
-        try:
-            catalog.resolve(catalog.profiles[name], vram)
-        except ProvisionError as error:
-            assert minimum in str(error) and "--profile fast" in str(error)
-            assert ("editing" in str(error)) == editing
-        else:
-            raise AssertionError
+    with pytest.raises(ProvisionError) as error:
+        catalog.resolve(catalog.profiles["full"], "sdxl", 10240)
 
-    try:
-        catalog.resolve(catalog.profiles["quality"], 16000, "nope")
-    except ProvisionError as error:
-        assert "fp8, gguf, sdxl" in str(error)
-    else:
-        raise AssertionError
+    assert "12000 MiB" in str(error.value) and "--profile quality" in str(error.value)
+    assert "editing" in str(error.value)
+
+    with pytest.raises(ProvisionError, match="fp8, gguf"):
+        catalog.resolve(catalog.profiles["quality"], "flux-dev", 16000, "nope")
+
+    with pytest.raises(ProvisionError, match="Unknown quality model"):
+        catalog.resolve(catalog.profiles["quality"], "nope", 16000)
 
 
-def test_sdxl_variant_is_licensed_for_commercial_use_and_pinned():
+def test_sdxl_is_licensed_for_commercial_use_and_pinned():
     catalog = _catalog()
-    variant = catalog.profiles["quality-sdxl"]
-    assert variant.variant_of == "quality" and not variant.nodes
-    added = {m.name: m for m in variant.models if m.name != "sdxl_turbo"}
-    assert set(added) == {"realvisxl", "sdxl_offset_lora"}
+    resolved = catalog.resolve(catalog.profiles["quality"], "sdxl", 8192)
+    assert not resolved.nodes
+    added = {m.name: m for m in resolved.models if m.name != "sdxl_turbo"}
+    assert set(added) == {"sdxl_base", "sdxl_offset_lora"}
     assert {m.license for m in added.values()} == {"openrail-pp"}
-    assert "openrail-pp" in {entry.key for entry in catalog.licenses_for(variant)}
+    assert "openrail-pp" in {entry.key for entry in catalog.licenses_for(resolved)}
+    assert catalog.minimum_profile("sdxl_base", "linux").base == "quality"
     assert catalog.minimum_profile("sdxl_quality", "linux").base == "quality"
+    assert catalog.models["realvisxl"].legacy
     notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
-    assert "RealVisXL" in notices and "offset LoRA" in notices
+    assert "SDXL 1.0" in notices and "offset LoRA" in notices
 
 
-def test_sdxl_quality_workflow_fits_the_template_conventions():
+def test_schnell_and_sdxl_carry_no_non_commercial_license():
+    catalog = _catalog()
+
+    for model in ("flux-schnell", "sdxl"):
+        for name in ("quality", "full"):
+            resolved = catalog.resolve(catalog.profiles[name], model, 24564)
+            keys = {entry.key for entry in catalog.licenses_for(resolved)}
+            expected = name == "full"  # only Kontext, for editing
+            assert ("flux-dev-non-commercial" in keys) == expected
+            assert {m.name for m in resolved.models} & {"flux_dev", "flux_dev_gguf"} == set()
+
+    assert catalog.describe_quality("flux-dev", 24564)["commercial_use"] is False
+    assert catalog.describe_quality("flux-schnell", 24564)["commercial_use"] is True
+    assert catalog.describe_quality("sdxl", 24564)["commercial_use"] is True
+
+
+def test_full_with_sdxl_includes_the_flux_components_through_kontext():
+    catalog = _catalog()
+    resolved = catalog.resolve(catalog.profiles["full"], "sdxl", 24564)
+    assert {"t5xxl", "clip_l", "flux_vae", "flux_kontext"} <= {m.name for m in resolved.models}
+    quality = catalog.resolve(catalog.profiles["quality"], "sdxl", 24564)
+    assert not {"t5xxl", "clip_l", "flux_vae"} & {m.name for m in quality.models}
+
+
+def test_sdxl_workflows_fit_the_template_conventions():
     import json
 
+    from imagehearth_mcp.engine import catalog as engine_catalog
     from imagehearth_mcp.engine import config as engine_config
     from imagehearth_mcp.engine.workflow_runner import negative_prompt_applies
 
-    workflow = json.loads((engine_config.WORKFLOWS_DIR / "sdxl_quality.json").read_text(encoding="utf-8"))
+    for name in ("sdxl_base", "sdxl_quality"):
+        workflow = json.loads((engine_config.WORKFLOWS_DIR / f"{name}.json").read_text(encoding="utf-8"))
+        kinds = {node["class_type"] for node in workflow.values()}
+        assert {"CheckpointLoaderSimple", "LoraLoader", "KSampler", "SaveImage"} <= kinds
+        assert negative_prompt_applies(workflow)
+        sampler = next(n for n in workflow.values() if n["class_type"] == "KSampler")
+        assert sampler["inputs"]["steps"] > 4
+
+    base = json.loads((engine_config.WORKFLOWS_DIR / "sdxl_base.json").read_text(encoding="utf-8"))
+    assert base["1"]["inputs"]["ckpt_name"] == "sd_xl_base_1.0.safetensors"
+    assert engine_catalog.VARIANTS["high"] == (
+        "flux_dev",
+        "flux_dev_gguf",
+        "flux_schnell",
+        "sdxl_base",
+        "sdxl_quality",
+    )
+
+
+def test_schnell_workflow_has_four_steps_and_no_guidance():
+    import json
+
+    from imagehearth_mcp.engine import config as engine_config
+
+    workflow = json.loads((engine_config.WORKFLOWS_DIR / "flux_schnell.json").read_text(encoding="utf-8"))
     kinds = {node["class_type"] for node in workflow.values()}
-    assert {"CheckpointLoaderSimple", "LoraLoader", "KSampler", "SaveImage"} <= kinds
-    assert negative_prompt_applies(workflow)
+    assert "FluxGuidance" not in kinds
     sampler = next(n for n in workflow.values() if n["class_type"] == "KSampler")
-    assert sampler["inputs"]["steps"] > 4
-
-    from imagehearth_mcp.engine import catalog as engine_catalog
-
-    assert engine_catalog.VARIANTS["high"] == ("flux_dev", "flux_dev_gguf", "sdxl_quality")
-    assert engine_catalog.choose("high", 8192) in {"flux_dev", "flux_dev_gguf", "sdxl_quality"}
+    assert sampler["inputs"]["steps"] == 4 and sampler["inputs"]["cfg"] == 1.0
+    assert workflow["1"]["inputs"]["unet_name"] == "flux1-schnell-fp8-e4m3fn.safetensors"
+    save = next(n for n in workflow.values() if n["class_type"] == "SaveImage")
+    assert save["inputs"]["filename_prefix"] == "imagehearth/flux_schnell"
 
 
-def test_variants_are_hidden_from_the_profile_list_but_proposed_by_vram():
+def test_profiles_are_proposed_by_vram():
     from types import SimpleNamespace
 
     from imagehearth_mcp.provisioner import setup
 
     catalog = _catalog()
-    assert "quality-gguf" not in catalog.profiles_for("linux")
-    assert "quality-gguf" in catalog.profiles
+    assert list(catalog.profiles_for("linux")) == ["fast", "quality", "full"]
 
     def propose(vram):
         gpu = SimpleNamespace(vram_mib=vram)
@@ -473,14 +549,14 @@ def test_variants_are_hidden_from_the_profile_list_but_proposed_by_vram():
     assert propose(6144) == "fast"
 
 
-def test_gguf_variants_carry_their_node_models_and_licenses():
+def test_gguf_options_carry_their_node_models_and_licenses():
     catalog = _catalog()
-    variant = catalog.profiles["quality-gguf"]
-    assert variant.variant_of == "quality" and variant.base == "quality"
-    assert [node.folder for node in variant.nodes]
-    assert {"flux_dev_gguf", "t5xxl_gguf"} <= {model.name for model in variant.models}
-    assert variant.bytes < catalog.profiles["quality"].bytes
-    assert "flux-dev-non-commercial" in {entry.key for entry in catalog.licenses_for(variant)}
+    resolved = catalog.resolve(catalog.profiles["quality"], "flux-dev", 16000)
+    assert resolved.variant_of == "quality" and resolved.base == "quality"
+    assert [node.folder for node in resolved.nodes]
+    assert {"flux_dev_gguf", "t5xxl_gguf"} <= {model.name for model in resolved.models}
+    assert resolved.bytes < catalog.resolve(catalog.profiles["quality"], "flux-dev", 24564).bytes
+    assert "flux-dev-non-commercial" in {entry.key for entry in catalog.licenses_for(resolved)}
 
 
 def test_service_is_told_by_its_cgroup_when_there_is_one():

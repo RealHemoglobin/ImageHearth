@@ -33,43 +33,43 @@ La puerta de calidad obligatoria de [tech-stack](../tech-stack.md) es `scripts/c
 
 Los tests deben cubrir:
 
-- [ ] Combinaciones perfil-modelo: modelos, nodos y licencias resueltos para `quality` y `full` con cada modelo y cada variante de precisión.
-- [ ] `full` con `sdxl` incluye T5, CLIP-L y el VAE de FLUX por Kontext.
-- [ ] `quality` con `flux-schnell` o `sdxl` sin licencia `flux-dev-non-commercial`.
-- [ ] Recomendación por tramos de VRAM y advertencia para un modelo que no cabe.
-- [ ] `--quality-model` y pregunta interactiva; sin valor, recomendación anunciada en la salida.
-- [ ] La elección se registra en el manifiesto de instalación.
-- [ ] El catálogo usa el workflow del modelo instalado.
-- [ ] `doctor` (también `--json`), `get_engine_status` y `list_workflows` con modelo y licencia.
-- [ ] Metadatos del PNG con modelo y workflow.
-- [ ] Migración de registros antiguos con FLUX Dev, FLUX Dev GGUF y RealVisXL; RealVisXL preexistente no se borra.
-- [ ] El cambio descarga y verifica antes de borrar.
-- [ ] Un fallo a mitad deja el modelo anterior funcionando y el registro sin cambiar; repetir continúa.
-- [ ] Archivos compartidos con Kontext o con el modelo nuevo conservados.
-- [ ] Modelos preexistentes y del modo adjunto nunca borrados.
-- [ ] Espacio comprobado con ambos modelos conviviendo.
-- [ ] Cambio rechazado con una generación en curso; ComfyUI gestionado reiniciado.
-- [ ] `setup_status` con la lista de modelos y `setup_start` con `quality_model` y advertencia.
+- [x] Combinaciones perfil-modelo: modelos, nodos y licencias resueltos para `quality` y `full` con cada modelo y cada variante de precisión.
+- [x] `full` con `sdxl` incluye T5, CLIP-L y el VAE de FLUX por Kontext.
+- [x] `quality` con `flux-schnell` o `sdxl` sin licencia `flux-dev-non-commercial`.
+- [x] Recomendación por tramos de VRAM y advertencia para un modelo que no cabe.
+- [x] `--quality-model` y pregunta interactiva; sin valor, recomendación anunciada en la salida.
+- [x] La elección se registra en el manifiesto de instalación.
+- [x] El catálogo usa el workflow del modelo instalado.
+- [x] `doctor` (también `--json`), `get_engine_status` y `list_workflows` con modelo y licencia.
+- [x] Metadatos del PNG con modelo y workflow.
+- [x] Migración de registros antiguos con FLUX Dev, FLUX Dev GGUF y RealVisXL; RealVisXL preexistente no se borra.
+- [x] El cambio descarga y verifica antes de borrar.
+- [x] Un fallo a mitad deja el modelo anterior funcionando y el registro sin cambiar; repetir continúa.
+- [x] Archivos compartidos con Kontext o con el modelo nuevo conservados.
+- [x] Modelos preexistentes y del modo adjunto nunca borrados.
+- [x] Espacio comprobado con ambos modelos conviviendo.
+- [x] Cambio rechazado con una generación en curso; ComfyUI gestionado reiniciado.
+- [x] `setup_status` con la lista de modelos y `setup_start` con `quality_model` y advertencia.
 
 ## Validaciones manuales (RTX 4090 en Linux)
 
-- [ ] Comparación del refiner de SDXL con los mismos prompts y semillas; decisión anotada en la evidencia.
-- [ ] Mismo prompt y semilla con `flux-dev`, `flux-schnell` y `sdxl`, cambiando con `setup`; tiempos y pico de VRAM anotados.
-- [ ] Ciclo `flux-dev` → `flux-schnell` → `sdxl` → `flux-dev` en `full`: Kontext funciona tras cada cambio y el disco usado vuelve al de partida.
-- [ ] Cambio interrumpido durante la descarga: se sigue generando con el modelo anterior; repetir el comando lo termina.
-- [ ] Schnell fp8 con 12 GB de VRAM medido; umbral de la recomendación fijado (y GGUF añadido si hizo falta).
-- [ ] Instalación `quality` con Schnell y con SDXL sin archivos de licencia no comercial de FLUX.
+- [x] Comparación del refiner de SDXL con los mismos prompts y semillas; decisión anotada en la evidencia.
+- [x] Mismo prompt y semilla con `flux-dev`, `flux-schnell` y `sdxl`, cambiando con `setup`; tiempos y pico de VRAM anotados.
+- [x] Ciclo `flux-dev` → `flux-schnell` → `sdxl` → `flux-dev` en `full`: Kontext funciona tras cada cambio y el disco usado vuelve al de partida.
+- [x] Cambio interrumpido durante la descarga: se sigue generando con el modelo anterior; repetir el comando lo termina.
+- [x] Schnell fp8 con 12 GB de VRAM medido (simulado con `--reserve-vram 12` en la 4090, no en una tarjeta de 12 GB real); umbral de 12 GB mantenido, sin GGUF de Schnell.
+- [x] Instalación `quality` con Schnell y con SDXL sin archivos de licencia no comercial de FLUX (comprobado sobre el manifiesto real en los tests; en la máquina solo había un `full`, que incluye Kontext).
 - [ ] `setup` interactivo muestra tamaño, VRAM, licencia, uso comercial, recomendada y advertencias.
-- [ ] Instalación anterior con FLUX Dev actualizada a la rama: sigue generando y `doctor` muestra `flux-dev`.
+- [x] Instalación anterior con FLUX Dev actualizada a la rama: sigue generando y `doctor` muestra `flux-dev`.
 - [ ] **Mantenedor:** desde Claude Code, `setup_status` y `setup_start` presentan modelo, licencia y advertencias y el agente deja elegir.
-- [ ] Comparativa de los tres modelos en `README.md` y `README.es.md`.
+- [x] Comparativa de los tres modelos en `README.md` y `README.es.md`.
 
 ## Lista para fusionar
 
-- [ ] `scripts/check.sh` en verde en Linux.
-- [ ] Prueba de contrato `/object_info` en verde con los workflows nuevos.
-- [ ] Validaciones manuales completadas.
-- [ ] Instrucciones del servidor MCP, skill `imagehearth`, mensajes de "no instalado", `tech-stack.md`, `docs/troubleshooting.md` y `THIRD_PARTY_NOTICES.md` actualizados.
+- [x] `scripts/check.sh` en verde en Linux.
+- [x] Prueba de contrato `/object_info` en verde con los workflows nuevos.
+- [ ] Validaciones manuales completadas (faltan `setup` interactivo comprobado a mano y el agente real, del mantenedor).
+- [x] Instrucciones del servidor MCP, skill `imagehearth`, mensajes de "no instalado", `tech-stack.md`, `docs/troubleshooting.md` y `THIRD_PARTY_NOTICES.md` actualizados.
 - [ ] README con la tabla, la comparativa y cómo cambiar de modelo.
 - [ ] Roadmap con las tareas hechas marcadas y la fase como completada.
 - [ ] Cambios revisados por el usuario, que realiza el commit.
@@ -78,13 +78,13 @@ Los tests deben cubrir:
 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
-| `scripts/check.sh` en Linux | | |
-| Prueba de contrato `/object_info` | | |
-| Refiner de SDXL | | |
-| Comparativa de los tres modelos | | |
-| Ciclo de cambios en `full` | | |
-| Cambio interrumpido | | |
-| Schnell con 12 GB | | |
-| Licencias de una instalación comercial | | |
-| Migración de una instalación anterior | | |
+| `scripts/check.sh` en Linux | 509 tests en verde, en el repositorio y contra el wheel | 2026-11-06 |
+| Prueba de contrato `/object_info` | OK: 20 tipos de nodo, con `flux_schnell` y `sdxl_base` | 2026-11-06 |
+| Refiner de SDXL | Sin mejora visible (mismas 3 imágenes, misma semilla; `comparison/refiner-grid.jpg`). No se incluye y se retira la entrada del manifiesto | 2026-11-06 |
+| Comparativa de los tres modelos | `comparison/grid.jpg`. Pico de VRAM / primera / siguientes: FLUX Dev 19,4 GB / 12,8 s / 10,3 s; Schnell 19,4 GB / 5,2 s / 2,8 s; SDXL 9,6 GB / 5,7 s / 4,0 s (`measurements/*.json`) | 2026-11-06 |
+| Ciclo de cambios en `full` | dev → schnell → sdxl → dev: Kontext OK tras cada cambio; disco 36.483.150.072 B antes y después, idéntico | 2026-11-06 |
+| Cambio interrumpido | SIGINT a 0,6 GB de SDXL: `doctor` y generación con Schnell intactos, registro sin cambiar; al repetir, «Resuming from 0.6 GB» y termina | 2026-11-06 |
+| Schnell con 12 GB | `--reserve-vram 12`: pico 12,3 GB, 2,8 s por imagen; con 14: 10,2 GB y 2,8 s. Simulado, no en una tarjeta de 12 GB real | 2026-11-06 |
+| Licencias de una instalación comercial | Tests sobre el manifiesto real: `quality` con Schnell o SDXL sin `flux-dev-non-commercial`; con `full` solo por Kontext | 2026-11-06 |
+| Migración de una instalación anterior | La instalación real (registro anterior, FLUX Dev fp8) se dedujo como `flux-dev` y siguió generando; PNG real con `ImageHearth-Quality-Model: flux-dev` | 2026-11-06 |
 | Agente real con `setup_start` | | |

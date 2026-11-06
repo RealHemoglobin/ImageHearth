@@ -311,53 +311,53 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 
 ### Catálogo y manifiesto
 
-- [ ] Separar el **perfil** (qué capacidades: `fast`, `quality`, `full`) del **modelo de `quality`** (`flux-dev`, `flux-schnell` o `sdxl`). El perfil sigue diciendo qué se instala; el modelo de `quality` decide qué pesos de generación de calidad lo componen.
-- [ ] Añadir FLUX.1 Schnell a `models.toml` con repositorio, revisión, SHA-256, tamaño y licencia `apache-2`. Reutiliza T5, CLIP-L y el VAE de FLUX. El repositorio oficial exige aprobación automática: documentar `HF_TOKEN` o elegir un origen alternativo estable (por ejemplo la versión fp8 reempaquetada para ComfyUI).
-- [ ] Añadir SDXL 1.0 a `models.toml` (`stabilityai/stable-diffusion-xl-base-1.0`, `openrail-pp`), con revisión y SHA-256 fijados. Se usa con la misma LoRA de detalle que ya instala la fase 7 y sustituye a RealVisXL en `quality-sdxl`.
-- [ ] **Refiner de SDXL:** comparar base con LoRA frente a base con LoRA y refiner (`stabilityai/stable-diffusion-xl-refiner-1.0`, `openrail-pp`) usando los mismos prompts y semillas. Si el refiner mejora la calidad, se incluye en el workflow y en el manifiesto; si no, se queda solo el modelo base.
-- [ ] **FLUX.1 Schnell con poca VRAM:** medir durante la implementación si fp8 genera bien con 12 GB y descarga parcial a RAM. Solo se añade una variante GGUF si las mediciones lo piden.
-- [ ] Combinar la elección con la escalera de variantes de la [fase 7](#fase-7-adaptación-al-hardware): el usuario elige la familia y el hardware decide la precisión (fp8 o GGUF) cuando exista.
-- [ ] **El hardware recomienda y el usuario decide:** se ofrecen siempre los tres modelos. Si el elegido pide más VRAM o RAM de la que hay, se permite instalarlo igualmente con una advertencia que da el mínimo medido y la memoria detectada.
-- [ ] En `full`, Kontext sigue necesitando T5, CLIP-L y el VAE de FLUX aunque el modelo de `quality` sea SDXL: el manifiesto los incluye por Kontext y no por el modelo de `quality`.
-- [ ] Registrar el modelo de `quality` elegido en el manifiesto de instalación.
+- [x] Separar el **perfil** (qué capacidades: `fast`, `quality`, `full`) del **modelo de `quality`** (`flux-dev`, `flux-schnell` o `sdxl`). El perfil sigue diciendo qué se instala; el modelo de `quality` decide qué pesos de generación de calidad lo componen.
+- [x] Añadir FLUX.1 Schnell a `models.toml` con repositorio, revisión, SHA-256, tamaño y licencia `apache-2`. Reutiliza T5, CLIP-L y el VAE de FLUX. El repositorio oficial exige aprobación automática: documentar `HF_TOKEN` o elegir un origen alternativo estable (por ejemplo la versión fp8 reempaquetada para ComfyUI).
+- [x] Añadir SDXL 1.0 a `models.toml` (`stabilityai/stable-diffusion-xl-base-1.0`, `openrail-pp`), con revisión y SHA-256 fijados. Se usa con la misma LoRA de detalle que ya instala la fase 7 y sustituye a RealVisXL en `quality-sdxl`.
+- [x] **Refiner de SDXL:** comparar base con LoRA frente a base con LoRA y refiner (`stabilityai/stable-diffusion-xl-refiner-1.0`, `openrail-pp`) usando los mismos prompts y semillas. Si el refiner mejora la calidad, se incluye en el workflow y en el manifiesto; si no, se queda solo el modelo base.
+- [x] **FLUX.1 Schnell con poca VRAM:** medir durante la implementación si fp8 genera bien con 12 GB y descarga parcial a RAM. Solo se añade una variante GGUF si las mediciones lo piden.
+- [x] Combinar la elección con la escalera de variantes de la [fase 7](#fase-7-adaptación-al-hardware): el usuario elige la familia y el hardware decide la precisión (fp8 o GGUF) cuando exista.
+- [x] **El hardware recomienda y el usuario decide:** se ofrecen siempre los tres modelos. Si el elegido pide más VRAM o RAM de la que hay, se permite instalarlo igualmente con una advertencia que da el mínimo medido y la memoria detectada.
+- [x] En `full`, Kontext sigue necesitando T5, CLIP-L y el VAE de FLUX aunque el modelo de `quality` sea SDXL: el manifiesto los incluye por Kontext y no por el modelo de `quality`.
+- [x] Registrar el modelo de `quality` elegido en el manifiesto de instalación.
 
 ### Workflows
 
-- [ ] Workflow `flux_schnell`: 4 pasos, sin CFG ni guía, con los parámetros recomendados del modelo.
-- [ ] Workflow `sdxl_base`: resolución nativa de 1024, pasos y CFG propios de SDXL base.
-- [ ] Incluirlos en `VARIANTS["high"]`; el catálogo usa el que esté instalado, como ahora.
-- [ ] `list_workflows`, `get_engine_status` y `doctor` muestran qué modelo de `quality` está activo y su licencia.
-- [ ] Guardar en los metadatos del PNG el modelo y el workflow que generaron cada imagen, para poder comparar después.
+- [x] Workflow `flux_schnell`: 4 pasos, sin CFG ni guía, con los parámetros recomendados del modelo.
+- [x] Workflow `sdxl_base`: resolución nativa de 1024, pasos y CFG propios de SDXL base.
+- [x] Incluirlos en `VARIANTS["high"]`; el catálogo usa el que esté instalado, como ahora.
+- [x] `list_workflows`, `get_engine_status` y `doctor` muestran qué modelo de `quality` está activo y su licencia.
+- [x] Guardar en los metadatos del PNG el modelo y el workflow que generaron cada imagen, para poder comparar después.
 
 ### Instalación
 
-- [ ] Al elegir `quality` o `full` en `setup` interactivo, preguntar el modelo de `quality` mostrando de cada opción el tamaño de descarga, la VRAM mínima, la licencia y si permite uso comercial. Se marca como recomendada la que mejor encaja con el hardware, sea cual sea su licencia, y las que no caben se muestran con su advertencia en lugar de ocultarse.
-- [ ] Modo no interactivo: `--quality-model {flux-dev,flux-schnell,sdxl}`. Si falta, se usa la recomendación según el hardware y se indica en la salida. Si el modelo pedido no cabe en el hardware, se instala igual y se emite la advertencia.
-- [ ] `setup_status` lista los modelos de `quality` con tamaño, licencia, uso comercial, cuál se recomienda y si cabe en el hardware. `setup_start` acepta `quality_model` opcional y devuelve la advertencia de hardware si la hay. Las instrucciones del servidor obligan al agente a decir al usuario qué modelo, licencia y advertencias tiene la instalación antes de llamarlo, y a dejarle elegir a él.
-- [ ] El consentimiento de licencias muestra solo las de lo que se va a descargar: con Schnell o SDXL no aparece la licencia no comercial de FLUX Dev salvo que se instale Kontext.
+- [x] Al elegir `quality` o `full` en `setup` interactivo, preguntar el modelo de `quality` mostrando de cada opción el tamaño de descarga, la VRAM mínima, la licencia y si permite uso comercial. Se marca como recomendada la que mejor encaja con el hardware, sea cual sea su licencia, y las que no caben se muestran con su advertencia en lugar de ocultarse.
+- [x] Modo no interactivo: `--quality-model {flux-dev,flux-schnell,sdxl}`. Si falta, se usa la recomendación según el hardware y se indica en la salida. Si el modelo pedido no cabe en el hardware, se instala igual y se emite la advertencia.
+- [x] `setup_status` lista los modelos de `quality` con tamaño, licencia, uso comercial, cuál se recomienda y si cabe en el hardware. `setup_start` acepta `quality_model` opcional y devuelve la advertencia de hardware si la hay. Las instrucciones del servidor obligan al agente a decir al usuario qué modelo, licencia y advertencias tiene la instalación antes de llamarlo, y a dejarle elegir a él.
+- [x] El consentimiento de licencias muestra solo las de lo que se va a descargar: con Schnell o SDXL no aparece la licencia no comercial de FLUX Dev salvo que se instale Kontext.
 
 ### Cambio de modelo
 
-- [ ] `imagehearth-mcp setup` sobre una instalación existente muestra el modelo de `quality` actual y permite cambiarlo por otro, de forma interactiva o con `--quality-model`.
-- [ ] Antes de cambiar, mostrar qué se descarga, qué se borra y el espacio que se libera, y pedir confirmación (o `--yes` en modo no interactivo).
-- [ ] Descargar y verificar primero el modelo nuevo y borrar el anterior solo después: si la descarga se interrumpe o falla, la instalación sigue funcionando con el modelo anterior y repetir el comando continúa donde se quedó.
-- [ ] Borrar solo archivos que ImageHearth instaló (según el manifiesto de instalación) y que ningún otro componente instalado use: T5, CLIP-L y el VAE se conservan si los necesita Kontext o el modelo nuevo. Los modelos preexistentes o del modo adjunto no se borran nunca.
-- [ ] Comprobar el espacio libre teniendo en cuenta que durante el cambio conviven ambos modelos.
-- [ ] Rechazar el cambio mientras haya una generación en curso, y reiniciar el ComfyUI gestionado si estaba en marcha para que no siga con los pesos anteriores en memoria.
-- [ ] Las imágenes ya generadas no se tocan.
+- [x] `imagehearth-mcp setup` sobre una instalación existente muestra el modelo de `quality` actual y permite cambiarlo por otro, de forma interactiva o con `--quality-model`.
+- [x] Antes de cambiar, mostrar qué se descarga, qué se borra y el espacio que se libera, y pedir confirmación (o `--yes` en modo no interactivo).
+- [x] Descargar y verificar primero el modelo nuevo y borrar el anterior solo después: si la descarga se interrumpe o falla, la instalación sigue funcionando con el modelo anterior y repetir el comando continúa donde se quedó.
+- [x] Borrar solo archivos que ImageHearth instaló (según el manifiesto de instalación) y que ningún otro componente instalado use: T5, CLIP-L y el VAE se conservan si los necesita Kontext o el modelo nuevo. Los modelos preexistentes o del modo adjunto no se borran nunca.
+- [x] Comprobar el espacio libre teniendo en cuenta que durante el cambio conviven ambos modelos.
+- [x] Rechazar el cambio mientras haya una generación en curso, y reiniciar el ComfyUI gestionado si estaba en marcha para que no siga con los pesos anteriores en memoria.
+- [x] Las imágenes ya generadas no se tocan.
 
 ### Documentación
 
-- [ ] Tabla en el README con los tres modelos de `quality`: licencia, uso comercial, tamaño, VRAM y tiempo medidos.
-- [ ] Comparativa con los mismos prompts y semillas en los tres modelos, documentada en el README. Sustituye a la comparación de variantes pendiente de la fase 7.
-- [ ] Explicar cómo cambiar de modelo y que, en `full`, la edición con Kontext sigue siendo no comercial.
-- [ ] Los errores de "no instalado" y la skill `imagehearth` mencionan `--quality-model` cuando proceda.
+- [x] Tabla en el README con los tres modelos de `quality`: licencia, uso comercial, tamaño, VRAM y tiempo medidos.
+- [x] Comparativa con los mismos prompts y semillas en los tres modelos, documentada en el README. Sustituye a la comparación de variantes pendiente de la fase 7.
+- [x] Explicar cómo cambiar de modelo y que, en `full`, la edición con Kontext sigue siendo no comercial.
+- [x] Los errores de "no instalado" y la skill `imagehearth` mencionan `--quality-model` cuando proceda.
 
 ### Pruebas
 
-- [ ] Pruebas simuladas: la elección se registra en el manifiesto; el catálogo usa el workflow del modelo instalado; el cambio descarga antes de borrar; un fallo a mitad deja el modelo anterior funcionando; los archivos compartidos con Kontext se conservan; los modelos preexistentes no se borran; el cambio se rechaza con una generación en curso.
-- [ ] Prueba real etiquetada: generar el mismo prompt con la misma semilla con cada uno de los tres modelos en la RTX 4090, cambiando con `setup` entre uno y otro.
-- [ ] Prueba real etiquetada: ciclo `flux-dev` → `flux-schnell` → `sdxl` → `flux-dev` en un perfil `full`, comprobando tras cada cambio que la edición con Kontext sigue funcionando y que el disco usado vuelve al de partida.
+- [x] Pruebas simuladas: la elección se registra en el manifiesto; el catálogo usa el workflow del modelo instalado; el cambio descarga antes de borrar; un fallo a mitad deja el modelo anterior funcionando; los archivos compartidos con Kontext se conservan; los modelos preexistentes no se borran; el cambio se rechaza con una generación en curso.
+- [x] Prueba real etiquetada: generar el mismo prompt con la misma semilla con cada uno de los tres modelos en la RTX 4090, cambiando con `setup` entre uno y otro.
+- [x] Prueba real etiquetada: ciclo `flux-dev` → `flux-schnell` → `sdxl` → `flux-dev` en un perfil `full`, comprobando tras cada cambio que la edición con Kontext sigue funcionando y que el disco usado vuelve al de partida.
 
 ### Decisiones cerradas el 2026-11-05
 

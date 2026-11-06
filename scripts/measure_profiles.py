@@ -121,7 +121,7 @@ def submit_and_wait(base, workflow):
             if status.get("status_str") == "error":
                 sys.exit(f"The generation failed: {json.dumps(status)[:2000]}")
 
-            return
+            return history[prompt_id]
 
         time.sleep(0.25)
 
@@ -145,7 +145,7 @@ def upload_reference(base, folder):
     return f"{uploaded['subfolder']}/{uploaded['name']}"
 
 
-def build(name, base, folder):
+def build(name, base, folder, prompt=PROMPT, seed=None):
     filename = f"{MEASURE_FOLDER}/{uuid.uuid4().hex[:12]}"
 
     if name in config.INTERNAL_WORKFLOWS:
@@ -161,7 +161,34 @@ def build(name, base, folder):
     template = json.loads(
         (config.WORKFLOWS_DIR / f"{name}.json").read_text(encoding="utf-8")
     )
-    return prepare_workflow(template, PROMPT, "", WIDTH, HEIGHT, filename)
+    workflow = prepare_workflow(template, prompt, "", WIDTH, HEIGHT, filename)
+
+    for node in workflow.values():
+        if seed is not None and node.get("class_type") == "KSampler":
+            node["inputs"]["seed"] = seed
+
+    return workflow
+
+
+def save_comparison(name, base, folder, prompts, seed, destination):
+    """Same prompts and seed for every model, to compare them side by side."""
+    destination.mkdir(parents=True, exist_ok=True)
+    saved = []
+
+    for number, prompt in enumerate(prompts, start=1):
+        entry = submit_and_wait(base, build(name, base, folder, prompt, seed))
+        image = next(
+            image
+            for output in entry["outputs"].values()
+            for image in output.get("images", [])
+        )
+        reply = requests.get(f"{base}/view", params=image, timeout=120)
+        reply.raise_for_status()
+        path = destination / f"{name}-{number}.png"
+        path.write_bytes(reply.content)
+        saved.append(str(path))
+
+    return saved
 
 
 def unload(base):
@@ -251,6 +278,17 @@ def parse_args():
         help="Measure only this workflow. Repeat it for several.",
     )
     parser.add_argument(
+        "--images",
+        type=Path,
+        help="Also save one image per prompt and workflow here, for comparing models.",
+    )
+    parser.add_argument(
+        "--prompt",
+        action="append",
+        help="Prompt for --images. Repeat it for several (default: the measurement prompt).",
+    )
+    parser.add_argument("--seed", type=int, default=1234, help="Seed for --images.")
+    parser.add_argument(
         "--comfy-arg",
         action="append",
         default=[],
@@ -288,7 +326,9 @@ def main():
         else:
             print(
                 f"WARNING: skipping {name}: not installed "
-                f"(needs --profile {entry.profile}).",
+                f"(needs --profile {entry.profile}"
+                + (f" --quality-model {entry.quality_model}" if entry.quality_model else "")
+                + "). Switch models with `imagehearth-mcp setup --quality-model ...`.",
                 file=sys.stderr,
             )
 
@@ -303,6 +343,11 @@ def main():
             for name in selected:
                 print(f"Measuring {name}...", file=sys.stderr)
                 results.append(measure(name, base, folder, process.pid, args.runs))
+
+                if args.images:
+                    results[-1]["images"] = save_comparison(
+                        name, base, folder, args.prompt or [PROMPT], args.seed, args.images
+                    )
     finally:
         if not processes.terminate(process.pid, 30):
             processes.kill(process.pid)
