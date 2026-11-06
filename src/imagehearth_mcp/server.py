@@ -6,7 +6,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.utilities.types import Image
 from PIL import Image as PILImage
 
-from imagehearth_mcp.engine import catalog, config, orchestrator, progress
+from imagehearth_mcp.engine import batch, catalog, config, orchestrator, progress
 from imagehearth_mcp.engine.image_router import create_image as route_image
 from imagehearth_mcp.engine.status import get_status
 from imagehearth_mcp.engine.validation import available_workflows
@@ -14,13 +14,20 @@ from imagehearth_mcp.engine.validation import available_workflows
 INSTRUCTIONS = """\
 ImageHearth generates and edits images locally on this computer.
 
-Use create_image for every image request. To edit, pass the existing files in \
-image_paths. Don't call ComfyUI directly or unload language models yourself: \
-ImageHearth frees the GPU and gives the memory back when it finishes. If you are a \
+create_image is the only image tool. When the user wants more than one image, or \
+you have several to make, make ONE create_image call with a list of prompts in \
+prompt, e.g. prompt=["a fox", "an owl"]. Never call it once per image: the single \
+call returns when all are done and is much faster. For one image, pass a string. To \
+edit, pass the existing files in image_paths. Don't call ComfyUI directly or \
+unload language models yourself: ImageHearth frees the GPU and gives the memory back when it finishes. If you are a \
 local model, this works while you are loaded, so calling it is safe.
 
 After a tool returns:
-- The first line is the path of the image. Always tell the user that path.
+- For one prompt, the first line is the path of the image. Always tell the user \
+that path.
+- For a list of prompts, there is one line per prompt in the order you gave: \
+"3: /path.png" or "3: ERROR: reason". An error on one line doesn't affect the \
+others; retry only those. Tell the user every path.
 - Each following line starting with WARNING: means the image exists but something \
 needs attention. Tell the user and don't generate it again because of a warning.
 - Only say an image exists if the tool returned a path.
@@ -92,7 +99,7 @@ def _preview(path):
 # Sin salida estructurada: la imagen opcional no cabe en un esquema de texto.
 @mcp.tool(structured_output=False)
 async def create_image(
-    prompt: str,
+    prompt: str | list[str | dict],
     mode: str = "auto",
     quality: str = "fast",
     image_paths: list[str] | None = None,
@@ -103,11 +110,23 @@ async def create_image(
     include_image: bool = False,
     ctx: Context = None,
 ):
-    """Create a new image or edit existing ones. Use this for every image request.
+    """Create or edit images. If you need more than one image, make ONE call with
+    a list of prompts in prompt: never one call per image. The call waits and
+    returns when all are done, and it is much faster than separate calls.
 
-    Only prompt is required. To edit, put the existing files in image_paths.
+    One image: create_image(prompt="a red fox")
+    Several:   create_image(prompt=["a red fox", "a blue whale", "an owl"])
 
-    prompt: What to draw, or the change to make.
+    To edit, put the existing files in image_paths.
+
+    prompt: One image: a string, what to draw or the change to make.
+      Several images: a list with one string per image (up to 20 unless the user
+      changed it), generated together in a single session. A list item can also be
+      an object {"prompt": ..., "quality": ..., "width": ..., "height": ...,
+      "negative_prompt": ..., "image_paths": ...} to differ from the common
+      values below. Items are independent: none can use the result of another
+      (editing a result is a later call), and a list is all new images or all
+      edits, never both.
     quality: "fast" (SDXL Turbo, seconds) for drafts, "high" (FLUX Dev, or a
       fine-tuned SDXL on GPUs with less memory) when the user wants a detailed
       result. Ignored when editing.
@@ -120,12 +139,36 @@ async def create_image(
     negative_prompt: What to avoid. SDXL models apply it; FLUX ignores it.
     include_image: true also returns the picture to you, for models with vision.
       It uses context, so leave it false unless you need to look at the result.
+      Only for a single prompt.
 
     If the models are missing, the error names the setup command to run; another
     model is never used instead.
     Returns the image path on the first line. Tell the user that path. Later lines
     starting with WARNING mean the image exists but something needs attention.
+    With a list of prompts, the whole list is checked first (nothing is made if an
+    item is invalid) and the result has one line per prompt in order:
+    "1: /path/image.png" or "1: ERROR: reason". A failing item doesn't stop the
+    others. "| WARNING: ..." after a path is about that image; WARNING lines at the
+    end are about the whole call.
     """
+    if isinstance(prompt, list):
+        if include_image:
+            raise ValueError("include_image only works with a single prompt.")
+
+        result = await _run_generation(
+            ctx,
+            batch.run,
+            items=prompt,
+            quality=quality,
+            width=width,
+            height=height,
+            negative_prompt=negative_prompt,
+            image_paths=image_paths,
+            workflow=workflow,
+            mode=mode,
+        )
+        return str(result)
+
     result = await _run_generation(
         ctx,
         route_image,

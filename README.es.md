@@ -25,6 +25,23 @@ irm https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.ps
 - *"Cambia el fondo de `foto.png` por una montaña nevada"*: FLUX Kontext.
 - *"Combina estas tres fotos en una sola escena"*: hasta seis imágenes de referencia.
 
+### Varias imágenes a la vez
+
+Cuando tu agente ya sabe que necesita varias imágenes independientes, pasa una lista de prompts a `create_image` en una sola llamada, que termina cuando están todas. La GPU se prepara una vez para todo el lote: los modelos de lenguaje se descargan y se restauran una vez y ComfyUI arranca una vez, en lugar de repetirlo con cada imagen.
+
+> Haz cuatro variaciones rápidas de un logotipo y dos pósters de alta calidad, de 1024x768.
+
+Cada elemento de la lista es un prompt, o un objeto con su propio prompt, calidad y tamaño. Un lote es solo de imágenes nuevas o solo de ediciones, nunca mezclado, y sus elementos no pueden depender unos de otros (una cadena de ediciones necesita una llamada tras otra). Todo el lote se comprueba antes de generar nada, y una imagen que falla no detiene las demás: la respuesta trae una línea por imagen, en el orden pedido (`1: /ruta/imagen.png` o `2: ERROR: motivo`).
+
+Por defecto un lote tiene como máximo 20 imágenes, para que un agente no retenga la GPU demasiado tiempo. Se cambia con `imagehearth-mcp setup --batch-limit N`; `imagehearth-mcp doctor` muestra el límite en uso. Medido en una RTX 4090 (24 GB) con un modelo de Ollama de 26B cargado, un lote frente a las mismas imágenes en llamadas separadas:
+
+| Imágenes | Llamadas separadas | Un lote | Ahorro |
+|---|---|---|---|
+| 4 `fast` + 2 `high` | 86,5 s (6 descargas del modelo) | 42,1 s (1 descarga) | 44,4 s (51 %) |
+| 3 ediciones Kontext de una foto de 3536x2352 | 566,2 s | 550,3 s | 15,9 s (3 %) |
+
+Lo que se ahorra es la descarga y recarga del modelo de lenguaje y el arranque de ComfyUI, unos 7 s por imagen aquí. Importa con generaciones rápidas y casi desaparece con las lentas: cada edición de una foto grande tarda unos tres minutos y eclipsa la preparación. Cancelar un lote a mitad conservó las imágenes hechas, restauró el modelo y liberó la GPU.
+
 Si también usas modelos de lenguaje locales, ImageHearth los libera de la memoria de la GPU mientras genera y los restaura después. Ollama se ha probado de verdad; LM Studio, llama.cpp y vLLM, solo con servidores simulados.
 
 ## Requisitos
@@ -182,6 +199,7 @@ memory_mode = "auto"            # "auto", "off" o "manual", ver abajo
 lmstudio_url = "http://127.0.0.1:1234"
 llamacpp_url = "http://127.0.0.1:8080"
 vllm_url = "http://127.0.0.1:8000"
+batch_limit = 20                # máximo de imágenes por llamada a create_image
 ```
 
 Cada clave se puede definir también con una variable de entorno: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL`, `IMAGEHEARTH_LMSTUDIO_URL`, `IMAGEHEARTH_LLAMACPP_URL`, `IMAGEHEARTH_VLLM_URL` e `IMAGEHEARTH_MEMORY_MODE`. Las variables ganan al archivo, y el archivo a los valores por defecto.

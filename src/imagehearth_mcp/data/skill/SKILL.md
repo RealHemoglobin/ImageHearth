@@ -32,7 +32,7 @@ Prefer `create_image` for normal image generation and editing tasks.
 
 Parameters:
 
-- `prompt` (string, required): Description of the desired image or edit.
+- `prompt` (string or array, required): Description of the desired image or edit. An array makes several images in one call (see below).
 - `mode` (string, optional): `auto`, `generate` or `edit`. Default: `auto`.
 - `quality` (string, optional): `fast` or `high`. Default: `fast`.
 - `image_paths` (array of strings, optional): Up to six reference image paths.
@@ -117,6 +117,47 @@ Combine multiple references:
         ]
     )
 
+## Several images: a list of prompts
+
+`create_image` is the only image tool. When you need two or more independent images, make ONE `create_image` call and pass a list as `prompt`. Never call it once per image. The call returns when every image is done, and the GPU is prepared only once for the whole list (language models unloaded and restored once, ComfyUI started once), which is much faster.
+
+- `prompt` (string or array): a list item is either a string, or an object with its own `prompt` and, if needed, `quality`, `width`, `height`, `negative_prompt`, `image_paths`, `workflow`, `mode`.
+- `quality`, `width`, `height`, `negative_prompt`, `image_paths`, `workflow`, `mode` at the top level are common values for every item that does not set its own. A value in an item wins.
+- `include_image` is not accepted with a list: open the files you need to look at.
+
+Rules:
+
+- Items are independent. An item cannot use the result of another one: a chain of edits (edit A, then edit the result) must be successive calls.
+- A list is all generations or all edits (`image_paths`), never both. Send generations and edits as separate calls.
+- The whole list is validated before anything runs. If one item is invalid, nothing is generated and the error lists every problem as `Item N: ...` (N starts at 1).
+- At most 20 items by default; the user can change it with `imagehearth-mcp setup --batch-limit N`. The error says the limit.
+
+Example:
+
+    create_image(
+        prompt=[
+            "A red fox in a snowy forest",
+            {"prompt": "A detailed medieval castle", "quality": "high"},
+            {"prompt": "A lighthouse at dawn", "negative_prompt": "people"}
+        ],
+        quality="fast",
+        width=1024,
+        height=768
+    )
+
+The result has one line per item, in the order you gave:
+
+    1: /home/user/Pictures/ImageHearth/a1b2c3.png
+    2: ERROR: ComfyUI error: ...
+    3: /home/user/Pictures/ImageHearth/d4e5f6.png | WARNING: sdxl_turbo ignores negative_prompt.
+    WARNING: ...
+
+- `N: /path` is an image that exists; `N: ERROR: reason` is one that failed. A failure does not affect the other items: retry only the failed ones.
+- `| WARNING:` after a path is a warning for that image; do not retry because of it.
+- `WARNING:` lines at the end apply to the whole call.
+- If the engine stops or the request is cancelled, the items not run say `ERROR: not attempted` or `ERROR: cancelled`; the finished ones are kept.
+- Tell the user every path.
+
 ## Other tools
 
 ### list_workflows
@@ -170,7 +211,7 @@ Before calling `setup_start`, tell the user the profile, download size and licen
 
 1. Understand the user's intended subject and purpose.
 2. Select the appropriate aspect ratio and dimensions.
-3. Use `create_image` by default.
+3. Use `create_image`. For several independent images, pass a list of prompts in one call.
 4. Choose `fast` for drafts and quick iterations.
 5. Choose `high` for detailed final images.
 6. Write precise prompts describing composition, lighting, style, environment and constraints.
@@ -242,7 +283,7 @@ Never silently switch to another image generation backend.
 ## General rules
 
 - Use ImageHearth as the default image generation and editing backend.
-- Prefer `create_image` for normal operations.
+- `create_image` is the only image tool: one call, with a list of prompts for several images.
 - Do not invent workflow names or tool parameters.
 - Do not modify original images unless explicitly requested.
 - Ask for clarification when an essential visual requirement is ambiguous.

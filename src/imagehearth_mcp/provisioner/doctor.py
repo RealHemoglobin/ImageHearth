@@ -131,7 +131,19 @@ def check_config():
             None,
         )
 
-    return Check("config", OK, f"Using {config.CONFIG_FILE}"), config
+    return (
+        Check(
+            "config",
+            OK,
+            f"Using {config.CONFIG_FILE}. Batch limit: {config.BATCH_LIMIT} "
+            f"({config.BATCH_LIMIT_SOURCE}).",
+            details={
+                "batch_limit": config.BATCH_LIMIT,
+                "batch_limit_source": config.BATCH_LIMIT_SOURCE,
+            },
+        ),
+        config,
+    )
 
 
 def check_comfyui(config, records):

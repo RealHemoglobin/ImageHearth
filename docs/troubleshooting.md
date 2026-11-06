@@ -74,6 +74,10 @@ Ask your agent to *"check the ImageHearth status"*:
 | ComfyUI doesn't start | Read `comfyui.log` in the logs folder below |
 | The generation is slow on a card with little memory | ComfyUI moves what doesn't fit into system RAM. `doctor` shows the memory arguments it starts with; add your own with `comfy_args` in `config.toml` (they win over the automatic ones) |
 | `llama-server` stopped and came back | With a one-model `llama-server` and `memory_mode = "auto"`, ImageHearth stops it to free the GPU and starts it again with the same command line, directory and environment. Its output goes to `llama-server.log` in the logs folder. A server run by another user, a system service or a container is never touched: use `memory_mode = "manual"` or `off` to stop it from being considered |
+| `create_image` with a list of prompts is rejected: `Item N: ...` | Nothing was generated. Each line names an item (counting from 1) and what is wrong with it; fix them and send the batch again |
+| `A batch must be all generations or all edits` | Send the new images and the edits (items with `image_paths`) as two batches |
+| `A batch can have at most N items` | Split the batch, or raise the limit with `imagehearth-mcp setup --batch-limit N` (or `batch_limit` in `config.toml`). `imagehearth-mcp doctor` shows the limit in use |
+| Some lines of a batch say `ERROR: ...` | Those images failed and the rest were made. `not attempted` means ComfyUI stopped before reaching them; ask for those again |
 | Out of GPU memory with a language model loaded | Use `memory_mode = "auto"`, or free the memory yourself. See the [README](../README.md#settings-optional) |
 
 ## Logs

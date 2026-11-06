@@ -957,6 +957,7 @@ def setup_args(**kwargs):
         install_node=False,
         models_dir=None,
         port=None,
+        batch_limit=None,
         skip_smoke_test=True,
         experimental=False,
     )
@@ -1417,6 +1418,41 @@ def test_invalid_config_is_reported_by_doctor(tmp_path):
     assert checks["package"]["status"] == "ok"
     assert checks["config"]["status"] == "fail"
     assert "comfy_port" in checks["config"]["message"]
+
+
+def test_setup_writes_batch_limit_and_keeps_other_keys(machine):
+    config.CONFIG_FILE.parent.mkdir(parents=True)
+    config.CONFIG_FILE.write_text('# mine\nollama_mode = "off"\n', encoding="utf-8")
+
+    assert setup_command.run(setup_args(batch_limit=5)) == 0
+
+    text = config.CONFIG_FILE.read_text(encoding="utf-8")
+    assert "batch_limit = 5" in text
+    assert 'ollama_mode = "off"' in text and "# mine" in text
+
+
+def test_setup_rejects_invalid_batch_limit_before_downloading(machine):
+    with pytest.raises(ProvisionError, match="batch-limit"):
+        setup_command.run(setup_args(batch_limit=0))
+
+    assert machine.downloads == []
+    assert not config.CONFIG_FILE.exists()
+
+
+def test_cli_accepts_batch_limit():
+    args = cli._build_parser().parse_args(["setup", "--batch-limit", "3"])
+    assert args.batch_limit == 3
+
+
+def test_doctor_reports_batch_limit(monkeypatch):
+    monkeypatch.setattr(config, "BATCH_LIMIT", 5, raising=False)
+    monkeypatch.setattr(config, "BATCH_LIMIT_SOURCE", "batch_limit in x", raising=False)
+
+    check, _ = doctor.check_config()
+
+    assert "Batch limit: 5" in check.message
+    assert check.details == {"batch_limit": 5, "batch_limit_source": "batch_limit in x"}
+    assert doctor.to_json([check])["checks"][0]["details"]["batch_limit"] == 5
 
 
 # update y uninstall

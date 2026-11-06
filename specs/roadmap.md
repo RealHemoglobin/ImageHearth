@@ -245,42 +245,42 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 
 ### Herramienta
 
-- [ ] Herramienta nueva `create_images` con `items`: una lista de peticiones con los mismos campos que `create_image` (`prompt`, `quality`, `width`, `height`, `negative_prompt`, `image_paths`, `workflow`, `mode`). Solo `prompt` es obligatorio en cada una.
-- [ ] Valores comunes opcionales al nivel del lote (`quality`, `width`, `height`, `negative_prompt`) que cada elemento puede sobrescribir, para que el agente no repita lo mismo en cada prompt.
-- [ ] **Lote homogéneo:** un lote es solo de generaciones o solo de ediciones con Kontext, nunca mezclado, para no cargar en ComfyUI modelos distintos dentro de la misma sesión. El tipo se deduce de los elementos (con o sin `image_paths`, o `mode`) y un lote mezclado se rechaza entero indicando qué elementos no encajan.
-- [ ] Validar el lote completo antes de tocar la GPU: tipo homogéneo, prompts, tamaños, rutas de referencia y workflows instalados. Si algo no es válido, se rechaza el lote entero sin descargar nada y el error dice qué elemento falla.
-- [ ] Máximo de 20 elementos por lote por defecto, para no retener el motor demasiado tiempo frente a otros clientes. Se guarda en la configuración y `imagehearth-mcp setup` permite cambiarlo con una opción (`--batch-limit N`, junto a `--port`); `doctor` muestra el valor en uso.
-- [ ] `create_image` no cambia: sigue siendo la herramienta para una sola imagen y la que usan los modelos pequeños.
+- [x] Herramienta nueva `create_images` con `items`: una lista de peticiones con los mismos campos que `create_image` (`prompt`, `quality`, `width`, `height`, `negative_prompt`, `image_paths`, `workflow`, `mode`). Solo `prompt` es obligatorio en cada una.
+- [x] Valores comunes opcionales al nivel del lote (`quality`, `width`, `height`, `negative_prompt`) que cada elemento puede sobrescribir, para que el agente no repita lo mismo en cada prompt.
+- [x] **Lote homogéneo:** un lote es solo de generaciones o solo de ediciones con Kontext, nunca mezclado, para no cargar en ComfyUI modelos distintos dentro de la misma sesión. El tipo se deduce de los elementos (con o sin `image_paths`, o `mode`) y un lote mezclado se rechaza entero indicando qué elementos no encajan.
+- [x] Validar el lote completo antes de tocar la GPU: tipo homogéneo, prompts, tamaños, rutas de referencia y workflows instalados. Si algo no es válido, se rechaza el lote entero sin descargar nada y el error dice qué elemento falla.
+- [x] Máximo de 20 elementos por lote por defecto, para no retener el motor demasiado tiempo frente a otros clientes. Se guarda en la configuración y `imagehearth-mcp setup` permite cambiarlo con una opción (`--batch-limit N`, junto a `--port`); `doctor` muestra el valor en uso.
+- [x] `create_image` no cambia: sigue siendo la herramienta para una sola imagen y la que usan los modelos pequeños.
 
 ### Motor
 
-- [ ] Un único `generation_session` para todo el lote: descarga y restauración de los modelos de lenguaje una sola vez, y ComfyUI arrancado una sola vez.
-- [ ] VRAM necesaria del lote = la del workflow más exigente que contenga; la comprobación de memoria libre se hace una vez al principio.
-- [ ] En los lotes de generación, agrupar internamente por workflow (SDXL Turbo, FLUX Dev, SDXL afinado) para que ComfyUI no cambie de pesos más de lo necesario, conservando el orden original en la respuesta. Los lotes de edición usan siempre Kontext.
-- [ ] Generar las imágenes una tras otra dentro de la sesión, reutilizando `run_workflow` y el camino de Kontext; cada una con su semilla aleatoria y su propio plazo, como ahora.
-- [ ] Un fallo en una imagen no aborta el lote: se registra el error de ese elemento y se sigue con el siguiente. Solo se aborta si el motor queda inutilizable (ComfyUI caído, `RecoveryRequired`).
-- [ ] Cancelar detiene el lote tras la imagen en curso; las ya generadas se conservan y se devuelven, y la limpieza de la sesión se ejecuta igual.
-- [ ] El estado de sesión registra el lote en curso para que `recover_engine` funcione igual que con una sola imagen.
+- [x] Un único `generation_session` para todo el lote: descarga y restauración de los modelos de lenguaje una sola vez, y ComfyUI arrancado una sola vez.
+- [x] VRAM necesaria del lote = la del workflow más exigente que contenga; la comprobación de memoria libre se hace una vez al principio.
+- [x] En los lotes de generación, agrupar internamente por workflow (SDXL Turbo, FLUX Dev, SDXL afinado) para que ComfyUI no cambie de pesos más de lo necesario, conservando el orden original en la respuesta. Los lotes de edición usan siempre Kontext.
+- [x] Generar las imágenes una tras otra dentro de la sesión, reutilizando `run_workflow` y el camino de Kontext; cada una con su semilla aleatoria y su propio plazo, como ahora.
+- [x] Un fallo en una imagen no aborta el lote: se registra el error de ese elemento y se sigue con el siguiente. Solo se aborta si el motor queda inutilizable (ComfyUI caído, `RecoveryRequired`).
+- [x] Cancelar detiene el lote tras la imagen en curso; las ya generadas se conservan y se devuelven, y la limpieza de la sesión se ejecuta igual.
+- [x] El estado de sesión registra el lote en curso para que `recover_engine` funcione igual que con una sola imagen.
 
 ### Respuesta y progreso
 
-- [ ] Una línea por elemento, en el orden pedido: `1: /ruta/imagen.png` o `1: ERROR: motivo`. Las advertencias generales del lote van al final con el prefijo `WARNING:` de siempre.
-- [ ] El progreso dice en qué imagen va (`Generating image 3 of 10 (45s)`), para que el cliente mantenga viva la petición y el usuario vea el avance.
-- [ ] `include_image` en el lote queda fuera o limitado a miniaturas, porque varias imágenes completas llenan el contexto del agente.
+- [x] Una línea por elemento, en el orden pedido: `1: /ruta/imagen.png` o `1: ERROR: motivo`. Las advertencias generales del lote van al final con el prefijo `WARNING:` de siempre.
+- [x] El progreso dice en qué imagen va (`Generating image 3 of 10 (45s)`), para que el cliente mantenga viva la petición y el usuario vea el avance.
+- [x] `include_image` en el lote queda fuera o limitado a miniaturas, porque varias imágenes completas llenan el contexto del agente.
 
 ### Agentes y documentación
 
-- [ ] Actualizar las instrucciones del servidor MCP y la skill `imagehearth`: si el agente ya sabe que va a crear varias imágenes independientes, que use `create_images` en lugar de llamar varias veces a `create_image`.
-- [ ] Dejar claro que cada elemento es independiente: un elemento no puede editar el resultado de otro del mismo lote. Las cadenas de ediciones siguen siendo llamadas sucesivas.
-- [ ] Dejar claro que generaciones y ediciones van en lotes separados: si el agente necesita ambas, hace dos llamadas a `create_images`.
-- [ ] Sección en el README con un ejemplo y el ahorro medido.
+- [x] Actualizar las instrucciones del servidor MCP y la skill `imagehearth`: si el agente ya sabe que va a crear varias imágenes independientes, que use `create_images` en lugar de llamar varias veces a `create_image`.
+- [x] Dejar claro que cada elemento es independiente: un elemento no puede editar el resultado de otro del mismo lote. Las cadenas de ediciones siguen siendo llamadas sucesivas.
+- [x] Dejar claro que generaciones y ediciones van en lotes separados: si el agente necesita ambas, hace dos llamadas a `create_images`.
+- [x] Sección en el README con un ejemplo y el ahorro medido.
 
 ### Pruebas
 
-- [ ] Pruebas simuladas: con N elementos, la descarga y la restauración de los modelos de lenguaje y el arranque de ComfyUI ocurren una sola vez; un fallo intermedio no impide los siguientes; la cancelación conserva las imágenes ya hechas y restaura los modelos; un lote mezclado o por encima del límite se rechaza sin tocar la GPU; el límite configurado en `setup` se respeta.
-- [ ] Prueba real etiquetada: lote de cuatro imágenes `fast` y dos `high` con un modelo de Ollama cargado, comparando el tiempo con seis llamadas a `create_image`.
-- [ ] Prueba real etiquetada: lote de tres ediciones con Kontext, comparando el tiempo con tres llamadas sueltas.
-- [ ] Probar con un agente real (Claude Code y un modelo local de la fase 5) que elige `create_images` cuando tiene una lista y `create_image` cuando tiene una sola.
+- [x] Pruebas simuladas: con N elementos, la descarga y la restauración de los modelos de lenguaje y el arranque de ComfyUI ocurren una sola vez; un fallo intermedio no impide los siguientes; la cancelación conserva las imágenes ya hechas y restaura los modelos; un lote mezclado o por encima del límite se rechaza sin tocar la GPU; el límite configurado en `setup` se respeta.
+- [x] Prueba real etiquetada: lote de cuatro imágenes `fast` y dos `high` con un modelo de Ollama cargado, comparando el tiempo con seis llamadas a `create_image`.
+- [x] Prueba real etiquetada: lote de tres ediciones con Kontext, comparando el tiempo con tres llamadas sueltas.
+- [ ] Probar con un agente real (Claude Code y un modelo local de la fase 5) que usa una lista de prompts en `create_image` cuando tiene varias imágenes y un prompt cuando tiene una sola. Claude Code probado el 2026-11-06; falta el modelo local.
 
 **Decisiones cerradas el 2026-11-05:**
 

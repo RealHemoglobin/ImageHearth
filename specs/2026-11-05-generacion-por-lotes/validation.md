@@ -52,24 +52,24 @@ Los tests deben cubrir:
 
 ### Antes de fusionar (RTX 4090 en Linux)
 
-- [ ] `imagehearth-mcp setup --batch-limit 5` y `doctor` muestra 5; un lote de 6 se rechaza con el error que explica el límite.
-- [ ] Desde un cliente MCP real, un lote pequeño de `fast` devuelve una línea por elemento en el orden pedido y el progreso muestra `Generating image N of M`.
-- [ ] Un lote mezclado desde el cliente real se rechaza sin arrancar ComfyUI ni descargar modelos.
+- [x] `imagehearth-mcp setup --batch-limit 5` y `doctor` muestra 5; un lote de 6 se rechaza con el error que explica el límite.
+- [x] Desde un cliente MCP real, un lote pequeño de `fast` devuelve una línea por elemento en el orden pedido y el progreso muestra `Generating image N of M`.
+- [x] Un lote mezclado desde el cliente real se rechaza sin arrancar ComfyUI ni descargar modelos.
 
 ### Para cerrar la fase (después de fusionar si hace falta)
 
-- [ ] Prueba real etiquetada: lote de cuatro `fast` y dos `high` con un modelo de Ollama cargado frente a seis `create_image`; tiempos y número de descargas del modelo anotados.
-- [ ] Prueba real etiquetada: lote de tres ediciones con Kontext frente a tres llamadas sueltas.
-- [ ] Cancelar un lote real a mitad: GPU libre, modelo restaurado, imágenes hechas en disco.
-- [ ] **Mantenedor:** Claude Code elige `create_images` con una lista y `create_image` con una sola imagen.
-- [ ] **Mantenedor:** un modelo local de la fase 5 hace lo mismo.
-- [ ] Ahorro medido trasladado a `README.md` y `README.es.md`.
+- [x] Prueba real etiquetada: lote de cuatro `fast` y dos `high` con un modelo de Ollama cargado frente a seis `create_image`; tiempos y número de descargas del modelo anotados.
+- [x] Prueba real etiquetada: lote de tres ediciones con Kontext frente a tres llamadas sueltas.
+- [x] Cancelar un lote real a mitad: GPU libre, modelo restaurado, imágenes hechas en disco.
+- [x] **Mantenedor:** Claude Code usa `create_image` con una lista de prompts para varias imágenes y con un prompt para una sola.
+- [ ] **Mantenedor:** un modelo local de la fase 5 hace lo mismo (con `create_image`; `create_images` se retiró).
+- [x] Ahorro medido trasladado a `README.md` y `README.es.md`.
 
 ## Lista para fusionar
 
-- [ ] `scripts/check.sh` en verde en Linux.
-- [ ] Prueba de contrato `/object_info` en verde.
-- [ ] Validaciones "Antes de fusionar" completadas.
+- [x] `scripts/check.sh` en verde en Linux.
+- [x] Prueba de contrato `/object_info` en verde.
+- [x] Validaciones "Antes de fusionar" completadas.
 - [ ] Instrucciones del servidor MCP, skill `imagehearth`, `tech-stack.md` y `docs/troubleshooting.md` actualizados.
 - [ ] README con la sección de lotes (el ahorro puede quedar pendiente de la medición de cierre, indicándolo).
 - [ ] Roadmap actualizado con las tareas hechas.
@@ -85,13 +85,13 @@ Los tests deben cubrir:
 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
-| `scripts/check.sh` en Linux | | |
-| Prueba de contrato `/object_info` | | |
-| `setup --batch-limit` y `doctor` | | |
-| Lote desde cliente MCP real | | |
-| Lote mezclado rechazado sin GPU | | |
-| 4 `fast` + 2 `high` con Ollama frente a 6 llamadas | | |
-| 3 ediciones Kontext frente a 3 llamadas | | |
-| Cancelación de un lote real | | |
-| Claude Code elige `create_images` | | |
-| Modelo local elige `create_images` | | |
+| `scripts/check.sh` en Linux | 451 tests en verde | 2026-11-06 |
+| Prueba de contrato `/object_info` | OK: 20 tipos de nodo existen | 2026-11-06 |
+| `setup --batch-limit` y `doctor` | Comprobado a mano por el mantenedor: correcto | 2026-11-06 | |
+| Lote desde cliente MCP real | Comprobado a mano por el mantenedor: correcto | 2026-11-06 | |
+| Lote mezclado rechazado sin GPU | Comprobado a mano por el mantenedor: correcto | 2026-11-06 | |
+| 4 `fast` + 2 `high` con Ollama frente a 6 llamadas | `scripts/measure_batch.py`, gemma4:26b, RTX 4090: 86,5 s con 6 descargas del modelo frente a 42,1 s con 1 (−51 %) | 2026-11-06 |
+| 3 ediciones Kontext frente a 3 llamadas | 566,2 s frente a 550,3 s (−3 %): cada edición de una foto de 3536x2352 tarda ~3 min y eclipsa la preparación | 2026-11-06 |
+| Cancelación de un lote real | 3 imágenes en disco, 3 `cancelled`, VRAM 3201→3378 MiB, modelo restaurado, sin estado pendiente | 2026-11-06 |
+| Claude Code usa una lista de prompts en `create_image` (la herramienta `create_images` se retiró: el agente llamaba una vez por imagen; repetida la prueba con la descripción nueva) | Correcto, comprobado por el mantenedor | 2026-11-06 |
+| Modelo local usa una lista de prompts en `create_image` | | |

@@ -274,7 +274,18 @@ def apply_config(args, mode, comfy_dir, port, records):
     if mode == ATTACHED or args.port or port != config.COMFY_PORT:
         values["comfy_port"] = port
 
+    batch_limit = getattr(args, "batch_limit", None)
+
+    if batch_limit is not None:
+        values["batch_limit"] = batch_limit
+
     settings.apply(config.CONFIG_FILE, values, records)
+
+    if os.environ.get("IMAGEHEARTH_BATCH_LIMIT") and "batch_limit" in values:
+        print(
+            "WARNING: IMAGEHEARTH_BATCH_LIMIT is set and overrides the limit written "
+            f"to {config.CONFIG_FILE}."
+        )
 
     if os.environ.get("IMAGEHEARTH_COMFY_DIR") and "comfy_dir" in values:
         print(
@@ -284,6 +295,10 @@ def apply_config(args, mode, comfy_dir, port, records):
 
 
 def _setup(args):
+    # Before anything is downloaded.
+    if getattr(args, "batch_limit", None) is not None and args.batch_limit < 1:
+        raise ProvisionError("--batch-limit must be 1 or more.")
+
     interactive = is_interactive(args)
     catalog = manifest.load()
     records = InstallManifest.load(config.INSTALL_MANIFEST)

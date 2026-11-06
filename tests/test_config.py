@@ -18,6 +18,7 @@ ENV_KEYS = (
     "IMAGEHEARTH_OUTPUT_DIR",
     "IMAGEHEARTH_OLLAMA_URL",
     "IMAGEHEARTH_OLLAMA_MODE",
+    "IMAGEHEARTH_BATCH_LIMIT",
 )
 
 
@@ -98,6 +99,31 @@ class ConfigLoading(unittest.TestCase):
     def test_non_numeric_timeout_names_the_variable(self):
         with self.assertRaisesRegex(RuntimeError, "IMAGEHEARTH_LOCK_TIMEOUT"):
             self.load(IMAGEHEARTH_LOCK_TIMEOUT="x")
+
+    def test_batch_limit_default(self):
+        loaded = self.load()
+        self.assertEqual(loaded.BATCH_LIMIT, 20)
+        self.assertEqual(loaded.BATCH_LIMIT_SOURCE, "default")
+
+    def test_batch_limit_from_file(self):
+        loaded = self.load("batch_limit = 5\n")
+        self.assertEqual(loaded.BATCH_LIMIT, 5)
+        self.assertIn("batch_limit", loaded.BATCH_LIMIT_SOURCE)
+
+    def test_batch_limit_environment_wins(self):
+        loaded = self.load("batch_limit = 5\n", IMAGEHEARTH_BATCH_LIMIT="7")
+        self.assertEqual(loaded.BATCH_LIMIT, 7)
+        self.assertEqual(loaded.BATCH_LIMIT_SOURCE, "IMAGEHEARTH_BATCH_LIMIT")
+
+    def test_invalid_batch_limit_names_its_source(self):
+        with self.assertRaisesRegex(RuntimeError, "IMAGEHEARTH_BATCH_LIMIT"):
+            self.load(IMAGEHEARTH_BATCH_LIMIT="0")
+
+        with self.assertRaisesRegex(RuntimeError, "batch_limit"):
+            self.load('batch_limit = "many"\n')
+
+        with self.assertRaisesRegex(RuntimeError, "batch_limit"):
+            self.load("batch_limit = true\n")
 
 
 class ImportHasNoSideEffects(unittest.TestCase):

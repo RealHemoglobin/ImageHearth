@@ -1,6 +1,7 @@
 import json
 import random
 import uuid
+from dataclasses import dataclass, field
 
 from imagehearth_mcp.engine import comfyui_client, config
 from imagehearth_mcp.engine.log import get_logger
@@ -92,14 +93,24 @@ def prepare_workflow(workflow, prompt, negative_prompt, width, height, filename)
     return workflow
 
 
-def run_workflow(
+@dataclass
+class PreparedWorkflow:
+    """A validated generation request, ready to run in a session."""
+
+    name: str
+    workflow: dict
+    image_id: str
+    warnings: list[str] = field(default_factory=list)
+
+
+def prepare_generation(
     workflow_name: str,
     prompt: str,
-    timeout: int = config.WORKFLOW_TIMEOUT,
     negative_prompt: str = "",
     width: int = 1024,
     height: int = 1024,
 ):
+    """Validate the request and fill its template. Touches neither GPU nor session."""
     validate_prompt(prompt)
     validate_dimensions(width, height)
 
@@ -127,12 +138,32 @@ def run_workflow(
         f"{config.COMFY_SUBFOLDER}/{image_id}",
     )
 
-    with generation_session(workflow_file.stem) as session:
-        destination = save_session_image(
-            session,
-            workflow,
-            timeout,
-            config.OUTPUT_DIR / f"{image_id}.png",
-        )
+    return PreparedWorkflow(workflow_file.stem, workflow, image_id, warnings)
 
-    return ImageResult(destination, warnings + session.warnings)
+
+def run_in_session(session, prepared, timeout=config.WORKFLOW_TIMEOUT):
+    """Generate inside an open session. Only the request's own warnings are returned."""
+    destination = save_session_image(
+        session,
+        prepared.workflow,
+        timeout,
+        config.OUTPUT_DIR / f"{prepared.image_id}.png",
+    )
+    return ImageResult(destination, list(prepared.warnings))
+
+
+def run_workflow(
+    workflow_name: str,
+    prompt: str,
+    timeout: int = config.WORKFLOW_TIMEOUT,
+    negative_prompt: str = "",
+    width: int = 1024,
+    height: int = 1024,
+):
+    prepared = prepare_generation(workflow_name, prompt, negative_prompt, width, height)
+
+    with generation_session(prepared.name) as session:
+        result = run_in_session(session, prepared, timeout)
+
+    result.warnings.extend(session.warnings)
+    return result

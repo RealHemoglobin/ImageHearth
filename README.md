@@ -27,6 +27,23 @@ irm https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.ps
 - *"Change the background of `photo.png` to a snowy mountain"*: FLUX Kontext.
 - *"Combine these three pictures into one scene"*: up to six reference images.
 
+### Several images at once
+
+When your agent already knows it needs several independent images, it passes a list of prompts to `create_image` in a single call, which returns when all are done. The GPU is prepared once for the whole batch: language models are unloaded and restored once and ComfyUI starts once, instead of repeating that for every image.
+
+> Make four fast variations of a logo, and two high-quality posters, 1024x768.
+
+Each list item is a prompt, or an object with its own prompt, quality and size. A batch is all new images or all edits, never both, and its items cannot depend on each other (a chain of edits needs one call after another). The whole batch is checked before anything is generated, and one failing image does not stop the rest: the answer has one line per image, in the order asked (`1: /path/image.png` or `2: ERROR: reason`).
+
+By default a batch has at most 20 images, so one agent does not hold the GPU for too long. Change it with `imagehearth-mcp setup --batch-limit N`; `imagehearth-mcp doctor` shows the limit in use. Measured on an RTX 4090 (24 GB) with a 26B Ollama model loaded, one batch against the same images in separate calls:
+
+| Images | Separate calls | One batch | Saved |
+|---|---|---|---|
+| 4 `fast` + 2 `high` | 86.5 s (6 unloads of the model) | 42.1 s (1 unload) | 44.4 s (51 %) |
+| 3 Kontext edits of a 3536x2352 photo | 566.2 s | 550.3 s | 15.9 s (3 %) |
+
+The saving is the language model's unload and reload and ComfyUI's startup, roughly 7 s per image here. It matters for quick generations and almost disappears for slow ones: each edit of a large photo takes about three minutes, which dwarfs the setup. Cancelling a batch halfway kept the finished images, restored the model and freed the GPU.
+
 If you also run local language models, ImageHearth frees them from GPU memory while generating and restores them afterwards. Ollama has been tested for real; LM Studio, llama.cpp and vLLM only against simulated servers.
 
 ## Requirements
@@ -184,9 +201,10 @@ memory_mode = "auto"            # "auto", "off" or "manual", see below
 lmstudio_url = "http://127.0.0.1:1234"
 llamacpp_url = "http://127.0.0.1:8080"
 vllm_url = "http://127.0.0.1:8000"
+batch_limit = 20                # most images per create_image call
 ```
 
-Each key can also be set with an environment variable: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL`, `IMAGEHEARTH_LMSTUDIO_URL`, `IMAGEHEARTH_LLAMACPP_URL`, `IMAGEHEARTH_VLLM_URL` and `IMAGEHEARTH_MEMORY_MODE`. Variables win over the file, and the file wins over the defaults.
+Each key can also be set with an environment variable: `IMAGEHEARTH_COMFY_DIR`, `IMAGEHEARTH_COMFY_PORT`, `IMAGEHEARTH_OUTPUT_DIR`, `IMAGEHEARTH_OLLAMA_URL`, `IMAGEHEARTH_LMSTUDIO_URL`, `IMAGEHEARTH_LLAMACPP_URL`, `IMAGEHEARTH_VLLM_URL`, `IMAGEHEARTH_BATCH_LIMIT` and `IMAGEHEARTH_MEMORY_MODE`. Variables win over the file, and the file wins over the defaults.
 
 | `memory_mode` | What happens to your language models |
 |---|---|

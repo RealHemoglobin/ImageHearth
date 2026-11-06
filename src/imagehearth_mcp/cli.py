@@ -68,6 +68,12 @@ def _build_parser():
     )
     setup.add_argument("--port", type=int, help="Port ComfyUI listens on.")
     setup.add_argument(
+        "--batch-limit",
+        type=int,
+        metavar="N",
+        help="Most images one create_image call may ask for (default 20).",
+    )
+    setup.add_argument(
         "--skip-smoke-test",
         action="store_true",
         help="Don't generate the final test image.",

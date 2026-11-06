@@ -1,6 +1,7 @@
 import json
 import random
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import requests
@@ -256,6 +257,67 @@ def build_workflow(
     return workflow
 
 
+@dataclass
+class PreparedEdit:
+    """A validated edit request, ready to run in a session."""
+
+    workflow_name: str
+    prompt: str
+    paths: list
+    width: int
+    height: int
+    image_id: str
+    warnings: list[str] = field(default_factory=list)
+
+
+def prepare_edit(prompt, image_path=None, image_paths=None, width=0, height=0):
+    """Validate the request and its references. Touches neither GPU nor session."""
+    validate_prompt(prompt)
+    workflow_name = resolve_edit_workflow()
+
+    paths = normalize_image_paths(image_path, image_paths)
+    width, height, warning = output_dimensions(paths[0], width, height)
+
+    return PreparedEdit(
+        workflow_name=workflow_name,
+        prompt=prompt,
+        paths=paths,
+        width=width,
+        height=height,
+        image_id=f"kontext_{uuid.uuid4().hex[:12]}",
+        warnings=[warning] if warning else [],
+    )
+
+
+def run_in_session(session, prepared, timeout=config.KONTEXT_TIMEOUT):
+    """Edit inside an open session. Only the request's own warnings are returned."""
+    uploaded_images = [
+        upload_image(path, index, session.run_id)
+        for index, path in enumerate(prepared.paths, start=1)
+    ]
+
+    workflow = build_workflow(
+        uploaded_images=uploaded_images,
+        prompt=prepared.prompt,
+        width=prepared.width,
+        height=prepared.height,
+        filename=f"{config.COMFY_SUBFOLDER}/{prepared.image_id}",
+        workflow_name=prepared.workflow_name,
+    )
+
+    log.info("Independent references: %s", len(prepared.paths))
+    log.info("Output dimensions: %sx%s", prepared.width, prepared.height)
+
+    destination = save_session_image(
+        session,
+        workflow,
+        timeout,
+        config.OUTPUT_DIR / f"{prepared.image_id}.png",
+    )
+
+    return ImageResult(destination, list(prepared.warnings))
+
+
 def generate(
     prompt,
     image_path=None,
@@ -264,39 +326,10 @@ def generate(
     width=0,
     height=0,
 ):
-    validate_prompt(prompt)
-    workflow_name = resolve_edit_workflow()
+    prepared = prepare_edit(prompt, image_path, image_paths, width, height)
 
-    paths = normalize_image_paths(image_path, image_paths)
-    width, height, warning = output_dimensions(paths[0], width, height)
+    with generation_session(prepared.workflow_name) as session:
+        result = run_in_session(session, prepared, timeout)
 
-    image_id = f"kontext_{uuid.uuid4().hex[:12]}"
-
-    with generation_session(workflow_name) as session:
-        uploaded_images = [
-            upload_image(path, index, session.run_id)
-            for index, path in enumerate(paths, start=1)
-        ]
-
-        workflow = build_workflow(
-            uploaded_images=uploaded_images,
-            prompt=prompt,
-            width=width,
-            height=height,
-            filename=f"{config.COMFY_SUBFOLDER}/{image_id}",
-            workflow_name=workflow_name,
-        )
-
-        log.info("Independent references: %s", len(paths))
-        log.info("Output dimensions: %sx%s", width, height)
-
-        destination = save_session_image(
-            session,
-            workflow,
-            timeout,
-            config.OUTPUT_DIR / f"{image_id}.png",
-        )
-
-    warnings = [warning] if warning else []
-    return ImageResult(destination, warnings + session.warnings)
-
+    result.warnings.extend(session.warnings)
+    return result

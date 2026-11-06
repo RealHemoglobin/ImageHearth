@@ -80,6 +80,26 @@ def _port_setting(values, key, env, default):
     return port
 
 
+def _positive_int_setting(values, key, env, default):
+    """Integer >= 1. Returns (value, source); the source is "default" if unset."""
+    value, source = _lookup(values, key, env)
+
+    if value is None:
+        return default, "default"
+
+    try:
+        if isinstance(value, bool):
+            raise TypeError
+        number = int(value)
+    except (TypeError, ValueError):
+        number = 0
+
+    if number < 1:
+        raise ConfigError(f"{source} must be an integer of 1 or more.")
+
+    return number, source
+
+
 def _choice_setting(values, key, env, choices, default):
     value, source = _lookup(values, key, env)
 
@@ -168,6 +188,12 @@ OLLAMA_MODE = _choice_setting(
 # None si no se ha fijado: entonces manda su alias, ollama_mode.
 MEMORY_MODE = _choice_setting(
     _values, "memory_mode", "IMAGEHEARTH_MEMORY_MODE", ("auto", "off", "manual"), None
+)
+
+
+# Maximum items per create_image call: a long batch holds the engine lock.
+BATCH_LIMIT, BATCH_LIMIT_SOURCE = _positive_int_setting(
+    _values, "batch_limit", "IMAGEHEARTH_BATCH_LIMIT", 20
 )
 
 

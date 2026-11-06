@@ -85,6 +85,7 @@ class Session:
         self.warnings = []
         self.generation_started = False
         self.required_mib = 0
+        self.generating_stage = "Generating the image"
         self._warned_models = set()
         self._next_ollama_check = 0.0
 
@@ -109,10 +110,16 @@ class Session:
             self.add_models(loaded)
             memory.get_provider().unload(loaded)
 
-        progress.stage("Generating the image")
+        progress.stage(self.generating_stage)
         self.prompt_id = comfyui_client.submit(workflow)
         state.write(phase=state.GENERATING, prompt_id=self.prompt_id)
         return self.prompt_id
+
+    def start_item(self, index, total):
+        """Record which image of a batch is being generated (both 1-based)."""
+        self.generating_stage = f"Generating image {index} of {total}"
+        progress.stage(self.generating_stage)
+        state.write(batch_total=total, batch_index=index)
 
     def prompt_finished(self):
         self.prompt_id = None
@@ -456,7 +463,11 @@ def ensure_comfyui():
 
 
 @contextmanager
-def generation_session(workflow=None):
+def generation_session(workflow=None, *, workflows=(), batch_total=None):
+    """One engine session. A batch passes every workflow it will run: the memory
+    needed is that of the most demanding one, checked once."""
+    names = [name for name in (workflow, *workflows) if name]
+
     with _engine_lock(config.LOCK_TIMEOUT):
         run_id = uuid.uuid4().hex[:12]
         token = log_run_id.set(run_id)
@@ -465,13 +476,17 @@ def generation_session(workflow=None):
             # Antes de escribir el nuevo estado: si falla, el anterior se conserva.
             adopted = _reconcile()
             session = Session(run_id, adopted)
-            session.required_mib = catalog.required_vram_mib(workflow)
+            session.required_mib = max(
+                (catalog.required_vram_mib(name) for name in names), default=0
+            )
             state.write(
                 phase=state.UNLOADING,
                 run_id=run_id,
                 models=session.models,
                 prompt_id=None,
                 reason=None,
+                batch_total=batch_total,
+                batch_index=None,
             )
 
             try:
