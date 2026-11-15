@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
-from imagehearth_mcp.engine import config
+from imagehearth_mcp.engine import catalog, config
+from imagehearth_mcp.engine import loras as lora_module
 from imagehearth_mcp.engine.kontext import generate as edit_with_kontext
 from imagehearth_mcp.engine.validation import (
     resolve_workflow,
@@ -29,6 +30,41 @@ class Request:
     height: int = 0
     negative_prompt: str = ""
     style: str = "auto"
+    # Resolved `loras.Selected` items: installed, with their weight.
+    loras: tuple = ()
+
+
+def _plan_loras(loras, mode, quality):
+    """The LoRAs of a generation, checked against everything but the GPU."""
+    requested = lora_module.normalize(loras)
+
+    if not requested:
+        return ()
+
+    if mode == "edit":
+        raise ValueError("LoRAs only work when generating, not when editing images.")
+
+    if quality != "high":
+        raise ValueError(
+            'LoRAs need quality="high" with the SDXL 1.0 quality model: "fast" '
+            "(SDXL Turbo) doesn't take them."
+        )
+
+    return tuple(requested)
+
+
+def _check_lora_model(workflow):
+    """LoRAs only work with SDXL 1.0; say which model is in the way."""
+    if workflow == lora_module.WORKFLOW:
+        return
+
+    model = catalog.quality_model_of(workflow)
+    names = {"flux-dev": "FLUX Dev", "flux-schnell": "FLUX Schnell", "sdxl": "RealVisXL"}
+    what = names.get(model, workflow)
+    raise ValueError(
+        f"LoRAs only work with the SDXL 1.0 quality model and this request uses {what}. "
+        "SDXL 1.0 is installed with `imagehearth-mcp setup --quality-model sdxl`."
+    )
 
 
 def plan_request(
@@ -41,6 +77,7 @@ def plan_request(
     height=0,
     negative_prompt="",
     style="auto",
+    loras=None,
 ):
     """Check one image request and resolve its mode. Shared by create_image and batches."""
     validate_prompt(prompt)
@@ -64,6 +101,8 @@ def plan_request(
     if mode == "auto":
         mode = "edit" if references else "generate"
 
+    requested = _plan_loras(loras, mode, quality)
+
     if mode == "edit":
         if not references:
             raise ValueError("Edit mode needs reference images.")
@@ -81,17 +120,24 @@ def plan_request(
         )
 
     validate_dimensions(width or DEFAULT_WIDTH, height or DEFAULT_HEIGHT)
+    selected = ()
+    resolved = resolve_workflow(workflow, quality)
+
+    if requested:
+        _check_lora_model(resolved)
+        selected = tuple(lora_module.resolve(requested))
 
     return Request(
         "generate",
         prompt,
         quality,
         [],
-        resolve_workflow(workflow, quality),
+        resolved,
         width or DEFAULT_WIDTH,
         height or DEFAULT_HEIGHT,
         negative_prompt,
         style,
+        selected,
     )
 
 
@@ -105,6 +151,7 @@ def create_image(
     height: int = 0,
     negative_prompt: str = "",
     style: str = "auto",
+    loras=None,
 ):
     """
     Central image generation and editing router.
@@ -126,7 +173,7 @@ def create_image(
     """
 
     request = plan_request(
-        prompt, mode, quality, image_paths, workflow, width, height, negative_prompt, style
+        prompt, mode, quality, image_paths, workflow, width, height, negative_prompt, style, loras
     )
 
     if request.mode == "edit":
@@ -150,5 +197,6 @@ def create_image(
             height=request.height,
             negative_prompt=request.negative_prompt,
             style=request.style,
+            loras=request.loras,
         )
     )

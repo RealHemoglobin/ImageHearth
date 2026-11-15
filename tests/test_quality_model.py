@@ -108,10 +108,11 @@ def test_quality_model_makes_no_sense_for_fast(machine):
 
 
 def test_interactive_choice_shows_size_vram_license_and_recommendation(machine, monkeypatch, capsys):
-    press(monkeypatch, "131")
+    # folder, model sdxl, no LoRAs (Enter), accept.
+    press(monkeypatch, "13\r1")
     setup_command.run(setup_args(profile="quality", accept_licenses=False, non_interactive=False))
     output = capsys.readouterr().out
-    assert "Step 2 of 3" in output and "Step 3 of 3" in output
+    assert "Step 2 of 4" in output and "Step 4 of 4" in output
 
     for name in ("flux-dev", "flux-schnell", "sdxl"):
         assert name in output
@@ -196,19 +197,20 @@ def test_switch_needs_confirmation_when_not_interactive(machine):
 
 def test_interactive_switch_declined_changes_nothing(machine, monkeypatch, capsys):
     setup_command.run(setup_args(profile="quality", quality_model="flux-dev"))
-    press(monkeypatch, "0")
+    # No LoRAs (Enter), decline the review (0), back to the LoRAs step (0 and Enter) and exit.
+    press(monkeypatch, "\r" "0" "0\r")
     assert setup_command.run(
         setup_args(profile="quality", quality_model="sdxl", non_interactive=False)
     ) == 0
     output = capsys.readouterr().out
-    assert "Step 1 of 1" in output and "FLUX.1 Dev ->" in output
+    assert "Step 2 of 2" in output and "FLUX.1 Dev ->" in output
     assert "flux_dev" in present(machine)
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "flux-dev"
 
 
 def test_interactive_switch_confirmed(machine, monkeypatch):
     setup_command.run(setup_args(profile="quality", quality_model="flux-dev"))
-    press(monkeypatch, "1")
+    press(monkeypatch, "\r" "1")
     setup_command.run(setup_args(profile="quality", quality_model="sdxl", non_interactive=False))
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "sdxl"
     assert "flux_dev" not in present(machine)

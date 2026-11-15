@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from imagehearth_mcp.engine import catalog, comfyui_client, config
+from imagehearth_mcp.engine import loras as lora_module
 from imagehearth_mcp.engine.log import get_logger
 from imagehearth_mcp.engine.orchestrator import generation_session
 from imagehearth_mcp.engine.result import ImageResult
@@ -26,8 +27,8 @@ def png_text_chunk(key, value):
     return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
 
 
-def stamp_png(path, workflow_name):
-    """Adds the workflow and quality model as PNG text, keeping what ComfyUI wrote."""
+def stamp_png(path, workflow_name, loras=()):
+    """Adds the workflow, quality model and LoRAs as PNG text, keeping what ComfyUI wrote."""
     if not workflow_name:
         return
 
@@ -36,6 +37,9 @@ def stamp_png(path, workflow_name):
 
     if model:
         text["ImageHearth-Quality-Model"] = model
+
+    if loras:
+        text["ImageHearth-LoRAs"] = lora_module.label(loras)
 
     data = Path(path).read_bytes()
 
@@ -47,7 +51,7 @@ def stamp_png(path, workflow_name):
     Path(path).write_bytes(data[:-12] + chunks + data[-12:])
 
 
-def save_session_image(session, workflow, timeout, destination, workflow_name=None):
+def save_session_image(session, workflow, timeout, destination, workflow_name=None, loras=()):
     """Ejecuta el workflow en la sesión y guarda su imagen verificada."""
     prompt_id = session.submit(workflow)
     log.info("Generation started: %s", prompt_id)
@@ -60,7 +64,7 @@ def save_session_image(session, workflow, timeout, destination, workflow_name=No
     session.prompt_finished()
 
     comfyui_client.download_image(image, destination)
-    stamp_png(destination, workflow_name)
+    stamp_png(destination, workflow_name, loras)
     log.info("Image saved: %s", destination)
 
     try:
@@ -94,8 +98,12 @@ OTHER_MEDIUM = re.compile(
 STYLES = ("auto", "photo", "none")
 
 
-def apply_style(workflow_name, prompt, negative_prompt, style="auto"):
-    """The prompt and negative prompt with photographic cues, when the style asks for them."""
+def apply_style(workflow_name, prompt, negative_prompt, style="auto", other_medium=False):
+    """The prompt and negative prompt with photographic cues, when the style asks for them.
+
+    `other_medium`: a LoRA already asks for a medium that isn't a photograph, so "auto"
+    adds no cues.
+    """
     if style not in STYLES:
         raise ValueError("style must be auto, photo or none.")
 
@@ -104,7 +112,7 @@ def apply_style(workflow_name, prompt, negative_prompt, style="auto"):
     if style == "none" or name not in PHOTO_WORKFLOWS:
         return prompt, negative_prompt
 
-    if style == "auto" and OTHER_MEDIUM.search(prompt):
+    if style == "auto" and (other_medium or OTHER_MEDIUM.search(prompt)):
         return prompt, negative_prompt
 
     prompt = f"{prompt.rstrip().rstrip(',.')}, {PHOTO_CUES}"
@@ -169,6 +177,54 @@ def prepare_workflow(workflow, prompt, negative_prompt, width, height, filename)
     return workflow
 
 
+LORA_NODE = "2"
+FIRST_LORA_NODE = 100
+
+
+def apply_loras(workflow, selected):
+    """Chain a LoraLoader per LoRA behind the fixed detail LoRA (node "2").
+
+    The text encoders and the sampler are rewired to the last one. Without LoRAs the
+    workflow is left exactly as it is.
+    """
+    if not selected:
+        return workflow
+
+    base = workflow.get(LORA_NODE)
+
+    if not isinstance(base, dict) or base.get("class_type") != "LoraLoader":
+        raise ValueError("This workflow can't take LoRAs.")
+
+    last = LORA_NODE
+
+    for offset, item in enumerate(selected):
+        node_id = str(FIRST_LORA_NODE + offset)
+        workflow[node_id] = {
+            "class_type": "LoraLoader",
+            "inputs": {
+                "lora_name": item.lora.lora_name,
+                "strength_model": item.weight,
+                "strength_clip": item.weight,
+                "model": [last, 0],
+                "clip": [last, 1],
+            },
+        }
+        last = node_id
+
+    for node in workflow.values():
+        if not isinstance(node, dict):
+            continue
+
+        for key, value in node.get("inputs", {}).items():
+            if node.get("class_type") == "LoraLoader" and key in ("model", "clip"):
+                continue
+
+            if isinstance(value, list) and len(value) == 2 and value[0] == LORA_NODE:
+                node["inputs"][key] = [last, value[1]]
+
+    return workflow
+
+
 @dataclass
 class PreparedWorkflow:
     """A validated generation request, ready to run in a session."""
@@ -177,6 +233,7 @@ class PreparedWorkflow:
     workflow: dict
     image_id: str
     warnings: list[str] = field(default_factory=list)
+    loras: tuple = ()
 
 
 def prepare_generation(
@@ -186,8 +243,12 @@ def prepare_generation(
     width: int = 1024,
     height: int = 1024,
     style: str = "auto",
+    loras=(),
 ):
-    """Validate the request and fill its template. Touches neither GPU nor session."""
+    """Validate the request and fill its template. Touches neither GPU nor session.
+
+    `loras` are already-resolved `loras.Selected` items.
+    """
     validate_prompt(prompt)
     validate_dimensions(width, height)
 
@@ -206,7 +267,16 @@ def prepare_generation(
     if negative_prompt and not negative_prompt_applies(workflow):
         warnings.append(f"{workflow_file.stem} ignores negative_prompt.")
 
-    prompt, negative_prompt = apply_style(workflow_file.stem, prompt, negative_prompt, style)
+    loras = tuple(loras)
+    prompt, negative_prompt = apply_style(
+        workflow_file.stem,
+        prompt,
+        negative_prompt,
+        style,
+        other_medium=bool(loras) and not lora_module.is_photographic(loras),
+    )
+    prompt = lora_module.with_trigger_words(prompt, loras)
+    apply_loras(workflow, loras)
 
     prepare_workflow(
         workflow,
@@ -217,7 +287,7 @@ def prepare_generation(
         f"{config.COMFY_SUBFOLDER}/{image_id}",
     )
 
-    return PreparedWorkflow(workflow_file.stem, workflow, image_id, warnings)
+    return PreparedWorkflow(workflow_file.stem, workflow, image_id, warnings, loras)
 
 
 def run_in_session(session, prepared, timeout=config.WORKFLOW_TIMEOUT):
@@ -228,6 +298,7 @@ def run_in_session(session, prepared, timeout=config.WORKFLOW_TIMEOUT):
         timeout,
         config.OUTPUT_DIR / f"{prepared.image_id}.png",
         prepared.name,
+        prepared.loras,
     )
     return ImageResult(destination, list(prepared.warnings))
 
@@ -240,9 +311,10 @@ def run_workflow(
     width: int = 1024,
     height: int = 1024,
     style: str = "auto",
+    loras=(),
 ):
     prepared = prepare_generation(
-        workflow_name, prompt, negative_prompt, width, height, style
+        workflow_name, prompt, negative_prompt, width, height, style, loras
     )
 
     with generation_session(prepared.name) as session:

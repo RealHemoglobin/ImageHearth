@@ -505,34 +505,34 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 
 ### Catálogo
 
-- [ ] Sección `[[loras]]` en `models.toml`: nombre, descripción corta, categoría, palabras de activación, peso recomendado, modelo base compatible (`sdxl`), repositorio y revisión, SHA-256, tamaño y licencia.
-- [ ] **Selección inicial** de entre 6 y 10 LoRAs de SDXL 1.0 que cubran estilos distintos, elegidas por licencia (preferir las que permiten uso comercial y descartar las de licencia dudosa), calidad medida con los mismos prompts y semillas, y origen estable en Hugging Face. Documentar la elección en la spec.
-- [ ] Las LoRAs solo se ofrecen cuando el modelo de `quality` instalado es SDXL 1.0. Con FLUX se indica que no aplican; las LoRAs de FLUX son otra fase si se piden.
+- [x] Sección `[[loras]]` en `models.toml`: nombre, descripción corta, categoría, palabras de activación, peso recomendado, modelo base compatible (`sdxl`), repositorio y revisión, SHA-256, tamaño y licencia.
+- [x] **Selección inicial** de entre 6 y 10 LoRAs de SDXL 1.0 que cubran estilos distintos, elegidas por licencia (preferir las que permiten uso comercial y descartar las de licencia dudosa), calidad medida con los mismos prompts y semillas, y origen estable en Hugging Face. Documentar la elección en la spec.
+- [x] Las LoRAs solo se ofrecen cuando el modelo de `quality` instalado es SDXL 1.0. Con FLUX se indica que no aplican; las LoRAs de FLUX son otra fase si se piden.
 
 ### Instalación
 
-- [ ] `setup` interactivo ofrece, al elegir SDXL, una selección múltiple del catálogo con el menú de la [fase 11](#fase-11-menús-por-número-en-setup), mostrando categoría, tamaño y licencia de cada una.
-- [ ] Modo no interactivo: `--loras nombre1,nombre2`, `--loras all` o `--loras none`. `setup` sobre una instalación existente permite añadir o quitar LoRAs sin tocar lo demás.
-- [ ] Descarga reanudable y verificada como el resto de modelos, registrada en el manifiesto de instalación y borrada por `uninstall` y al cambiar de modelo de `quality`.
-- [ ] `setup_status` lista el catálogo y lo instalado; `setup_start` acepta `loras`.
+- [x] `setup` interactivo ofrece, al elegir SDXL, una selección múltiple del catálogo con el menú de la [fase 11](#fase-11-menús-por-número-en-setup), mostrando categoría, tamaño y licencia de cada una.
+- [x] Modo no interactivo: `--loras nombre1,nombre2`, `--loras all` o `--loras none`. `setup` sobre una instalación existente permite añadir o quitar LoRAs sin tocar lo demás.
+- [x] Descarga reanudable y verificada como el resto de modelos, registrada en el manifiesto de instalación y borrada por `uninstall` y al cambiar de modelo de `quality`.
+- [x] `setup_status` lista el catálogo y lo instalado; `setup_start` acepta `loras`.
 
 ### Generación
 
-- [ ] `list_workflows` (o una herramienta `list_loras` si medir el coste en modelos pequeños lo justifica) devuelve las LoRAs instaladas con su descripción, categoría y palabras de activación.
-- [ ] `create_image` y cada elemento de `create_images` aceptan `loras` opcional: lista de nombres, con peso opcional. Máximo 3 por imagen. Un nombre desconocido o no instalado da un error que dice cuáles hay y cómo instalarlas.
-- [ ] `build_workflow` encadena los nodos `LoraLoader` detrás de la LoRA de detalle fija (que no cuenta en el máximo) y antes del muestreador, con el peso recomendado si no se indica otro, y añade las palabras de activación al prompt si no están.
-- [ ] Solo con `quality: high` y el modelo SDXL 1.0. Con `fast` (SDXL Turbo) o con FLUX se rechaza con un mensaje que lo explica.
-- [ ] Guardar en los metadatos del PNG las LoRAs y pesos usados.
+- [x] `list_workflows` (o una herramienta `list_loras` si medir el coste en modelos pequeños lo justifica) devuelve las LoRAs instaladas con su descripción, categoría y palabras de activación.
+- [x] `create_image` y cada elemento de `create_images` aceptan `loras` opcional: lista de nombres, con peso opcional. Máximo 3 por imagen. Un nombre desconocido o no instalado da un error que dice cuáles hay y cómo instalarlas.
+- [x] `build_workflow` encadena los nodos `LoraLoader` detrás de la LoRA de detalle fija (que no cuenta en el máximo) y antes del muestreador, con el peso recomendado si no se indica otro, y añade las palabras de activación al prompt si no están.
+- [x] Solo con `quality: high` y el modelo SDXL 1.0. Con `fast` (SDXL Turbo) o con FLUX se rechaza con un mensaje que lo explica.
+- [x] Guardar en los metadatos del PNG las LoRAs y pesos usados.
 
 ### Agentes y documentación
 
-- [ ] Instrucciones del servidor y skill `imagehearth`: cuando el usuario pida un estilo, consultar las LoRAs instaladas y usarlas si encajan; no inventar nombres.
-- [ ] Tabla en el README con cada LoRA, su categoría, licencia y una imagen de ejemplo con el mismo prompt y semilla con y sin LoRA.
+- [x] Instrucciones del servidor y skill `imagehearth`: cuando el usuario pida un estilo, consultar las LoRAs instaladas y usarlas si encajan; no inventar nombres.
+- [x] Tabla en el README con cada LoRA, su categoría, licencia y una imagen de ejemplo con el mismo prompt y semilla con y sin LoRA.
 
 ### Pruebas
 
-- [ ] Pruebas simuladas: workflow con 0, 1 y 3 LoRAs; nombre desconocido; LoRA con FLUX o con `fast` rechazada; lotes con LoRAs distintas por elemento; instalación y borrado según el manifiesto.
-- [ ] Prueba real etiquetada: cada LoRA del catálogo con el mismo prompt y semilla en la RTX 4090.
+- [x] Pruebas simuladas: workflow con 0, 1 y 3 LoRAs; nombre desconocido; LoRA con FLUX o con `fast` rechazada; lotes con LoRAs distintas por elemento; instalación y borrado según el manifiesto.
+- [x] Prueba real etiquetada: cada LoRA del catálogo con el mismo prompt y semilla en la RTX 4090.
 
 **Listo cuando:**
 

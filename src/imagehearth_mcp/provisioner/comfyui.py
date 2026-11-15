@@ -3,6 +3,7 @@
 import filecmp
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tarfile
@@ -44,6 +45,16 @@ def find_uv(which=shutil.which):
         )
 
     return uv
+
+
+def use_private_cache(records):
+    """uv guarda aquí lo que descarga (varios GB de PyTorch): `uninstall` lo borra entero.
+
+    Se registra como propio solo si no existía, y lo heredan los procesos de uv.
+    """
+    cache = config.DATA_DIR / "uv-cache"
+    records.claim("cache", cache)
+    os.environ["UV_CACHE_DIR"] = str(cache)
 
 
 def _run_uv(command, run):
@@ -251,6 +262,7 @@ def install_custom_node(
         return False
 
     if not custom_node_is_current(pin, comfy_dir):
+        use_private_cache(records)
         print(f"Installing {pin.folder}...")
         partial = destination.with_name(destination.name + PARTIAL_SUFFIX)
         shutil.rmtree(partial, ignore_errors=True)
@@ -298,6 +310,7 @@ def install_managed(pin, torch, target, records, *, run=subprocess.run, fetch=_d
         )
 
     find_uv(which)
+    use_private_cache(records)
     records.claim_verified("comfyui", target)
 
     if records.comfyui_version != pin.version or not (target / "main.py").exists():

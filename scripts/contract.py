@@ -31,17 +31,51 @@ def free_port():
         return sock.getsockname()[1]
 
 
+LORA_WORKFLOW = "sdxl_base.json with 3 chained LoRAs"
+
+
+def lora_workflow():
+    """`sdxl_base` as the engine builds it with the most LoRAs a request can have."""
+    from imagehearth_mcp.engine import loras, workflow_runner
+
+    catalog = manifest.load().loras
+    chosen = [loras.Selected(lora, lora.weight) for lora in list(catalog.values())[: loras.MAX_LORAS]]
+    template = json.loads((config.WORKFLOWS_DIR / "sdxl_base.json").read_text(encoding="utf-8"))
+    return workflow_runner.apply_loras(template, chosen)
+
+
+def workflows():
+    found = {
+        file.name: json.loads(file.read_text(encoding="utf-8"))
+        for file in sorted(config.WORKFLOWS_DIR.glob("*.json"))
+    }
+    found[LORA_WORKFLOW] = lora_workflow()
+    return found
+
+
 def workflow_nodes():
     nodes = {}
 
-    for file in sorted(config.WORKFLOWS_DIR.glob("*.json")):
-        workflow = json.loads(file.read_text(encoding="utf-8"))
-
+    for name, workflow in workflows().items():
         for node in workflow.values():
             if isinstance(node, dict) and "class_type" in node:
-                nodes.setdefault(node["class_type"], set()).add(file.name)
+                nodes.setdefault(node["class_type"], set()).add(name)
 
     return nodes
+
+
+def unknown_inputs(available):
+    """Inputs of the LoRA workflow that the node in ComfyUI doesn't declare."""
+    wrong = []
+
+    for key, node in lora_workflow().items():
+        declared = available[node["class_type"]]["input"]
+        names = {*declared.get("required", {}), *declared.get("optional", {})}
+        wrong += [
+            f"{node['class_type']} {key}: {name}" for name in node["inputs"] if name not in names
+        ]
+
+    return wrong
 
 
 def install_nodes(base_dir):
@@ -140,7 +174,16 @@ def check_contract(base_dir):
 
             sys.exit(1)
 
+        wrong = unknown_inputs(available)
+
+        if wrong:
+            for item in wrong:
+                print(f"UNKNOWN INPUT {item} ({LORA_WORKFLOW})")
+
+            sys.exit(1)
+
         print(f"OK: {len(workflow_nodes())} node types used by the workflows exist.")
+        print(f"OK: the inputs of {LORA_WORKFLOW} exist.")
     finally:
         if not processes.terminate(process.pid, 30):
             processes.kill(process.pid)

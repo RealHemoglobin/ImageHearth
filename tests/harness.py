@@ -386,3 +386,19 @@ def swap_models(real, replacements):
         },
         edit_options=options(real.edit_options),
     )
+
+
+def small_loras(real, license=None):
+    """The manifest's LoRAs with a few bytes each (the size and hash of their name)."""
+    import dataclasses
+    import hashlib
+
+    return {
+        name: dataclasses.replace(
+            lora,
+            bytes=len(name),
+            sha256=hashlib.sha256(name.encode()).hexdigest(),
+            **({"license": license} if license else {}),
+        )
+        for name, lora in real.loras.items()
+    }

@@ -89,6 +89,8 @@ explicit-preview-rules = true
 "tests/test_setup_steps.py" = ["F811"]
 "tests/test_install_dir.py" = ["F811"]
 "tests/test_move.py" = ["F811"]
+"tests/test_loras.py" = ["F811"]
+"tests/test_lora_install.py" = ["F811"]
 # Restaurar Ollama es limpieza final: cualquier fallo se convierte en aviso
 # para no perder la imagen ya generada.
 "src/imagehearth_mcp/engine/orchestrator.py" = ["BLE001"]
@@ -96,5 +98,6 @@ explicit-preview-rules = true
 "src/imagehearth_mcp/provisioner/smoke.py" = ["BLE001"]
 # Los llamadores capturan ValueError; pasar a TypeError cambiaría el comportamiento.
 "src/imagehearth_mcp/engine/validation.py" = ["TRY004"]
+"src/imagehearth_mcp/engine/loras.py" = ["TRY004"]
 # Se conserva el orden con el que ComfyUI carga el nodo: importa sus módulos internos.
 "src/imagehearth_mcp/data/imagehearth_status/__init__.py" = ["I001"]

@@ -457,3 +457,164 @@ class Tool(BatchCase):
         self.assertIn("create_image", tools)
         self.assertNotIn("create_images", tools)
         self.assertIn("list of prompts", server.INSTRUCTIONS)
+
+
+# Phase 13: LoRAs
+
+
+def loras_of(workflow):
+    """The names of the style LoRAs (not the fixed detail one) a workflow loads, in order."""
+    return [
+        node["inputs"]["lora_name"]
+        for key, node in sorted(workflow.items(), key=lambda pair: int(pair[0]))
+        if node.get("class_type") == "LoraLoader" and int(key) >= 100
+    ]
+
+
+class LoraBatch(BatchCase):
+    """Every model is present here: the quality model is picked with workflow=sdxl_base."""
+
+    def setUp(self):
+        super().setUp()
+        from imagehearth_mcp.provisioner import manifest
+
+        self.catalog = manifest.load().loras
+
+    def name(self, lora):
+        return self.catalog[lora].lora_name
+
+    def untouched(self):
+        self.assertEqual(self.comfy.events, [])
+        self.assertEqual(self.ollama.requests, [])
+        self.assertIsNone(state.read())
+
+    def test_each_item_has_its_own_loras_and_the_common_ones_fill_the_rest(self):
+        batch.run(
+            [
+                {"prompt": "a", "loras": ["anime-pop"]},
+                {"prompt": "b"},
+                {"prompt": "c", "loras": []},
+                {"prompt": "d", "loras": [{"name": "crayon", "weight": 0.4}, "photorealism"]},
+            ],
+            quality="high",
+            workflow="sdxl_base",
+            loras=["pixel-art"],
+        )
+        found = [loras_of(workflow) for workflow in self.comfy.workflows]
+        self.assertEqual(
+            found,
+            [
+                [self.name("anime-pop")],
+                [self.name("pixel-art")],
+                [],
+                [self.name("crayon"), self.name("photorealism")],
+            ],
+        )
+        weight = self.comfy.workflows[3]["100"]["inputs"]["strength_model"]
+        self.assertEqual(weight, 0.4)
+
+    def test_a_bad_item_rejects_the_whole_list_before_generating(self):
+        self.no_gpu()
+
+        with self.assertRaises(ValueError) as caught:
+            batch.run(
+                [
+                    {"prompt": "ok", "loras": ["anime-pop"]},
+                    {"prompt": "bad", "loras": ["a", "b", "c", "d"]},
+                    {"prompt": "unknown", "loras": ["no-such-lora"]},
+                ],
+                quality="high",
+                workflow="sdxl_base",
+            )
+
+        message = str(caught.exception)
+        self.assertIn("Item 2: At most 3 LoRAs", message)
+        self.assertIn("Item 3: Unknown LoRA 'no-such-lora'", message)
+        self.assertNotIn("Item 1:", message)
+        self.untouched()
+
+    def test_common_loras_with_fast_reject_every_item(self):
+        self.no_gpu()
+
+        with self.assertRaisesRegex(ValueError, 'Item 1: LoRAs need quality="high"'):
+            batch.run(["a", "b"], quality="fast", loras=["anime-pop"])
+
+        self.untouched()
+
+    def test_create_image_adds_the_lora_and_marks_the_png(self):
+        result = create_image(
+            "a harbor", quality="high", workflow="sdxl_base", loras=["pixel-art"]
+        )
+        self.assertEqual(loras_of(self.comfy.workflows[0]), [self.name("pixel-art")])
+
+        with Image.open(result.splitlines()[0]) as image:
+            image.load()
+            weight = f"{self.catalog['pixel-art'].weight:g}"
+            self.assertEqual(image.text["ImageHearth-LoRAs"], f"pixel-art:{weight}")
+
+    def test_without_loras_the_png_and_workflow_are_as_before(self):
+        result = create_image("a harbor", quality="high", workflow="sdxl_base")
+        self.assertEqual(loras_of(self.comfy.workflows[0]), [])
+
+        with Image.open(result.splitlines()[0]) as image:
+            image.load()
+            self.assertNotIn("ImageHearth-LoRAs", image.text)
+
+    def test_the_server_tool_passes_loras_through(self):
+        asyncio.run(
+            server.create_image(
+                "a harbor", quality="high", workflow="sdxl_base", loras=["anime-pop"], ctx=None
+            )
+        )
+        asyncio.run(
+            server.create_image(
+                ["a", "b"], quality="high", workflow="sdxl_base", loras=["photorealism"], ctx=None
+            )
+        )
+        self.assertEqual(
+            [loras_of(workflow) for workflow in self.comfy.workflows],
+            [[self.name("anime-pop")], [self.name("photorealism")], [self.name("photorealism")]],
+        )
+
+    def rejects(self, pattern, **arguments):
+        self.no_gpu()
+        patcher = mock.patch(
+            "imagehearth_mcp.engine.workflow_runner.generation_session",
+            side_effect=AssertionError("touched the GPU"),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        with self.assertRaisesRegex(ValueError, pattern):
+            create_image("a harbor", loras=["anime-pop"], **arguments)
+
+        self.untouched()
+
+    def test_flux_is_refused_before_touching_anything(self):
+        self.rejects("SDXL 1.0 quality model.*FLUX Dev", quality="high")
+
+    def test_fast_is_refused_before_touching_anything(self):
+        self.rejects('quality="high"', quality="fast")
+
+    def test_editing_is_refused_before_touching_anything(self):
+        reference = self.make_reference()
+        self.rejects("not when editing", quality="high", image_paths=[reference])
+
+    def test_realvisxl_is_refused_before_touching_anything(self):
+        self.rejects("RealVisXL", quality="high", workflow="sdxl_quality")
+
+    def test_a_lora_that_is_not_installed_is_refused_before_touching_anything(self):
+        from imagehearth_mcp.provisioner import models
+
+        present = self.models_present.side_effect
+
+        def without_anime(items, folder, extra=None):
+            return [
+                models.ModelState(item.model, item.path, models.MISSING)
+                if item.model.name == "anime-pop"
+                else item
+                for item in present(items, folder, extra)
+            ]
+
+        with mock.patch.object(models, "inspect", side_effect=without_anime):
+            self.rejects("LoRA 'anime-pop' is not installed.*setup --loras", quality="high", workflow="sdxl_base")

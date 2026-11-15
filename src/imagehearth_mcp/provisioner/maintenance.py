@@ -258,7 +258,7 @@ def _uninstall(args):
         return 0
 
     interactive = sys.stdin.isatty()
-    owned = records.owned("comfyui", "node", "config", "staging")
+    owned = records.owned("comfyui", "node", "config", "staging", "cache")
     owned_models = records.owned("model")
 
     print("Will remove:")

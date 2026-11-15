@@ -32,7 +32,7 @@ from imagehearth_mcp.provisioner import models as model_files
 from imagehearth_mcp.provisioner import setup as setup_command
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
 from imagehearth_mcp.server import list_workflows
-from tests.harness import EngineTestCase, swap_models
+from tests.harness import EngineTestCase, small_loras, swap_models
 from tests.test_provisioner import machine, setup_args, torch_ok  # noqa: F401
 
 DATA = Path(__file__).parent / "data"
@@ -41,12 +41,15 @@ DATA = Path(__file__).parent / "data"
 def tiny_catalog():
     """El manifiesto real con modelos de pocos bytes."""
     real = manifest.load()
-    return swap_models(
-        real,
-        {
-            name: dataclasses.replace(model, bytes=len(name))
-            for name, model in real.models.items()
-        },
+    return dataclasses.replace(
+        swap_models(
+            real,
+            {
+                name: dataclasses.replace(model, bytes=len(name))
+                for name, model in real.models.items()
+            },
+        ),
+        loras=small_loras(real),
     )
 
 

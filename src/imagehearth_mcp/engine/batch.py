@@ -28,6 +28,7 @@ ITEM_FIELDS = (
     "workflow",
     "mode",
     "style",
+    "loras",
 )
 
 
@@ -82,6 +83,7 @@ def validate(
     workflow="",
     mode="auto",
     style="auto",
+    loras=None,
 ):
     """Check the whole batch and prepare every item, or raise with all the problems.
 
@@ -109,6 +111,7 @@ def validate(
         "workflow": workflow,
         "mode": mode,
         "style": style,
+        "loras": loras,
     }
     errors = []
     requests_ = {}
@@ -190,6 +193,7 @@ def _prepare(request):
         request.width,
         request.height,
         request.style,
+        request.loras,
     )
 
 

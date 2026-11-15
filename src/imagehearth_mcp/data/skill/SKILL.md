@@ -40,6 +40,8 @@ Parameters:
 - `width` (integer, optional): Output width. Default: automatic.
 - `height` (integer, optional): Output height. Default: automatic.
 - `negative_prompt` (string, optional): Elements to avoid during generation. SDXL models apply it; other backends return a warning.
+- `style` (string, optional): `auto`, `photo` or `none`. Photographic cues for FLUX Schnell and SDXL 1.0. Default: `auto`.
+- `loras` (array, optional): Style LoRAs, only with `quality="high"` when the quality model is SDXL 1.0. See "Style LoRAs".
 - `include_image` (boolean, optional): Also return the picture, for models with vision. Default: false, because it uses context. The path stays on the first line.
 
 ### Automatic routing
@@ -68,6 +70,17 @@ For generation without references:
 - `high`: the quality model the user installed (FLUX Dev, FLUX Schnell or SDXL 1.0). Negative prompts only apply to SDXL 1.0. FLUX Schnell and SDXL 1.0 draw painterly unless told otherwise: `style="auto"` (default) adds photographic cues unless the prompt names another medium, but for realism still write the prompt like a photograph (subject, light, lens).
 
 Quality does not change the editing backend. Image editing always uses FLUX Kontext.
+
+### Style LoRAs
+
+With SDXL 1.0 as the quality model, the user can install small style LoRAs (pixel art, watercolor, anime, extra detail...). When the user asks for a style:
+
+1. Call `list_workflows` and look at the item with `active: true`. If it is `sdxl_base`, it has a `loras` list of the installed ones: `name`, `description`, `category`, `trigger_words` and the recommended `weight`.
+2. If one fits, pass it in `create_image` with `quality="high"`: `loras=["pixel-art"]`, or with a weight (0 to 2): `loras=[{"name": "watercolor", "weight": 0.6}]`. At most 3 per image, each once. A name alone uses its recommended weight.
+3. Do not add the activation words yourself: they are added to the prompt if missing. `style="auto"` adds no photographic cues when a LoRA asks for another medium.
+4. Never invent a name. If none fits or the list is empty, generate without LoRAs. If the user wants a LoRA that is not installed, the error names the command (`imagehearth-mcp setup --loras ...`): tell the user, it needs them to run it.
+
+LoRAs do not work with `quality="fast"`, FLUX or editing: the call fails before touching the GPU and the error says why. In a list of prompts, `loras` can be set per item or as a common value, like the other fields. The PNG records them in `ImageHearth-LoRAs`.
 
 ### Dimensions
 
@@ -162,7 +175,7 @@ The result has one line per item, in the order you gave:
 
 ### list_workflows
 
-List the generation workflows whose models are installed.
+List the generation workflows whose models are installed. The item of the quality model has `active: true`; when it is SDXL 1.0 it also has the installed style `loras`.
 
 Use this tool to inspect the available workflow catalog. It is checked on every call, so a later `setup` shows up without a restart.
 
@@ -206,6 +219,8 @@ Use only when `get_engine_status` reports `recovery_required`.
 `setup_start` installs ComfyUI and a profile. It needs `profile` and `accept_licenses`, refuses experimental profiles, and keeps running if the agent disconnects.
 
 Before calling `setup_start`, tell the user the profile, download size and licenses, and wait for their clear yes. Never accept licenses on their behalf.
+
+If the user chooses SDXL 1.0, also ask whether they want style LoRAs and which: `setup_status` lists them under `loras` with category, size and license. Pass the chosen names in `loras` (`["all"]` for every one). On an existing installation `loras` fixes the set: the ones not listed are deleted, so include the installed ones to keep. An empty list changes nothing.
 
 ## Image creation guidelines
 

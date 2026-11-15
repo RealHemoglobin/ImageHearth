@@ -7,6 +7,7 @@ from mcp.server.fastmcp.utilities.types import Image
 from PIL import Image as PILImage
 
 from imagehearth_mcp.engine import batch, catalog, config, orchestrator, progress
+from imagehearth_mcp.engine import loras as loras_module
 from imagehearth_mcp.engine.image_router import create_image as route_image
 from imagehearth_mcp.engine.status import get_status
 from imagehearth_mcp.engine.validation import available_workflows
@@ -41,6 +42,11 @@ ComfyUI: call ensure_comfyui. If it still fails, report the actual error.
 - memory_mode manual: ImageHearth does not touch the user's models, so the user \
 must free GPU memory.
 
+Styles: when the user asks for a style (pixel art, watercolor, anime...), call \
+list_workflows and, if the item with active=true has a "loras" entry that fits, \
+pass its name in create_image(loras=[...]). LoRAs only work with quality="high" \
+and SDXL 1.0. Never invent a LoRA name: if none fits, don't use one.
+
 Installing: setup_status shows what is missing, sizes and licenses. setup_start \
 downloads many GB. Before calling it you MUST tell the user the profile, the quality \
 model (for quality and full), the download size, the licenses and any warning that \
@@ -50,7 +56,11 @@ model on their behalf. Changing the quality model later is also setup_start with
 another quality_model: tell the user it replaces the current one. ComfyUI and the \
 models take tens of GB: before setup_start also ask whether they want another folder \
 or disk (setup_status install_folder shows the usual one and the disks with free \
-space) and pass it as install_dir. Don't choose it for them.
+space) and pass it as install_dir. Don't choose it for them. If the user chooses \
+SDXL 1.0 (sdxl), also ask whether they want style LoRAs and which ones (setup_status \
+loras has each one's size and license) and pass their names in loras; ["all"] installs \
+every one. On an existing installation, loras fixes the set: the ones not listed are \
+deleted, so list the installed ones you want to keep.
 """
 
 mcp = FastMCP("imagehearth", instructions=INSTRUCTIONS)
@@ -115,6 +125,7 @@ async def create_image(
     negative_prompt: str = "",
     include_image: bool = False,
     style: str = "auto",
+    loras: list[str | dict] | None = None,
     ctx: Context = None,
 ):
     """Create or edit images. If you need more than one image, make ONE call with
@@ -130,7 +141,7 @@ async def create_image(
       Several images: a list with one string per image (up to 20 unless the user
       changed it), generated together in a single session. A list item can also be
       an object {"prompt": ..., "quality": ..., "width": ..., "height": ...,
-      "negative_prompt": ..., "style": ..., "image_paths": ...} to differ from the common
+      "negative_prompt": ..., "style": ..., "loras": ..., "image_paths": ...} to differ from the common
       values below. Items are independent: none can use the result of another
       (editing a result is a later call), and a list is all new images or all
       edits, never both.
@@ -147,6 +158,14 @@ async def create_image(
       for another medium (painting, anime, illustration...). "photo" always adds
       them; "none" sends the prompt as written. Other models are never changed. For
       realism, still describe the scene like a photograph: subject, light, lens.
+    loras: Style LoRAs, only with quality="high" when the quality model is SDXL 1.0
+      (never with fast, FLUX or editing). A list of names, or objects with a weight:
+      loras=["pixel-art", {"name": "watercolor", "weight": 0.6}]. Use only the
+      names listed in list_workflows (the "loras" of the item with active=true), as
+      they are installed; a name alone uses its recommended weight. At most 3 per image,
+      each once, weight 0 to 2. The activation words are added to the prompt for you.
+      Choose one when the user asks for the style it gives (pixel art, watercolor,
+      anime...). Empty or omitted: none.
     workflow: Leave empty. Only for a name returned by list_workflows.
     negative_prompt: What to avoid. SDXL models apply it; FLUX ignores it.
     include_image: true also returns the picture to you, for models with vision.
@@ -179,6 +198,7 @@ async def create_image(
             workflow=workflow,
             mode=mode,
             style=style,
+            loras=loras,
         )
         return str(result)
 
@@ -194,6 +214,7 @@ async def create_image(
         height=height,
         negative_prompt=negative_prompt,
         style=style,
+        loras=loras,
     )
 
     if not include_image:
@@ -215,6 +236,9 @@ def list_workflows() -> list:
     The item of the quality model that quality="high" uses has active=true, its
     quality_model (flux-dev, flux-schnell or sdxl), its license and whether it allows
     commercial use. If none is installed, the only item has a next_step saying what to do.
+    When that item is SDXL 1.0 (sdxl_base) it also has "loras": the installed style LoRAs,
+    each with name, description, category, trigger_words and the recommended weight, to
+    pass to create_image(loras=[...]). The list is empty if none is installed.
     """
     workflows = [
         {"name": name, "file": f"{name}.json"} for name in available_workflows()
@@ -233,6 +257,9 @@ def list_workflows() -> list:
                 commercial_use=active["commercial_use"],
                 active=True,
             )
+
+            if active["workflow"] == loras_module.WORKFLOW:
+                item["loras"] = loras_module.describe_installed()
 
     return workflows
 
@@ -281,7 +308,8 @@ async def setup_status() -> dict:
     Lists each profile with its download size, licenses and whether it suits this
     hardware, and the quality models (FLUX Dev, FLUX Schnell, SDXL 1.0) with size,
     minimum VRAM, license, commercial use, whether they fit this GPU, which one is
-    recommended and which one is installed. install_folder has the usual install
+    recommended and which one is installed. loras lists the style LoRAs for SDXL 1.0
+    (name, description, category, size, license) and which are installed. install_folder has the usual install
     folder, the disks found with their free space and, if installed, the current
     folder. Nothing is changed or downloaded.
     """
@@ -298,6 +326,7 @@ async def setup_start(
     existing_comfyui: str = "",
     quality_model: str = "",
     install_dir: str = "",
+    loras: list[str] | None = None,
 ) -> dict:
     """Install ComfyUI and models. Downloads many GB: ask the user first.
 
@@ -316,6 +345,10 @@ async def setup_start(
       Empty uses the usual place. It is checked first (space, permissions, file system)
       and refused with the reason if it doesn't suit. On an existing installation a
       different folder is refused: the user moves it with `imagehearth-mcp update --move-to`.
+    loras: Only with the sdxl quality model: the style LoRAs to install, by name from
+      setup_status (or ["all"]), as the user chose. Ask them first: each one has a size and
+      a license. On an existing installation it fixes the set (downloads the missing ones
+      and deletes the others); an empty list or omitting it changes nothing.
     Returns at once, with the quality model used and a warning if it doesn't fit the
     GPU: tell the user. The installation continues even if you disconnect; follow it
     with setup_status.
@@ -323,5 +356,11 @@ async def setup_start(
     from imagehearth_mcp.provisioner import agent_setup
 
     return await asyncio.to_thread(
-        agent_setup.start, profile, accept_licenses, existing_comfyui, quality_model, install_dir
+        agent_setup.start,
+        profile,
+        accept_licenses,
+        existing_comfyui,
+        quality_model,
+        install_dir,
+        loras,
     )

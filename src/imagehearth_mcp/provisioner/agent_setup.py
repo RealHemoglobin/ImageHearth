@@ -110,6 +110,32 @@ def _job_status(catalog, models_dir):
     }
 
 
+def _lora_entries(catalog, models_dir, extra, records):
+    """The LoRA catalog with the size and license of each and whether it is installed."""
+    installed = {
+        item.model.name
+        for item in models.inspect(list(catalog.loras.values()), models_dir, extra)
+        if item.state == models.PRESENT
+    }
+    entries = []
+
+    for lora in catalog.loras.values():
+        license = catalog.licenses[lora.license]
+        entries.append(
+            {
+                "name": lora.name,
+                "description": lora.description,
+                "category": lora.category,
+                "download_mb": round(lora.bytes / 1e6),
+                "license": {"name": license.name, "url": license.url, "summary": license.summary},
+                "commercial_use": license.commercial,
+                "installed": lora.name in installed,
+            }
+        )
+
+    return entries
+
+
 def _is_experimental(name, system):
     return system == "darwin" or name.startswith("mac-")
 
@@ -178,6 +204,10 @@ def status():
         "install_folder": install_folders,
         "profiles": profiles,
         "quality_models": quality_models,
+        "loras": {
+            "only_with": "sdxl",
+            "available": _lora_entries(catalog, models_dir, extra, records),
+        },
         "installed_quality_model": (
             None
             if installed is None
@@ -240,8 +270,9 @@ def _next_step(job, profiles, comfy_found):
             "fits this GPU and which one is recommended), stating sizes, licenses and "
             "warnings. Also ask whether they want ComfyUI and the models in another "
             "folder or disk (install_folder has the usual one and the disks found, with "
-            "free space): the models take tens of GB. Then call setup_start, with "
-            "install_dir if they chose one. Image editing in full uses FLUX Kontext, "
+            "free space): the models take tens of GB. If they choose sdxl, ask whether "
+            "they want style LoRAs and which (loras has size and license of each). Then "
+            "call setup_start, with install_dir and loras if they chose them. Image editing in full uses FLUX Kontext, "
             "which is non-commercial whatever the quality model is."
         )
 
@@ -275,6 +306,64 @@ def _load_records():
         return InstallManifest.load(config.INSTALL_MANIFEST)
     except ProvisionError:
         return InstallManifest(config.INSTALL_MANIFEST)
+
+
+def _lora_names(loras, catalog):
+    """The names asked for (["all"] means every one), or ValueError. None means no change."""
+    if not loras:
+        return None
+
+    if not isinstance(loras, (list, tuple)) or not all(isinstance(name, str) for name in loras):
+        raise ValueError('loras must be a list of names from setup_status, or ["all"].')
+
+    if "all" in loras:
+        if len(loras) > 1:
+            raise ValueError('Use ["all"] alone, or a list of names.')
+
+        return list(catalog.loras)
+
+    unknown = [name for name in loras if name not in catalog.loras]
+
+    if unknown:
+        raise ValueError(
+            f"Unknown LoRA(s): {', '.join(unknown)}. Choose from: {', '.join(catalog.loras)}."
+        )
+
+    return list(dict.fromkeys(loras))
+
+
+def _effective_quality_model(catalog, base, quality_model, records, vram):
+    """The quality model the installation will have after this setup, or None."""
+    if not base.quality:
+        return None
+
+    if quality_model:
+        return quality_model
+
+    installed = quality.current(catalog, records, models.resolve_dir(records, config.COMFY_DIR))
+
+    if installed is not None:
+        return None if installed.legacy else installed.name
+
+    return catalog.recommend(vram)
+
+
+def _validate_loras(loras, catalog, base, quality_model, records, vram):
+    names = _lora_names(loras, catalog)
+
+    if names is None:
+        return None
+
+    effective = _effective_quality_model(catalog, base, quality_model, records, vram)
+
+    if effective != "sdxl":
+        raise ValueError(
+            "LoRAs only work with the sdxl quality model, and this installation would use "
+            f"{effective or 'a profile without one'}. Nothing was started: ask the user to "
+            "choose sdxl, or leave loras empty."
+        )
+
+    return names
 
 
 def _validate(profile, accept_licenses, existing_comfyui, quality_model="", install_dir=""):
@@ -361,7 +450,7 @@ def _folder_issues(install_dir, catalog, base, used, vram, detection):
     return locations.split(locations.check(folder, sizes, install_bytes))
 
 
-def _spawn(profile, existing_comfyui, quality_model="", install_dir=""):
+def _spawn(profile, existing_comfyui, quality_model="", install_dir="", loras=""):
     command = [
         sys.executable,
         "-m",
@@ -370,6 +459,7 @@ def _spawn(profile, existing_comfyui, quality_model="", install_dir=""):
         str(Path(existing_comfyui).expanduser().resolve()) if existing_comfyui else "",
         quality_model,
         install_dir,
+        loras,
     ]
 
     config.SETUP_JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -384,13 +474,16 @@ def _spawn(profile, existing_comfyui, quality_model="", install_dir=""):
         )
 
 
-def start(profile, accept_licenses, existing_comfyui="", quality_model="", install_dir=""):
+def start(
+    profile, accept_licenses, existing_comfyui="", quality_model="", install_dir="", loras=None
+):
     _validate(profile, accept_licenses, existing_comfyui, quality_model, install_dir)
     catalog = manifest.load()
     detection = detect.detect(disk_path=config.DATA_DIR, extra_paths=[config.COMFY_DIR])
     gpu = detection.primary_gpu
     vram = gpu.vram_mib if gpu else 0
     base = catalog.profiles[profile]
+    lora_names = _validate_loras(loras, catalog, base, quality_model, _load_records(), vram)
     used = ""
     warning = None
     replaces = None
@@ -429,11 +522,13 @@ def start(profile, accept_licenses, existing_comfyui="", quality_model="", insta
                 "An installation is already running. Follow it with setup_status."
             )
 
-        process = (
-            _spawn(profile, existing_comfyui, quality_model, install_dir)
-            if install_dir
-            else _spawn(profile, existing_comfyui, quality_model)
-        )
+        joined = ",".join(lora_names or ())
+        if joined:
+            process = _spawn(profile, existing_comfyui, quality_model, install_dir, joined)
+        elif install_dir:
+            process = _spawn(profile, existing_comfyui, quality_model, install_dir)
+        else:
+            process = _spawn(profile, existing_comfyui, quality_model)
         _write_job(
             state=RUNNING,
             profile=profile,
@@ -461,6 +556,9 @@ def start(profile, accept_licenses, existing_comfyui="", quality_model="", insta
     if install_dir:
         result["install_dir"] = install_dir
 
+    if lora_names:
+        result["loras"] = lora_names
+
     if warnings:
         result["folder_warnings"] = warnings
 
@@ -473,7 +571,7 @@ def start(profile, accept_licenses, existing_comfyui="", quality_model="", insta
     return result
 
 
-def _args(profile, existing_comfyui, quality_model="", install_dir=""):
+def _args(profile, existing_comfyui, quality_model="", install_dir="", loras=""):
     from imagehearth_mcp.cli import _build_parser
 
     argv = ["setup", "--profile", profile, "--accept-licenses", "--non-interactive"]
@@ -484,6 +582,9 @@ def _args(profile, existing_comfyui, quality_model="", install_dir=""):
 
     if install_dir:
         argv += ["--install-dir", install_dir]
+
+    if loras:
+        argv += ["--loras", loras]
 
     if existing_comfyui:
         argv += ["--attach", existing_comfyui, "--install-node"]
@@ -497,10 +598,10 @@ def main(argv):
     from imagehearth_mcp.engine.errors import ConfigError
     from imagehearth_mcp.provisioner.setup import run
 
-    profile, existing, quality_model, install_dir = ([*argv, "", "", ""])[:4]
+    profile, existing, quality_model, install_dir, loras = ([*argv, "", "", "", ""])[:5]
 
     try:
-        code = run(_args(profile, existing, quality_model, install_dir))
+        code = run(_args(profile, existing, quality_model, install_dir, loras))
     except (ProvisionError, ConfigError) as error:
         print(f"Error: {error}", flush=True)
         _write_job(state=FAILED, error=str(error))

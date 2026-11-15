@@ -117,6 +117,11 @@ name = "Apache-2.0"
 url = "https://www.apache.org/licenses/LICENSE-2.0"
 summary = "Permissive license."
 
+[licenses.creativeml-openrail-m]
+name = "CreativeML OpenRAIL-M"
+url = "https://huggingface.co/spaces/CompVis/stable-diffusion-license"
+summary = "Permits commercial use of the model and its outputs, with use restrictions that must be passed on (no illegal, harmful or deceptive uses)."
+
 [[models]]
 name = "sdxl_turbo"
 repo = "stabilityai/sdxl-turbo"
@@ -275,6 +280,161 @@ bytes = 3386856640
 sha256 = "b51cbb10b1a7aac6dd1c3b62f0ed908bfd06e0b42d2f3577d43e061361f51dae"
 license = "apache-2"
 workflows = ["flux_dev_gguf", "flux_kontext_dev_gguf"]
+
+# Style LoRAs for SDXL 1.0 (phase 13). Each one was measured on the RTX 4090 with the same
+# prompts and seed, with and without it, and against the same text without the LoRA:
+# specs/2026-11-15-loras-sdxl/seleccion-loras.md. `weight` is the recommended strength;
+# `trigger_words` are added to the prompt if missing.
+
+[[loras]]
+name = "pixel-art"
+description = "Pixel art: crisp blocky pixels, flat colors, game-sprite look."
+category = "pixel-art"
+trigger_words = ["pixel art"]
+weight = 1.0
+base = "sdxl"
+repo = "nerijs/pixel-art-xl"
+revision = "8bf4a4d9ea283e00a51fafda8e0539f8248ea037"
+filename = "pixel-art-xl.safetensors"
+dest = "loras/pixel-art-xl.safetensors"
+bytes = 170543052
+sha256 = "4234637cb80c998f41e348e6a6cb6bc20d8d038b2b0f256b6129b3b5e353eef7"
+license = "creativeml-openrail-m"
+
+[[loras]]
+name = "anime-pop"
+description = "Pop-art anime illustration: vivid colors and bold shapes."
+category = "anime"
+trigger_words = ["daiton style"]
+weight = 1.0
+base = "sdxl"
+repo = "alvdansen/popartanime"
+revision = "fbb087a14e1b48229887f921447056a1dcf7c67a"
+filename = "Pop_Art_Illustration-000012.safetensors"
+dest = "loras/popartanime-000012.safetensors"
+bytes = 228456476
+sha256 = "e71cc68299339e3453842155df0cadffdb3b78e1e3052abc441ec3185db8a741"
+license = "creativeml-openrail-m"
+
+[[loras]]
+name = "photorealism"
+description = "Photorealistic look: natural skin, lighting and lens."
+category = "photo"
+trigger_words = ["PhotoRealism"]
+weight = 1.0
+base = "sdxl"
+repo = "prithivMLmods/Canopus-Realism-LoRA"
+revision = "33a0d267ae33adc979c9d99cf2cf5fe9dc1b6dd6"
+filename = "Canopus-Realism-LoRA.safetensors"
+dest = "loras/canopus-realism-sdxl.safetensors"
+bytes = 456485460
+sha256 = "0629f06bcfa43cf84a68d3a94f53e0babb06f92ef9024073093cc4a8530f7fd9"
+license = "creativeml-openrail-m"
+
+[[loras]]
+name = "papercut"
+description = "Layered paper-cut art with depth and shadows."
+category = "illustration"
+trigger_words = ["papercut"]
+weight = 1.0
+base = "sdxl"
+repo = "TheLastBen/Papercut_SDXL"
+revision = "b001f28d3913bc1e4a19f2564fa41e39049bec1c"
+filename = "papercut.safetensors"
+dest = "loras/papercut-sdxl.safetensors"
+bytes = 340786114
+sha256 = "98f1729d858e7bf719283797e45661337ce915941b83260026e157d94963c402"
+license = "creativeml-openrail-m"
+
+[[loras]]
+name = "flat-illustration"
+description = "Minimal flat vector illustration with pastel colors."
+category = "illustration"
+trigger_words = ["minimal flat illustration"]
+weight = 1.0
+base = "sdxl"
+repo = "ramel2/emotional-flat-illustration-sdxl-lora"
+revision = "7255f850a340a39c3a3c517d1169d2917efe0bc3"
+filename = "minimal_flat_illustration,_emotional_scene.safetensors"
+dest = "loras/flat-illustration-sdxl.safetensors"
+bytes = 456500044
+sha256 = "ba0337ce4170d2912f1a1f0c9d74c9ad39db1123a8835d99eaad9d90a194af71"
+license = "creativeml-openrail-m"
+
+[[loras]]
+name = "lineart"
+description = "Clean line art and manga-style outlines."
+category = "illustration"
+trigger_words = ["LineAniAF", "lineart"]
+weight = 1.0
+base = "sdxl"
+repo = "artificialguybr/LineAniRedmond-LinearMangaSDXL-V2"
+revision = "411d5335378c13e63bf0d5376b405a39e9a869cb"
+filename = "LineAniRedmondV2-Lineart-LineAniAF.safetensors"
+dest = "loras/lineani-redmond-v2.safetensors"
+bytes = 170540028
+sha256 = "1692a2c7d285f6c94b7910bc8f8ec2758163ba2710214bd35bb20cc94d2488c8"
+license = "creativeml-openrail-m"
+
+[[loras]]
+name = "pencil-art"
+description = "Pencil drawing: graphite shading and sketch lines."
+category = "illustration"
+trigger_words = ["Pencil Art"]
+weight = 1.0
+base = "sdxl"
+repo = "prithivMLmods/Canopus-Pencil-Art-LoRA"
+revision = "32666b93b2aad31c77c4a8db5fa189dce1876667"
+filename = "Canopus-Pencil-Art-LoRA.safetensors"
+dest = "loras/canopus-pencil-art-sdxl.safetensors"
+bytes = 456486316
+sha256 = "7e3f756fcbb06bbac9a8db5ba01911e14467fce8976e64e40f9cfd84874f5db3"
+license = "apache-2"
+
+[[loras]]
+name = "crayon"
+description = "Crayon drawing: waxy strokes on textured paper."
+category = "illustration"
+trigger_words = []
+weight = 1.0
+base = "sdxl"
+repo = "ostris/crayon_style_lora_sdxl"
+revision = "aef7fd10d197d2a80b008e9e8f0575da0a312025"
+filename = "crayons_v1_sdxl.safetensors"
+dest = "loras/crayons-v1-sdxl.safetensors"
+bytes = 48101644
+sha256 = "f620948d05bc064567a73adf6c2decab184ddbae3fb9602fb3fcb1136dbda93b"
+license = "apache-2"
+
+[[loras]]
+name = "3d-render"
+description = "Stylized 3D render, like an animated film."
+category = "3d"
+trigger_words = ["3d render"]
+weight = 0.85
+base = "sdxl"
+repo = "goofyai/3d_render_style_xl"
+revision = "5ec74a57db5e244a2157173781a7b29045f88237"
+filename = "3d_render_style_xl.safetensors"
+dest = "loras/3d-render-style-xl.safetensors"
+bytes = 85450700
+sha256 = "393de3e04d956b13ac1a41c3a932e196330ad03d7a70abc2a174d911376ec397"
+license = "apache-2"
+
+[[loras]]
+name = "clay-animation"
+description = "Clay animation: handmade plasticine figures."
+category = "3d"
+trigger_words = ["Clay Animation"]
+weight = 1.0
+base = "sdxl"
+repo = "artificialguybr/ClayAnimationRedmond"
+revision = "e9ff71de987133002aca87e4a01e2ec95af8b6b0"
+filename = "ClayAnimationRedm.safetensors"
+dest = "loras/clay-animation-redmond.safetensors"
+bytes = 170540036
+sha256 = "1ab7e69b8c5118918bab5a193c2c85497f7138eec081da51d7ef7b54f0efe006"
+license = "creativeml-openrail-m"
 
 [profiles.fast]
 description = "Quick generation with SDXL Turbo"

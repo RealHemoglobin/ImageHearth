@@ -374,6 +374,33 @@ def check_custom_nodes(config, records, catalog):
     )
 
 
+def lora_state(records, catalog, models_dir, extra_paths, verify_hashes):
+    """(installed names, problems by name) of the catalog LoRAs.
+
+    A LoRA is a problem when setup registered its file and the file is missing or isn't the
+    expected one. One that was never installed is simply not installed.
+    """
+    from imagehearth_mcp.provisioner import models
+
+    installed = []
+    problems = {}
+
+    for item in models.inspect(list(catalog.loras.values()), models_dir, extra_paths):
+        name = item.model.name
+        registered = records.entry(models_dir / item.model.dest) is not None
+        bad = item.state != models.PRESENT
+
+        if not bad and verify_hashes:
+            bad = models.sha256(item.path) != item.model.sha256
+
+        if not bad:
+            installed.append(name)
+        elif registered or item.state == models.WRONG_SIZE:
+            problems[name] = str(item.path)
+
+    return installed, problems
+
+
 def check_models(config, records, catalog, verify_hashes, system):
     from imagehearth_mcp.provisioner import models, quality
 
@@ -405,7 +432,16 @@ def check_models(config, records, catalog, verify_hashes, system):
         if name == expected:
             problems = {item.model.name: str(item.path) for item in bad}
 
-    details = {"models_dir": str(models_dir), "profile": expected, "profiles": complete}
+    loras, lora_problems = lora_state(records, catalog, models_dir, extra_paths, verify_hashes)
+    details = {
+        "models_dir": str(models_dir),
+        "profile": expected,
+        "profiles": complete,
+        "loras": loras,
+    }
+
+    if lora_problems:
+        details["lora_problems"] = lora_problems
 
     if problems:
         return Check(
@@ -417,8 +453,25 @@ def check_models(config, records, catalog, verify_hashes, system):
         )
 
     method = "SHA-256" if verify_hashes else "size"
+    found = f" LoRAs: {', '.join(loras)}." if loras else ""
+
+    if lora_problems:
+        keep = ",".join(loras) or "none"
+        return Check(
+            "models",
+            WARN,
+            f"Profile {expected} complete (checked by {method}), but these LoRAs are "
+            f"missing or damaged: {', '.join(lora_problems)}.{found}",
+            f"Run `imagehearth-mcp setup --loras {','.join([*loras, *lora_problems])}` to "
+            f"download them again, or `--loras {keep}` to drop them.",
+            details,
+        )
+
     return Check(
-        "models", OK, f"Profile {expected} complete (checked by {method}).", details=details
+        "models",
+        OK,
+        f"Profile {expected} complete (checked by {method}).{found}",
+        details=details,
     )
 
 

@@ -120,6 +120,10 @@ def plan_change(catalog, records, models_dir, old_profile, new_profile, keep_pro
     change.download = [
         item for item in models.inspect(new_profile.models, models_dir, extra) if item.state != models.PRESENT
     ]
+    # LoRAs are for SDXL 1.0 only: they leave with it.
+    if not old.legacy and old.name == "sdxl" and new_profile.quality_model != "sdxl":
+        leaving = [*leaving, *catalog.loras.values()]
+
     # A ComfyUI that isn't ours keeps every file it has, ours or not.
     change.kept_attached = records.mode == "attached"
     change.delete = (
@@ -141,7 +145,8 @@ def show_change(change, catalog):
     print(f"  To download: {format_size(change.download_bytes)}")
 
     for item in change.delete:
-        print(f"  To delete afterwards: {item.path.name}")
+        kind = " (LoRA)" if hasattr(item.model, "trigger_words") else ""
+        print(f"  To delete afterwards: {item.path.name}{kind}")
 
     if change.kept_attached:
         print("  The old model stays in the ComfyUI you attached; delete it by hand if you want the space.")
@@ -163,11 +168,16 @@ def require_idle():
 
 def delete_old(change, records):
     """Borra los archivos que dejó el modelo anterior. Se llama con el nuevo ya verificado."""
+    return delete_items(change.delete, records)
+
+
+def delete_items(items, records):
+    """Borra esos archivos y los olvida en el registro. Devuelve los fallos, uno por línea."""
     from imagehearth_mcp.provisioner import maintenance
 
     failures = []
 
-    for item in change.delete:
+    for item in items:
         try:
             maintenance._remove(item.path)
         except OSError as error:

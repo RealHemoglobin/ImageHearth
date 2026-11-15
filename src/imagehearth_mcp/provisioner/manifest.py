@@ -9,6 +9,8 @@ from importlib import resources
 from imagehearth_mcp.provisioner import ProvisionError
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_LORA_NAME = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
+MAX_LORA_WEIGHT = 2.0
 _REVISION = re.compile(r"[0-9a-f]{40}")
 DESKTOP_PLATFORMS = ("linux", "windows")
 
@@ -37,6 +39,35 @@ class Model:
     requires: tuple[str, ...] = ()
     # Kept in the manifest only so an old installation keeps generating.
     legacy: bool = False
+
+
+@dataclass(frozen=True)
+class Lora:
+    """A style LoRA for SDXL 1.0. It has the fields of `Model` the downloader needs."""
+
+    name: str
+    description: str
+    category: str
+    trigger_words: tuple[str, ...]
+    # Recommended strength.
+    weight: float
+    base: str
+    repo: str
+    revision: str
+    filename: str
+    dest: str
+    bytes: int
+    sha256: str
+    license: str
+    # Same shape as `Model`, so `provisioner.models` handles both alike.
+    workflows = ()
+    requires = ()
+    legacy = False
+
+    @property
+    def lora_name(self):
+        """The name ComfyUI's LoraLoader knows it by: the path under `models/loras`."""
+        return self.dest.removeprefix("loras/")
 
 
 @dataclass(frozen=True)
@@ -131,6 +162,17 @@ class Manifest:
     nodes: dict[str, NodePin] = field(default_factory=dict)
     quality_models: dict[str, QualityModel] = field(default_factory=dict)
     edit_options: tuple[Option, ...] = ()
+    loras: dict[str, Lora] = field(default_factory=dict)
+
+    def lora_licenses(self, loras):
+        """The licenses of those LoRAs, without repeats."""
+        keys = []
+
+        for item in loras:
+            if item.license not in keys:
+                keys.append(item.license)
+
+        return [self.licenses[key] for key in keys]
 
     def licenses_for(self, profile):
         keys = [self.comfyui.license]
@@ -358,6 +400,90 @@ class Manifest:
         }
 
 
+def _parse_loras(entries, licenses, models):
+    loras = {}
+    destinations = {model.dest for model in models.values()}
+
+    for entry in entries:
+        trigger_words = entry["trigger_words"]
+
+        if not isinstance(trigger_words, (list, tuple)) or not all(
+            isinstance(word, str) and word.strip() for word in trigger_words
+        ):
+            raise ValueError(f"{entry['name']}: trigger_words must be a list of words")
+
+        weight = entry["weight"]
+        lora = Lora(
+            entry["name"],
+            entry["description"],
+            entry["category"],
+            tuple(trigger_words),
+            weight,
+            entry["base"],
+            entry["repo"],
+            entry["revision"],
+            entry["filename"],
+            entry["dest"],
+            entry["bytes"],
+            entry["sha256"],
+            entry["license"],
+        )
+
+        if not isinstance(lora.name, str) or not _LORA_NAME.fullmatch(lora.name):
+            raise ValueError(f"{lora.name!r}: a LoRA name is lowercase words joined by hyphens")
+
+        if lora.name in loras:
+            raise ValueError(f"duplicated LoRA {lora.name}")
+
+        if lora.base != "sdxl":
+            raise ValueError(f"{lora.name}: base must be sdxl")
+
+        parts = lora.dest.split("/")
+
+        if (
+            parts[0] != "loras"
+            or len(parts) < 2
+            or any(part in ("", ".", "..") for part in parts)
+            or "\\" in lora.dest
+        ):
+            raise ValueError(f"{lora.name}: dest must be a path under loras/")
+
+        if lora.dest in destinations:
+            raise ValueError(f"{lora.name}: dest {lora.dest} is already used")
+
+        destinations.add(lora.dest)
+
+        if (
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not 0 <= weight <= MAX_LORA_WEIGHT
+        ):
+            raise ValueError(f"{lora.name}: weight must be between 0 and {MAX_LORA_WEIGHT:g}")
+
+        for key in ("description", "category", "repo", "filename"):
+            if not isinstance(getattr(lora, key), str) or not getattr(lora, key).strip():
+                raise ValueError(f"{lora.name}: {key} is empty")
+
+        if not _SHA256.fullmatch(lora.sha256):
+            raise ValueError(f"{lora.name}: invalid sha256")
+
+        if not _REVISION.fullmatch(lora.revision):
+            raise ValueError(f"{lora.name}: revision must be a full commit hash")
+
+        if lora.license not in licenses:
+            raise ValueError(f"{lora.name}: unknown license {lora.license}")
+
+        if not licenses[lora.license].commercial:
+            raise ValueError(f"{lora.name}: only licenses that allow commercial use")
+
+        if not isinstance(lora.bytes, int) or lora.bytes <= 0:
+            raise ValueError(f"{lora.name}: invalid size")
+
+        loras[lora.name] = lora
+
+    return loras
+
+
 def parse(values):
     """Convierte y valida el contenido del manifiesto."""
     try:
@@ -405,6 +531,8 @@ def parse(values):
             for name in model.requires:
                 if name not in models:
                     raise ValueError(f"{model.name}: unknown required model {name}")
+
+        loras = _parse_loras(values.get("loras", ()), licenses, models)
 
         nodes = {
             name: NodePin(
@@ -512,7 +640,7 @@ def parse(values):
         raise ProvisionError(f"Invalid models.toml: {error!r}") from error
 
     return Manifest(
-        comfyui, pytorch, licenses, models, profiles, nodes, quality_models, edit_options
+        comfyui, pytorch, licenses, models, profiles, nodes, quality_models, edit_options, loras
     )
 
 

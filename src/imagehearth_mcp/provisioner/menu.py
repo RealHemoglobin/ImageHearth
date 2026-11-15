@@ -234,30 +234,43 @@ def confirm(question, default=False, reader=None, allow_back=False):
         print("\r" + " " * len(prompt) + "\r", end="", flush=True)
 
 
-def choose_many(title, options, reader=None, allow_back=True, back_label="Back"):
-    """Selección múltiple con todas marcadas. Devuelve las `key` elegidas, o BACK con 0."""
+def choose_many(
+    title, options, reader=None, allow_back=True, back_label="Back", default=None
+):
+    """Selección múltiple. Devuelve las `key` elegidas, o BACK con 0.
+
+    `default`: las `key` marcadas al empezar, que elige Enter; con `default=None` están
+    todas. Con marcas propias, `none` no elige ninguna.
+    """
     options = list(options)
     source = _Reader(reader)
+    marked = [option.key for option in options] if default is None else list(default)
 
     if title:
         print(f"\n{title}")
 
     for number, option in enumerate(options, start=1):
-        _print_option(number, option, mark="[x] ")
+        _print_option(number, option, mark="[x] " if option.key in marked else "[ ] ")
 
     if allow_back:
         print(f"  0. {back_label}")
 
-    prompt = "Enter for all, or numbers separated by commas: "
+    if default is None:
+        prompt = "Enter for all, or numbers separated by commas: "
+    else:
+        prompt = "Enter to keep the marked ones, numbers separated by commas, or none: "
 
     while True:
         answer = source.line(prompt)
 
         if not answer:
-            return [option.key for option in options]
+            return [option.key for option in options if option.key in marked]
 
         if answer == "0" and allow_back:
             return BACK
+
+        if default is not None and answer.lower() == "none":
+            return []
 
         try:
             numbers = [int(part) for part in answer.replace(" ", "").split(",") if part]
@@ -268,4 +281,7 @@ def choose_many(title, options, reader=None, allow_back=True, back_label="Back")
             chosen = sorted(set(numbers))
             return [options[number - 1].key for number in chosen]
 
-        print(f"Type numbers from 1 to {len(options)} separated by commas, or press Enter for all.")
+        print(
+            f"Type numbers from 1 to {len(options)} separated by commas, or press Enter "
+            f"{'for all' if default is None else 'to keep the marked ones'}."
+        )

@@ -29,12 +29,13 @@ def interactive(**kwargs):
 
 
 def test_full_run_only_with_keys(machine, monkeypatch, capsys):
-    press(monkeypatch, "1231")
+    # folder, profile quality, model sdxl, no LoRAs (Enter), accept.
+    press(monkeypatch, "123\r1")
     assert setup_command.run(interactive()) == 0
     output = capsys.readouterr().out
 
-    for step in (1, 2, 3, 4):
-        assert f"Step {step} of 4" in output
+    for step in (1, 2, 3, 4, 5):
+        assert f"Step {step} of 5" in output
 
     records = InstallManifest.load(config.INSTALL_MANIFEST)
     assert (records.profile, records.quality_model) == ("quality", "sdxl")
@@ -48,11 +49,12 @@ def test_enter_takes_the_recommended_answers(machine, monkeypatch):
 
 
 def test_zero_goes_back_and_keeps_answers(machine, monkeypatch, capsys):
-    # profile quality, model sdxl, back from the review to the model (default sdxl), accept.
-    press(monkeypatch, "1230\r1")
+    # profile quality, model sdxl, no LoRAs; back from the review to the LoRAs and from there
+    # to the model (default sdxl), on to the LoRAs again and accept.
+    press(monkeypatch, "123\r" "0" "0\r" "\r" "\r" "1")
     assert setup_command.run(interactive()) == 0
     output = capsys.readouterr().out
-    assert output.count("Step 3 of 4") == 2
+    assert output.count("Step 3 of 5") == 2
     assert "Choice [3]" in output
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "sdxl"
 
@@ -62,14 +64,15 @@ def test_profile_without_quality_removes_the_model_step(machine, monkeypatch, ca
     press(monkeypatch, "1" + "2" + "0" + "1" + "1")
     assert setup_command.run(interactive()) == 0
     output = capsys.readouterr().out
-    assert "Step 2 of 4" in output and "Step 3 of 3" in output
+    assert "Step 2 of 5" in output and "Step 3 of 3" in output
     records = InstallManifest.load(config.INSTALL_MANIFEST)
     assert records.profile == "fast" and records.quality_model is None
 
 
 def test_zero_from_every_step_goes_back_one_at_a_time(machine, monkeypatch, capsys):
-    # profile, model, review; back, back, back leaves with nothing written.
-    press(monkeypatch, "123" + "0000")
+    # folder, profile, model, then back from the LoRAs, the model, the profile and the folder
+    # leaves with nothing written.
+    press(monkeypatch, "123" + "0\r" + "000")
     assert setup_command.run(interactive()) == 0
     assert "Nothing was changed." in capsys.readouterr().out
     assert not config.INSTALL_MANIFEST.exists()
@@ -85,10 +88,10 @@ def test_steps_resolved_by_arguments_are_not_shown(machine, monkeypatch, capsys)
 
 
 def test_quality_model_argument_hides_its_step(machine, monkeypatch, capsys):
-    press(monkeypatch, "121")
+    press(monkeypatch, "12\r1")
     assert setup_command.run(interactive(quality_model="sdxl")) == 0
     output = capsys.readouterr().out
-    assert "Step 3 of 3" in output and "Quality models" not in output
+    assert "Step 4 of 4" in output and "Quality models" not in output
 
 
 def existing_comfy(machine):

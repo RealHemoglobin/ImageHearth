@@ -192,6 +192,57 @@ def choose_quality_model(
     return answer if answer is menu.BACK else Selection(answer)
 
 
+def parse_loras(text, catalog):
+    """The names in `--loras` (`all`, `none` or a list), in catalog order; error if unknown."""
+    text = (text or "").strip()
+
+    if text == "all":
+        return tuple(catalog.loras)
+
+    names = [part.strip() for part in text.split(",") if part.strip()]
+
+    if names == ["none"] or not names:
+        return ()
+
+    unknown = [name for name in names if name not in catalog.loras]
+
+    if unknown:
+        raise ProvisionError(
+            f"Unknown LoRA {', '.join(map(repr, unknown))}. Choose from: "
+            f"{', '.join(catalog.loras)}, or use all or none."
+        )
+
+    return tuple(name for name in catalog.loras if name in names)
+
+
+def format_small(size):
+    return f"{size / 1_000_000:.0f} MB" if size < 1_000_000_000 else format_size(size)
+
+
+def lora_options(catalog):
+    return [
+        menu.Option(
+            lora.name,
+            f"{lora.name:18} {lora.category:13} {format_small(lora.bytes):>7}  "
+            f"{catalog.licenses[lora.license].name}",
+            lora.description,
+        )
+        for lora in catalog.loras.values()
+    ]
+
+
+def choose_loras(catalog, installed, default=None, back_label="Back"):
+    """The LoRAs to have: those marked on the installation, or none. `menu.BACK` goes back."""
+    marked = list(installed) if default is None else list(default)
+    answer = menu.choose_many(
+        "Style LoRAs for SDXL 1.0 (optional):",
+        lora_options(catalog),
+        back_label=back_label,
+        default=marked,
+    )
+    return answer if answer is menu.BACK else tuple(answer)
+
+
 def choose_mode(args, detection, records, interactive, default=None, back_label="Back"):
     """Devuelve (modo, carpeta, puerto por defecto)."""
     default_dir = config.DATA_DIR / "comfyui"
@@ -257,7 +308,8 @@ def choose_mode(args, detection, records, interactive, default=None, back_label=
 
 
 def show_summary(
-    catalog, profile, mode, comfy_dir, models_dir, pending, torch=None, folder=None, notes=()
+    catalog, profile, mode, comfy_dir, models_dir, pending, torch=None, folder=None, notes=(),
+    loras=None,
 ):
     print(f"\nProfile: {profile.name} ({profile.description})")
 
@@ -288,10 +340,32 @@ def show_summary(
         status = "" if item.state != models.PRESENT else "  (already present)"
         print(f"  {item.model.name:14} {format_size(item.model.bytes):>8}{status}")
 
+    licenses = catalog.licenses_for(profile)
+
+    if loras is not None:
+        for item in loras.download:
+            print(f"  {item.model.name:14} {format_small(item.model.bytes):>8}  (LoRA)")
+
+        licenses += [
+            entry
+            for entry in catalog.lora_licenses(item.model for item in loras.download)
+            if entry not in licenses
+        ]
+
     print(f"  Models to download: {format_size(pending)}")
+
+    if loras is not None:
+        print(
+            "\nLoRAs after this: "
+            f"{', '.join(loras.names) if loras.names else 'none'}"
+        )
+
+        for item in loras.delete:
+            print(f"  To delete: {item.path.name} ({format_small(item.model.bytes)})")
+
     print("\nLicenses you accept by downloading them:")
 
-    for entry in catalog.licenses_for(profile):
+    for entry in licenses:
         print(f"  {entry.name}\n    {entry.url}\n    {entry.summary}")
 
     print()
@@ -461,6 +535,25 @@ class Answers:
     base: object = None
     quality: Selection | None = None
     quality_for: str | None = None
+    # LoRAs chosen in the step; None until asked.
+    loras: tuple | None = None
+
+
+@dataclass(frozen=True)
+class LoraPlan:
+    """The set of LoRAs this run leaves: what to download and what to delete."""
+
+    names: tuple
+    download: tuple = ()
+    delete: tuple = ()
+
+    @property
+    def download_bytes(self):
+        return sum(item.model.bytes for item in self.download)
+
+    @property
+    def changes(self):
+        return bool(self.download or self.delete)
 
 
 @dataclass(frozen=True)
@@ -475,6 +568,7 @@ class Plan:
     pending: int
     torch: object
     folder: Path | None = None
+    loras: LoraPlan | None = None
 
 
 def choose_folder(run, back_label="Back"):
@@ -578,6 +672,9 @@ class _Run:
         self.folder_arg = locations.resolve(asked) if asked else None
         self.folder = self.folder_arg
         self.answers = None
+        asked_loras = getattr(args, "loras", None)
+        # None: not asked for, the LoRAs are left as they are.
+        self.lora_arg = None if asked_loras is None else parse_loras(asked_loras, catalog)
 
     def models_dir(self, comfy_dir):
         args = self.args
@@ -742,7 +839,69 @@ class _Run:
             args, self.catalog, self.records, self.models_dir(comfy_dir), answers.base,
             profile, installed, selection, self.vram,
         )
-        return change is not None
+        loras = self.lora_plan(answers, selection, self.models_dir(comfy_dir))
+        return change is not None or bool(loras and loras.delete)
+
+    def _quality_is_sdxl(self, answers, base):
+        """Whether the quality model is (or can still end up being) SDXL 1.0."""
+        asked = getattr(self.args, "quality_model", None)
+
+        if asked:
+            return asked == "sdxl"
+
+        if answers.quality_for == base.name and answers.quality is not None:
+            return answers.quality.name == "sdxl" and not answers.quality.legacy
+
+        return True
+
+    def asks_loras(self, answers):
+        """The LoRAs step: interactive, SDXL 1.0 and no `--loras` already saying it."""
+        if not self.interactive or self.lora_arg is not None or not self.catalog.loras:
+            return False
+
+        base = answers.base
+
+        if base is None:
+            asked = getattr(self.args, "quality_model", None)
+            profiles = self.catalog.profiles_for(self.detection.system)
+            return any(p.quality for p in profiles.values()) and (not asked or asked == "sdxl")
+
+        return base.quality and self._quality_is_sdxl(answers, base)
+
+    def installed_loras(self, models_dir):
+        """Catalog LoRAs whose file is there, and by name."""
+        return {
+            item.model.name: item
+            for item in models.inspect(list(self.catalog.loras.values()), models_dir)
+            if item.state != models.MISSING
+        }
+
+    def lora_plan(self, answers, selection, models_dir):
+        """What `--loras` or the step ask for, or None if the LoRAs are left alone."""
+        sdxl = selection is not None and selection.name == "sdxl" and not selection.legacy
+        # An answer to the step is dropped if the model was changed afterwards.
+        names = self.lora_arg if self.lora_arg is not None else (answers.loras if sdxl else None)
+
+        if names is None:
+            return None
+
+        if not sdxl:
+            raise ProvisionError(
+                "LoRAs only work with the SDXL 1.0 quality model: use --quality-model sdxl "
+                "with a quality or full profile. Nothing was changed."
+            )
+
+        extra = models.extra_search_paths(config.COMFY_DIR)
+        wanted = [self.catalog.loras[name] for name in names]
+        download = tuple(
+            item for item in models.inspect(wanted, models_dir, extra) if item.state != models.PRESENT
+        )
+        delete = tuple(
+            item
+            for name, item in self.installed_loras(models_dir).items()
+            if name not in names and self.records.is_owned(item.path)
+        )
+        return LoraPlan(tuple(names), download, delete)
 
     def _selection(self, answers):
         if answers.base is None:
@@ -775,6 +934,9 @@ class _Run:
 
         if self.asks_quality(answers.base) or self._may_ask_quality(answers.base):
             found.append("quality")
+
+        if self.asks_loras(answers):
+            found.append("loras")
 
         if self.asks_review(answers):
             found.append("review")
@@ -820,9 +982,12 @@ class _Run:
         )
         torch = self.catalog.pytorch.get(self.detection.platform.index)
         folder = self.folder if mode == MANAGED and (self.folder_arg or not self.records.mode) else None
+        loras = self.lora_plan(answers, selection, models_dir)
+        pending = models.pending_bytes(profile.models, models_dir)
+        pending += loras.download_bytes if loras else 0
         return Plan(
             mode, comfy_dir, self.args.port or default_port, models_dir, selection, profile,
-            change, models.pending_bytes(profile.models, models_dir), torch, folder,
+            change, pending, torch, folder, loras,
         )
 
 
@@ -877,6 +1042,20 @@ def _ask_step(run, answers, name, back_label):
 
         return result
 
+    if name == "loras":
+        models_dir = run.models_dir(answers.mode[1])
+        installed = [
+            lora_name
+            for lora_name, item in run.installed_loras(models_dir).items()
+            if item.state == models.PRESENT
+        ]
+        result = choose_loras(run.catalog, installed, answers.loras, back_label)
+
+        if result is not menu.BACK:
+            answers.loras = result
+
+        return result
+
     return None
 
 
@@ -913,7 +1092,7 @@ def _review(run, answers, ask):
 
     show_summary(
         run.catalog, plan.profile, plan.mode, plan.comfy_dir, plan.models_dir, plan.pending,
-        plan.torch, plan.folder, notes,
+        plan.torch, plan.folder, notes, plan.loras,
     )
 
     if not ask:
@@ -1040,6 +1219,11 @@ def _setup(args):
     models.ensure_models(profile.models, models_dir, records)
     records.profile = _higher_profile(records.profile, profile.base)
 
+    if plan.loras is not None:
+        models.ensure_models(
+            [catalog.loras[name] for name in plan.loras.names], models_dir, records
+        )
+
     if profile.quality and not selection.legacy:
         # Only now that the model is verified: until then the previous one is the record.
         records.quality_model = profile.quality_model
@@ -1047,6 +1231,10 @@ def _setup(args):
         records.edit_precision = profile.edit_precision
 
     records.save()
+
+    if plan.loras is not None and plan.loras.delete:
+        for failure in quality.delete_items(plan.loras.delete, records):
+            print(f"WARNING: could not delete {failure}")
 
     if change is not None:
         for failure in quality.delete_old(change, records):

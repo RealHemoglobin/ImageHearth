@@ -33,7 +33,7 @@ from imagehearth_mcp.provisioner import (
 )
 from imagehearth_mcp.provisioner import setup as setup_command
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
-from tests.harness import swap_models
+from tests.harness import small_loras, swap_models
 
 GB = 1_000_000_000
 
@@ -1046,7 +1046,9 @@ def machine(tmp_path, monkeypatch):
         )
         for name, model in manifest.load().models.items()
     }
-    fake_catalog = swap_models(manifest.load(), small)
+    fake_catalog = dataclasses.replace(
+        swap_models(manifest.load(), small), loras=small_loras(manifest.load(), "apache-2")
+    )
     monkeypatch.setattr(manifest, "load", lambda: fake_catalog)
 
     real_ensure = models.ensure_models

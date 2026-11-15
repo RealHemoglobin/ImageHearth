@@ -48,6 +48,14 @@ def _build_parser():
         "one: it is downloaded first and the old one deleted afterwards.",
     )
     setup.add_argument(
+        "--loras",
+        metavar="NAMES",
+        help="Style LoRAs for SDXL 1.0: a comma-separated list of names, all or none. On "
+        "an existing installation it fixes the set: the ones missing are downloaded and "
+        "the others deleted. Without it the LoRAs are left as they are. Only with the "
+        "sdxl quality model.",
+    )
+    setup.add_argument(
         "--variant",
         choices=("fp8", "gguf"),
         help="Force the precision of the quality model (and of image editing in full) "
