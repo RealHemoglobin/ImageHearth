@@ -384,6 +384,8 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 
 **Objetivo:** tras `imagehearth-mcp uninstall` o `connect --remove`, ningún agente sigue mostrando ImageHearth: ni el servidor MCP ni la skill.
 
+**Estado:** completada por decisión del usuario el 2026-11-15. `scripts/check.sh` en verde y pruebas reales en Linux hechas. La reproducción en Windows no consta en la [evidencia](2026-11-15-desconexion-completa/validation.md#evidencia), que recoge lo pendiente; Hermes y opencode solo se comprobaron con tests simulados o por archivo.
+
 **Contexto (2026-11-15):** después de desinstalar, ImageHearth seguía apareciendo en Claude Code. Hoy `~/.claude.json` ya no tiene la entrada, así que hay que reproducirlo. Revisando el código hay varias causas posibles:
 
 - `disconnect_all` solo retira las conexiones que `connect` registró en `install.json`. Una entrada añadida a mano, siguiendo `llms-install.md`, con el nombre antiguo `imageengine` o desde una instalación anterior cuyo registro se perdió no se toca.
