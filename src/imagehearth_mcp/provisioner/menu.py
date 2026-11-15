@@ -184,6 +184,11 @@ def choose(title, options, default=None, reader=None, allow_back=True, back_labe
         print(f"Type a number from {'0' if allow_back else '1'} to {len(options)}.")
 
 
+def ask_line(prompt, reader=None):
+    """Una línea de texto. Una línea vacía devuelve ''."""
+    return _Reader(reader).line(prompt)
+
+
 def confirm(question, default=False, reader=None, allow_back=False):
     """Sí o no con una tecla: y/s sí, n o 0 no, Enter el valor por defecto. Con `allow_back`, 0 es BACK."""
     hint = "Y/n" if default else "y/N"

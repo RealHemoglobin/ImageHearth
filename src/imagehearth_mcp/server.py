@@ -47,7 +47,10 @@ model (for quality and full), the download size, the licenses and any warning th
 the model doesn't fit their GPU, let them choose the model (say which one is \
 recommended), ask them, and wait for a clear yes. Never accept licenses or choose a \
 model on their behalf. Changing the quality model later is also setup_start with \
-another quality_model: tell the user it replaces the current one.
+another quality_model: tell the user it replaces the current one. ComfyUI and the \
+models take tens of GB: before setup_start also ask whether they want another folder \
+or disk (setup_status install_folder shows the usual one and the disks with free \
+space) and pass it as install_dir. Don't choose it for them.
 """
 
 mcp = FastMCP("imagehearth", instructions=INSTRUCTIONS)
@@ -278,7 +281,9 @@ async def setup_status() -> dict:
     Lists each profile with its download size, licenses and whether it suits this
     hardware, and the quality models (FLUX Dev, FLUX Schnell, SDXL 1.0) with size,
     minimum VRAM, license, commercial use, whether they fit this GPU, which one is
-    recommended and which one is installed. Nothing is changed or downloaded.
+    recommended and which one is installed. install_folder has the usual install
+    folder, the disks found with their free space and, if installed, the current
+    folder. Nothing is changed or downloaded.
     """
     # Se importa al usarse: el arranque del servidor no carga el provisioner.
     from imagehearth_mcp.provisioner import agent_setup
@@ -292,6 +297,7 @@ async def setup_start(
     accept_licenses: bool,
     existing_comfyui: str = "",
     quality_model: str = "",
+    install_dir: str = "",
 ) -> dict:
     """Install ComfyUI and models. Downloads many GB: ask the user first.
 
@@ -305,6 +311,11 @@ async def setup_start(
       chose from setup_status. Empty uses the recommended one for this GPU (or keeps
       the installed one). On an existing installation a different one replaces the
       current model: it is downloaded first and the old one deleted afterwards.
+    install_dir: Absolute folder where ComfyUI and the models go (ComfyUI ends up in
+      install_dir/comfyui), if the user chose one from setup_status's install_folder.
+      Empty uses the usual place. It is checked first (space, permissions, file system)
+      and refused with the reason if it doesn't suit. On an existing installation a
+      different folder is refused: the user moves it with `imagehearth-mcp update --move-to`.
     Returns at once, with the quality model used and a warning if it doesn't fit the
     GPU: tell the user. The installation continues even if you disconnect; follow it
     with setup_status.
@@ -312,5 +323,5 @@ async def setup_start(
     from imagehearth_mcp.provisioner import agent_setup
 
     return await asyncio.to_thread(
-        agent_setup.start, profile, accept_licenses, existing_comfyui, quality_model
+        agent_setup.start, profile, accept_licenses, existing_comfyui, quality_model, install_dir
     )

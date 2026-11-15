@@ -468,26 +468,26 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 
 ### Instalación
 
-- [ ] `setup --install-dir PATH`: ComfyUI gestionado en `PATH/comfyui` y modelos en `PATH/comfyui/models`, salvo que `--models-dir` diga otra cosa.
-- [ ] En `setup` interactivo, preguntar la carpeta con el menú de la [fase 11](#fase-11-menús-por-número-en-setup): la de siempre (recomendada), otras unidades detectadas con su espacio libre o escribir una ruta. Mostrar el espacio libre de cada opción frente a lo que se va a descargar.
-- [ ] Guardar la carpeta en `config.toml` (`comfy_dir`, y `models_dir` si es distinta) y en el registro de instalación, para que `update`, `doctor` y `uninstall` la usen.
-- [ ] Comprobaciones previas en la carpeta elegida: permisos de escritura, espacio libre, sistema de archivos (avisar en FAT32 por el límite de 4 GB por archivo, y en unidades de red o extraíbles), rutas con espacios o caracteres no ASCII en Windows y longitud de ruta.
-- [ ] `setup_status` y `setup_start` aceptan `install_dir` opcional; las instrucciones del servidor piden al agente que pregunte al usuario si quiere otra carpeta antes de descargar.
-- [ ] En modo adjunto no se ofrece: ComfyUI es del usuario. Solo se puede elegir dónde van los modelos con `--models-dir`, como ahora.
+- [x] `setup --install-dir PATH`: ComfyUI gestionado en `PATH/comfyui` y modelos en `PATH/comfyui/models`, salvo que `--models-dir` diga otra cosa.
+- [x] En `setup` interactivo, preguntar la carpeta con el menú de la [fase 11](#fase-11-menús-por-número-en-setup): la de siempre (recomendada), otras unidades detectadas con su espacio libre o escribir una ruta. Mostrar el espacio libre de cada opción frente a lo que se va a descargar.
+- [x] Guardar la carpeta en `config.toml` (`comfy_dir`, y `models_dir` si es distinta) y en el registro de instalación, para que `update`, `doctor` y `uninstall` la usen.
+- [x] Comprobaciones previas en la carpeta elegida: permisos de escritura, espacio libre, sistema de archivos (avisar en FAT32 por el límite de 4 GB por archivo, y en unidades de red o extraíbles), rutas con espacios o caracteres no ASCII en Windows y longitud de ruta.
+- [x] `setup_status` y `setup_start` aceptan `install_dir` opcional; las instrucciones del servidor piden al agente que pregunte al usuario si quiere otra carpeta antes de descargar.
+- [x] En modo adjunto no se ofrece: ComfyUI es del usuario. Solo se puede elegir dónde van los modelos con `--models-dir`, como ahora.
 
 ### Mover una instalación
 
-- [ ] `update --move-to PATH` traslada el ComfyUI gestionado y los modelos que instaló ImageHearth. No mueve modelos preexistentes ni, en modo adjunto, el ComfyUI del usuario.
-- [ ] Antes de mover, mostrar qué se mueve, el tamaño y el espacio libre en el destino, y pedir confirmación (o `--yes` en modo no interactivo).
-- [ ] Rechazar el traslado con una generación o una instalación en curso, y parar el ComfyUI gestionado si está en marcha.
-- [ ] En el mismo sistema de archivos, renombrar. En otro disco, copiar y verificar (tamaño y SHA-256 de los modelos según el manifiesto) y borrar el origen solo al final. Si se interrumpe, la instalación sigue funcionando en el origen y repetir el comando continúa donde se quedó.
-- [ ] El entorno de Python de ComfyUI no se puede reubicar (guarda rutas absolutas): se recrea en el destino con uv en lugar de copiarlo.
-- [ ] Actualizar `config.toml`, el registro de instalación, `extra_model_paths.yaml` y el nodo de estado con las rutas nuevas. Las conexiones de los agentes no cambian, porque apuntan al ejecutable y no a la carpeta.
-- [ ] `doctor` muestra la carpeta de instalación, el disco y su espacio libre.
+- [x] `update --move-to PATH` traslada el ComfyUI gestionado y los modelos que instaló ImageHearth. No mueve modelos preexistentes ni, en modo adjunto, el ComfyUI del usuario.
+- [x] Antes de mover, mostrar qué se mueve, el tamaño y el espacio libre en el destino, y pedir confirmación (o `--yes` en modo no interactivo).
+- [x] Rechazar el traslado con una generación o una instalación en curso, y parar el ComfyUI gestionado si está en marcha.
+- [x] En el mismo sistema de archivos, renombrar. En otro disco, copiar y verificar (tamaño y SHA-256 de los modelos según el manifiesto) y borrar el origen solo al final. Si se interrumpe, la instalación sigue funcionando en el origen y repetir el comando continúa donde se quedó.
+- [x] El entorno de Python de ComfyUI no se puede reubicar (guarda rutas absolutas): se recrea en el destino con uv en lugar de copiarlo.
+- [x] Actualizar `config.toml`, el registro de instalación, `extra_model_paths.yaml` y el nodo de estado con las rutas nuevas. Las conexiones de los agentes no cambian, porque apuntan al ejecutable y no a la carpeta.
+- [x] `doctor` muestra la carpeta de instalación, el disco y su espacio libre.
 
 ### Pruebas
 
-- [ ] Pruebas simuladas: instalación en otra carpeta, rechazo por falta de espacio o de permisos, traslado en el mismo disco y entre discos, traslado interrumpido y repetido, y `uninstall` tras un traslado.
+- [x] Pruebas simuladas: instalación en otra carpeta, rechazo por falta de espacio o de permisos, traslado en el mismo disco y entre discos, traslado interrumpido y repetido, y `uninstall` tras un traslado.
 - [ ] Prueba real etiquetada: instalar `fast` en un segundo disco en Linux y en Windows (otra letra de unidad), generar, mover con `update --move-to` y volver a generar.
 
 **Listo cuando:**

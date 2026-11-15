@@ -11,6 +11,7 @@ from imagehearth_mcp.provisioner import (
     ProvisionError,
     comfyui,
     detect,
+    locations,
     manifest,
     menu,
     models,
@@ -32,6 +33,7 @@ PROFILE_ORDER = (
     "mac-quality",
     "mac-full",
 )
+MAX_DRIVES = menu.MAX_SINGLE_KEY - 2
 UNTESTED_MACOS = (
     "macOS is prepared but has never been run on a real Mac: ComfyUI, ComfyUI-GGUF, "
     "FLUX and Kontext may not work on MPS."
@@ -254,14 +256,23 @@ def choose_mode(args, detection, records, interactive, default=None, back_label=
     return ATTACHED, Path(install.path), port
 
 
-def show_summary(catalog, profile, mode, comfy_dir, models_dir, pending, torch=None):
+def show_summary(
+    catalog, profile, mode, comfy_dir, models_dir, pending, torch=None, folder=None, notes=()
+):
     print(f"\nProfile: {profile.name} ({profile.description})")
 
     if profile.quality_model:
         print(f"Quality model: {profile.quality_model} ({profile.precision})")
 
+    if folder is not None:
+        print(f"Install folder: {folder}")
+
     print(f"ComfyUI: {mode}, {comfy_dir}")
     print(f"Models:  {models_dir}")
+
+    for note in notes:
+        print(f"WARNING: {note}")
+
     print("\nDownloads:")
 
     if mode == MANAGED and not (Path(comfy_dir) / "venv").exists():
@@ -369,6 +380,24 @@ def install_attached(args, comfy_dir, records, interactive):
         )
 
 
+def _normal(path):
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _is_inside(path, folder):
+    return _normal(path) == _normal(folder) or _normal(folder) + os.sep in _normal(path) + os.sep
+
+
+def _claim_folder(records, folder):
+    """Anota qué carpetas crea setup: `uninstall` solo borra lo que se anotó como propio."""
+    top = locations.first_missing(folder)
+
+    if top is not None:
+        records.claim("install_dir", top)
+
+    records.install_dir = str(folder)
+
+
 def _higher_profile(current, new):
     if current not in PROFILE_ORDER:
         return new
@@ -376,11 +405,14 @@ def _higher_profile(current, new):
     return max(current, new, key=PROFILE_ORDER.index)
 
 
-def apply_config(args, mode, comfy_dir, port, records):
+def apply_config(args, mode, comfy_dir, port, records, models_dir=None):
     values = {}
 
     if mode == ATTACHED or Path(config.COMFY_DIR) != Path(comfy_dir):
         values["comfy_dir"] = str(comfy_dir)
+
+    if models_dir is not None and Path(models_dir) != Path(comfy_dir) / "models":
+        values["models_dir"] = str(models_dir)
 
     if mode == ATTACHED or args.port or port != config.COMFY_PORT:
         values["comfy_port"] = port
@@ -442,6 +474,92 @@ class Plan:
     change: object
     pending: int
     torch: object
+    folder: Path | None = None
+
+
+def choose_folder(run, back_label="Back"):
+    """La carpeta de instalación. Devuelve una ruta, None (la de siempre) o `menu.BACK`."""
+    default = locations.default_install_dir()
+    # Con más de nueve opciones el menú deja de leer una sola tecla.
+    drives = sorted(
+        (drive for drive in locations.list_drives() if not drive.system),
+        key=lambda drive: -drive.free,
+    )[:MAX_DRIVES]
+    needed = run.download_hint()
+    options = [
+        menu.Option(
+            "default",
+            f"{default}  (the usual place)",
+            _free_text(locations.free_bytes(default), needed),
+            recommended=True,
+        )
+    ]
+    proposals = {}
+
+    for drive in drives:
+        proposal = locations.propose(drive)
+        proposals[str(proposal)] = proposal
+        kind = " ".join(
+            tag
+            for tag, on in (("network", drive.network), ("removable", drive.removable))
+            if on
+        )
+        detail = _free_text(drive.free, needed) + (f" ({kind})" if kind else "")
+        options.append(menu.Option(str(proposal), str(proposal), detail))
+
+    options.append(menu.Option("type", "Type a path"))
+    current = str(run.folder) if run.folder is not None else "default"
+    previous = current if current in proposals or current == "default" else "type"
+
+    while True:
+        answer = menu.choose(
+            "Install folder (ComfyUI and the models take tens of GB):",
+            options,
+            default=previous,
+            back_label=back_label,
+        )
+
+        if answer is menu.BACK:
+            return menu.BACK
+
+        if answer == "default":
+            return None
+
+        if answer == "type":
+            text = menu.ask_line("Folder (Enter to go back to the list): ")
+
+            if not text:
+                continue
+
+            folder = locations.resolve(text)
+        else:
+            folder = proposals[answer]
+
+        if folder == default:
+            return None
+
+        errors, warnings = locations.split(run.folder_issues(folder))
+
+        for warning in warnings:
+            print(f"WARNING: {warning}")
+
+        if not errors:
+            return folder
+
+        for error in errors:
+            print(f"Error: {error}")
+
+
+def _free_text(free, needed):
+    text = f"{format_size(free)} free"
+
+    if needed:
+        text += f", ComfyUI and models need about {format_size(needed)}"
+
+        if free < needed:
+            text += " (not enough space)"
+
+    return text
 
 
 class _Run:
@@ -455,11 +573,114 @@ class _Run:
         self.interactive = interactive
         gpu = detection.primary_gpu
         self.vram = gpu.vram_mib if gpu else 0
+        asked = getattr(args, "install_dir", None)
+        # Carpeta pedida por argumento o elegida en el paso; None es la de siempre.
+        self.folder_arg = locations.resolve(asked) if asked else None
+        self.folder = self.folder_arg
+        self.answers = None
 
     def models_dir(self, comfy_dir):
         args = self.args
         found = Path(args.models_dir).expanduser().resolve() if args.models_dir else None
+
+        if (
+            found is None
+            and self.folder is not None
+            and not self.records.mode
+            and Path(comfy_dir) == self.folder / "comfyui"
+        ):
+            # Una carpeta nueva lleva sus modelos dentro, no los de una instalación borrada.
+            return Path(comfy_dir) / "models"
+
         return found or models.resolve_dir(self.records, comfy_dir)
+
+    def _models_in(self, comfy_dir):
+        asked = self.args.models_dir
+        return Path(asked).expanduser().resolve() if asked else Path(comfy_dir) / "models"
+
+    def place(self, mode):
+        """Aplica `--install-dir` o la carpeta elegida a (modo, carpeta de ComfyUI, puerto)."""
+        kind, _, port = mode
+        arg = self.folder_arg
+
+        if arg is None:
+            if kind == MANAGED and self.folder is not None and not self.records.mode:
+                return kind, self.folder / "comfyui", port
+
+            return mode
+
+        if kind != MANAGED:
+            raise ProvisionError(
+                "--install-dir is for the ComfyUI that ImageHearth installs, and this "
+                "installation uses an existing ComfyUI. Nothing was changed."
+            )
+
+        target = arg / "comfyui"
+
+        if self.records.mode and _normal(self.records.comfy_dir) != _normal(target):
+            raise ProvisionError(
+                f"ImageHearth is already installed in {self.records.comfy_dir}. setup "
+                f"doesn't move it: run `imagehearth-mcp update --move-to {arg}` instead."
+            )
+
+        return kind, target, port
+
+    def asks_folder(self, answers):
+        args = self.args
+
+        if not self.interactive or self.folder_arg or args.attach or self.records.mode:
+            return False
+
+        if answers.mode is None:
+            # El modo aún se pregunta: si es gestionado, este paso viene después.
+            return self.asks_mode()
+
+        return answers.mode[0] == MANAGED
+
+    def _resolved_profile(self, answers):
+        if answers.base is None:
+            return None
+
+        try:
+            return self._profile(answers.base, self._selection(answers) or Selection())
+        except ProvisionError:
+            return None
+
+    def download_hint(self):
+        """Lo que se descargará, si ya se sabe qué perfil: para mostrar junto al espacio libre."""
+        profile = self._resolved_profile(self.answers)
+
+        if profile is None:
+            return 0
+
+        torch = self.catalog.pytorch.get(self.detection.platform.index)
+        return profile.bytes + self.catalog.install_bytes(torch)
+
+    def folder_issues(self, folder, plan=None):
+        """Errores y avisos de instalar en `folder` con lo que se sabe hasta ahora."""
+        comfy_dir = folder / "comfyui"
+        profile = plan.profile if plan else self._resolved_profile(self.answers)
+        models_dir = plan.models_dir if plan else self._models_in(comfy_dir)
+        sizes, install_bytes = [], 0
+
+        if profile is not None:
+            sizes = [
+                item.model.bytes
+                for item in models.inspect(profile.models, models_dir)
+                if item.state != models.PRESENT
+            ]
+
+            if not (comfy_dir / "venv").exists():
+                torch = plan.torch if plan else self.catalog.pytorch.get(self.detection.platform.index)
+                install_bytes = self.catalog.install_bytes(torch)
+
+        inside = _is_inside(models_dir, folder)
+        issues = locations.check(folder, sizes if inside else (), install_bytes)
+
+        if not inside and sizes:
+            issues += locations.check(models_dir, sizes)
+
+        return issues
 
     def installed(self, comfy_dir):
         return quality.current(self.catalog, self.records, self.models_dir(comfy_dir))
@@ -546,6 +767,9 @@ class _Run:
         if self.asks_mode():
             found.append("mode")
 
+        if self.asks_folder(answers):
+            found.append("folder")
+
         if self.asks_profile():
             found.append("profile")
 
@@ -559,8 +783,12 @@ class _Run:
 
     def resolve_fixed(self, answers):
         """Lo que ya deciden los argumentos o la detección. Los errores salen antes de preguntar."""
+        self.answers = answers
+
         if answers.mode is None and not self.asks_mode():
-            answers.mode = choose_mode(self.args, self.detection, self.records, self.interactive)
+            answers.mode = self.place(
+                choose_mode(self.args, self.detection, self.records, self.interactive)
+            )
 
         if answers.base is None and not self.asks_profile():
             answers.base = choose_profile(self.args, self.detection, self.catalog, self.interactive)
@@ -591,9 +819,10 @@ class _Run:
             selection, self.vram,
         )
         torch = self.catalog.pytorch.get(self.detection.platform.index)
+        folder = self.folder if mode == MANAGED and (self.folder_arg or not self.records.mode) else None
         return Plan(
             mode, comfy_dir, self.args.port or default_port, models_dir, selection, profile,
-            change, models.pending_bytes(profile.models, models_dir), torch,
+            change, models.pending_bytes(profile.models, models_dir), torch, folder,
         )
 
 
@@ -607,7 +836,18 @@ def _ask_step(run, answers, name, back_label):
         )
 
         if result is not menu.BACK:
-            answers.mode = result
+            answers.mode = run.place(result)
+            answers.quality_for = None
+
+        return result
+
+    if name == "folder":
+        result = choose_folder(run, back_label)
+
+        if result is not menu.BACK:
+            run.folder = result
+            kind, _, port = answers.mode
+            answers.mode = (kind, (result or locations.default_install_dir()) / "comfyui", port)
             answers.quality_for = None
 
         return result
@@ -643,6 +883,16 @@ def _ask_step(run, answers, name, back_label):
 def _review(run, answers, ask):
     """Resumen y confirmación. Con `ask`, devuelve `menu.BACK` si se vuelve atrás."""
     plan = run.plan(answers)
+    notes = []
+
+    if plan.folder is not None:
+        errors, notes = locations.split(run.folder_issues(plan.folder, plan))
+
+        if errors:
+            raise ProvisionError(
+                "\n".join(errors) + "\nNothing was changed: choose another folder or a "
+                "smaller profile."
+            )
 
     if plan.profile.variant_of:
         print(
@@ -663,7 +913,7 @@ def _review(run, answers, ask):
 
     show_summary(
         run.catalog, plan.profile, plan.mode, plan.comfy_dir, plan.models_dir, plan.pending,
-        plan.torch,
+        plan.torch, plan.folder, notes,
     )
 
     if not ask:
@@ -719,6 +969,12 @@ def _setup(args):
     if getattr(args, "batch_limit", None) is not None and args.batch_limit < 1:
         raise ProvisionError("--batch-limit must be 1 or more.")
 
+    if getattr(args, "install_dir", None) and args.attach:
+        raise ProvisionError(
+            "--install-dir and --attach can't be combined: --attach uses a ComfyUI that "
+            "is already installed, and --install-dir says where ImageHearth installs one."
+        )
+
     interactive = is_interactive(args)
     catalog = manifest.load()
     records = InstallManifest.load(config.INSTALL_MANIFEST)
@@ -755,6 +1011,9 @@ def _setup(args):
 
     run_preflight(detection, profile, torch, mode, comfy_dir, models_dir, port, pending, catalog)
 
+    if plan.folder is not None:
+        _claim_folder(records, plan.folder)
+
     records.mode = mode
     records.comfy_dir = str(comfy_dir)
     records.models_dir = str(models_dir)
@@ -776,7 +1035,7 @@ def _setup(args):
                 f"so ComfyUI finds the models:\n{block}"
             )
 
-    apply_config(args, mode, comfy_dir, port, records)
+    apply_config(args, mode, comfy_dir, port, records, models_dir)
 
     models.ensure_models(profile.models, models_dir, records)
     records.profile = _higher_profile(records.profile, profile.base)

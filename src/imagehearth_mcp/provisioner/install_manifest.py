@@ -25,6 +25,7 @@ class InstallManifest:
         self.mode = values.get("mode")
         self.comfy_dir = values.get("comfy_dir")
         self.models_dir = values.get("models_dir")
+        self.install_dir = values.get("install_dir")
         self.comfyui_version = values.get("comfyui_version")
         self.profile = values.get("profile")
         # Model of the quality profile and the precision installed. Missing in records
@@ -84,6 +85,7 @@ class InstallManifest:
                     "mode": self.mode,
                     "comfy_dir": self.comfy_dir,
                     "models_dir": self.models_dir,
+                    "install_dir": self.install_dir,
                     "comfyui_version": self.comfyui_version,
                     "profile": self.profile,
                     "quality_model": self.quality_model,

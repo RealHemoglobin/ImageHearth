@@ -5,6 +5,7 @@ a la desconexión. El progreso queda en un archivo de estado.
 """
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -15,6 +16,7 @@ from imagehearth_mcp.platform import files, locks, processes, spawn
 from imagehearth_mcp.provisioner import (
     ProvisionError,
     detect,
+    locations,
     manifest,
     models,
     quality,
@@ -157,6 +159,7 @@ def status():
 
     comfy_found = detect.is_comfy_dir(config.COMFY_DIR)
     job = _job_status(catalog, models_dir)
+    install_folders = _install_folders(records)
 
     return {
         "comfyui": {
@@ -172,6 +175,7 @@ def status():
         },
         "gpu": {"name": gpu.name if gpu else None, "vram_mib": vram},
         "disk_free_gb": round(detection.disk_free_bytes / 1e9, 1),
+        "install_folder": install_folders,
         "profiles": profiles,
         "quality_models": quality_models,
         "installed_quality_model": (
@@ -181,6 +185,35 @@ def status():
         ),
         "installation": job,
         "next_step": _next_step(job, profiles, comfy_found),
+    }
+
+
+def _install_folders(records):
+    """Dónde se puede instalar: la de siempre, las unidades con espacio y la actual."""
+    default = locations.default_install_dir()
+    drives = []
+
+    for drive in locations.list_drives():
+        if drive.system:
+            continue
+
+        drives.append(
+            {
+                "path": str(locations.propose(drive)),
+                "free_gb": round(drive.free / 1e9, 1),
+                "filesystem": drive.fstype or None,
+                "network": drive.network,
+                "removable": drive.removable,
+            }
+        )
+
+    return {
+        "default": str(default),
+        "default_free_gb": round(locations.free_bytes(default) / 1e9, 1),
+        "current": (
+            str(records.install_dir or default) if records.mode == "managed" else None
+        ),
+        "drives": drives,
     }
 
 
@@ -205,7 +238,10 @@ def _next_step(job, profiles, comfy_found):
             "Ask the user which profile to install and, for quality or full, which "
             "quality model (quality_models has size, license, commercial use, whether it "
             "fits this GPU and which one is recommended), stating sizes, licenses and "
-            "warnings, then call setup_start. Image editing in full uses FLUX Kontext, "
+            "warnings. Also ask whether they want ComfyUI and the models in another "
+            "folder or disk (install_folder has the usual one and the disks found, with "
+            "free space): the models take tens of GB. Then call setup_start, with "
+            "install_dir if they chose one. Image editing in full uses FLUX Kontext, "
             "which is non-commercial whatever the quality model is."
         )
 
@@ -241,7 +277,7 @@ def _load_records():
         return InstallManifest(config.INSTALL_MANIFEST)
 
 
-def _validate(profile, accept_licenses, existing_comfyui, quality_model=""):
+def _validate(profile, accept_licenses, existing_comfyui, quality_model="", install_dir=""):
     if accept_licenses is not True:
         raise ValueError(
             "Nothing was started: the user has not accepted the licenses. Show them "
@@ -277,8 +313,55 @@ def _validate(profile, accept_licenses, existing_comfyui, quality_model=""):
     if existing_comfyui and not detect.is_comfy_dir(Path(existing_comfyui).expanduser()):
         raise ValueError(f"{existing_comfyui} does not look like a ComfyUI folder.")
 
+    if install_dir:
+        _validate_install_dir(install_dir, existing_comfyui)
 
-def _spawn(profile, existing_comfyui, quality_model=""):
+
+def _validate_install_dir(install_dir, existing_comfyui):
+    if existing_comfyui:
+        raise ValueError(
+            "install_dir and existing_comfyui can't be combined: the first says where "
+            "ImageHearth installs its own ComfyUI, the second reuses one already installed."
+        )
+
+    if not os.path.isabs(Path(install_dir).expanduser()):
+        raise ValueError(f"install_dir must be an absolute path, not {install_dir!r}.")
+
+    records = _load_records()
+    folder = locations.resolve(install_dir)
+
+    if records.mode == "attached":
+        raise ValueError(
+            "This installation uses an existing ComfyUI, so install_dir doesn't apply."
+        )
+
+    if records.mode and os.path.abspath(records.comfy_dir) != str(folder / "comfyui"):
+        raise ValueError(
+            f"ImageHearth is already installed in {records.comfy_dir}. install_dir can't "
+            "move it: tell the user to run `imagehearth-mcp update --move-to "
+            f"{folder}` themselves, or leave install_dir empty."
+        )
+
+
+def _folder_issues(install_dir, catalog, base, used, vram, detection):
+    """(errores, avisos) de instalar en `install_dir` lo que pide `setup_start`."""
+    folder = locations.resolve(install_dir)
+    profile = catalog.resolve(base, used or None, vram)
+    comfy_dir = folder / "comfyui"
+    sizes = [
+        item.model.bytes
+        for item in models.inspect(profile.models, comfy_dir / "models")
+        if item.state != models.PRESENT
+    ]
+    install_bytes = 0
+
+    if not (comfy_dir / "venv").exists():
+        install_bytes = catalog.install_bytes(catalog.pytorch.get(detection.platform.index))
+
+    return locations.split(locations.check(folder, sizes, install_bytes))
+
+
+def _spawn(profile, existing_comfyui, quality_model="", install_dir=""):
     command = [
         sys.executable,
         "-m",
@@ -286,6 +369,7 @@ def _spawn(profile, existing_comfyui, quality_model=""):
         profile,
         str(Path(existing_comfyui).expanduser().resolve()) if existing_comfyui else "",
         quality_model,
+        install_dir,
     ]
 
     config.SETUP_JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -300,8 +384,8 @@ def _spawn(profile, existing_comfyui, quality_model=""):
         )
 
 
-def start(profile, accept_licenses, existing_comfyui="", quality_model=""):
-    _validate(profile, accept_licenses, existing_comfyui, quality_model)
+def start(profile, accept_licenses, existing_comfyui="", quality_model="", install_dir=""):
+    _validate(profile, accept_licenses, existing_comfyui, quality_model, install_dir)
     catalog = manifest.load()
     detection = detect.detect(disk_path=config.DATA_DIR, extra_paths=[config.COMFY_DIR])
     gpu = detection.primary_gpu
@@ -321,6 +405,19 @@ def start(profile, accept_licenses, existing_comfyui="", quality_model=""):
         if installed is not None and quality_model and (installed.legacy or installed.name != used):
             replaces = installed.name
 
+    warnings = []
+
+    if install_dir:
+        errors, warnings = _folder_issues(install_dir, catalog, base, used, vram, detection)
+
+        if errors:
+            raise ValueError(
+                "Nothing was started: " + " ".join(errors) + " Tell the user and ask "
+                "for another folder, or leave install_dir empty for the usual one."
+            )
+
+        install_dir = str(locations.resolve(install_dir))
+
     try:
         lock = locks.acquire(config.SETUP_JOB_LOCK, 1)
     except TimeoutError:
@@ -332,7 +429,11 @@ def start(profile, accept_licenses, existing_comfyui="", quality_model=""):
                 "An installation is already running. Follow it with setup_status."
             )
 
-        process = _spawn(profile, existing_comfyui, quality_model)
+        process = (
+            _spawn(profile, existing_comfyui, quality_model, install_dir)
+            if install_dir
+            else _spawn(profile, existing_comfyui, quality_model)
+        )
         _write_job(
             state=RUNNING,
             profile=profile,
@@ -357,6 +458,12 @@ def start(profile, accept_licenses, existing_comfyui="", quality_model=""):
     if warning:
         result["warning"] = warning
 
+    if install_dir:
+        result["install_dir"] = install_dir
+
+    if warnings:
+        result["folder_warnings"] = warnings
+
     if replaces:
         result["replaces"] = (
             f"The installed quality model ({replaces}) is replaced: the new one is "
@@ -366,7 +473,7 @@ def start(profile, accept_licenses, existing_comfyui="", quality_model=""):
     return result
 
 
-def _args(profile, existing_comfyui, quality_model=""):
+def _args(profile, existing_comfyui, quality_model="", install_dir=""):
     from imagehearth_mcp.cli import _build_parser
 
     argv = ["setup", "--profile", profile, "--accept-licenses", "--non-interactive"]
@@ -374,6 +481,9 @@ def _args(profile, existing_comfyui, quality_model=""):
     if quality_model:
         # The user chose it (and, if it replaces another, confirmed that) through the agent.
         argv += ["--quality-model", quality_model, "--yes"]
+
+    if install_dir:
+        argv += ["--install-dir", install_dir]
 
     if existing_comfyui:
         argv += ["--attach", existing_comfyui, "--install-node"]
@@ -387,10 +497,10 @@ def main(argv):
     from imagehearth_mcp.engine.errors import ConfigError
     from imagehearth_mcp.provisioner.setup import run
 
-    profile, existing, quality_model = ([*argv, "", ""])[:3]
+    profile, existing, quality_model, install_dir = ([*argv, "", "", ""])[:4]
 
     try:
-        code = run(_args(profile, existing, quality_model))
+        code = run(_args(profile, existing, quality_model, install_dir))
     except (ProvisionError, ConfigError) as error:
         print(f"Error: {error}", flush=True)
         _write_job(state=FAILED, error=str(error))

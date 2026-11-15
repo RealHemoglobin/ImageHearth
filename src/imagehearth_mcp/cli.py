@@ -77,6 +77,12 @@ def _build_parser():
         help="Allow installing the status node in an attached ComfyUI.",
     )
     setup.add_argument(
+        "--install-dir",
+        metavar="PATH",
+        help="Install ComfyUI in PATH/comfyui, and the models in PATH/comfyui/models "
+        "unless --models-dir says otherwise. Not compatible with --attach.",
+    )
+    setup.add_argument(
         "--models-dir",
         metavar="PATH",
         help="Keep the models here and share them through extra_model_paths.yaml.",
@@ -106,6 +112,18 @@ def _build_parser():
         "update", help="Apply the pinned ComfyUI version and the current model manifest."
     )
     _add_consent(update)
+    update.add_argument(
+        "--move-to",
+        metavar="PATH",
+        help="Move the ComfyUI that ImageHearth installed, and the models it downloaded, "
+        "to PATH/comfyui. Repeat the command to finish an interrupted move; use the "
+        "current folder to cancel it.",
+    )
+    update.add_argument(
+        "--yes",
+        action="store_true",
+        help="With --move-to, move without asking.",
+    )
 
     uninstall = commands.add_parser(
         "uninstall", help="Remove only what setup installed."

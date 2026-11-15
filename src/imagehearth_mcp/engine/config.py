@@ -205,6 +205,8 @@ LOCK_FILE = DATA_DIR / "engine.lock"
 STATE_FILE = DATA_DIR / "state" / "session.json"
 PID_FILE = DATA_DIR / "state" / "comfyui.pid"
 INSTALL_MANIFEST = DATA_DIR / "install.json"
+# Traslado a otra carpeta a medias (`update --move-to`).
+MOVE_STATE = DATA_DIR / "move.json"
 SETUP_LOCK = DATA_DIR / "setup.lock"
 SETUP_JOB_LOCK = DATA_DIR / "setup-job.lock"
 SETUP_JOB_FILE = DATA_DIR / "state" / "setup_job.json"

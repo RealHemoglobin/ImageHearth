@@ -32,17 +32,18 @@ Call the `setup_status` tool, or run `imagehearth-mcp setup --non-interactive` t
 - For `quality` and `full`, the quality models in `quality_models` (FLUX Dev, FLUX Schnell, SDXL 1.0) with size, minimum GPU memory, license and commercial use. Say which one is recommended and warn about any that doesn't fit the GPU (its `warning`). Let the user choose.
 - The licenses of what will be downloaded, with their links. FLUX Dev and FLUX Kontext (editing in `full`) are non-commercial; FLUX Schnell and SDXL 1.0 allow commercial use.
 - Any existing ComfyUI found, which avoids downloading it again.
+- Where to install: ComfyUI and the models take tens of GB. `setup_status` has `install_folder` with the usual folder (`default`, and the space free there) and the other disks found with their free space. Ask whether they want another one; don't choose it for them.
 
-Wait for a clear answer naming the profile and the quality model and accepting the licenses.
+Wait for a clear answer naming the profile, the quality model and the folder (or "the usual one") and accepting the licenses.
 
 ## 5. Install
 
-Call `setup_start` with that `profile`, the `quality_model` the user chose and `accept_licenses: true`. Pass `existing_comfyui` only if the user chose to reuse one. It returns at once and continues if you disconnect. Check `setup_status` from time to time: `installation.state` becomes `finished` or `failed`, and `installation.log_tail` shows the latest output. If it is `interrupted`, call `setup_start` again and it continues where it stopped.
+Call `setup_start` with that `profile`, the `quality_model` the user chose and `accept_licenses: true`. Pass `install_dir` (an absolute path) only if the user chose another folder: it is checked first and refused with the reason if there is no space, no permission or the file system can't hold the models; tell the user and ask for another. Pass `existing_comfyui` only if the user chose to reuse one (it can't be combined with `install_dir`). It returns at once and continues if you disconnect. Check `setup_status` from time to time: `installation.state` becomes `finished` or `failed`, and `installation.log_tail` shows the latest output. If it is `interrupted`, call `setup_start` again and it continues where it stopped.
 
 Without the tools, run this instead, after the user's answer:
 
 ```bash
-imagehearth-mcp setup --profile <profile> --quality-model <flux-dev|flux-schnell|sdxl> --accept-licenses --non-interactive --managed
+imagehearth-mcp setup --profile <profile> --quality-model <flux-dev|flux-schnell|sdxl> --accept-licenses --non-interactive --managed [--install-dir <folder>]
 ```
 
 ## 6. Verify

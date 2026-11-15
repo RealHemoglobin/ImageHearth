@@ -22,6 +22,7 @@ from imagehearth_mcp.provisioner import (
     comfyui,
     detect,
     doctor,
+    locations,
     maintenance,
     manifest,
     menu,
@@ -987,6 +988,7 @@ def machine(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "COMFY_PORT", 8188)
     monkeypatch.setattr(config, "INSTALL_MANIFEST", data / "install.json")
     monkeypatch.setattr(config, "SETUP_LOCK", data / "setup.lock")
+    monkeypatch.setattr(config, "MOVE_STATE", data / "move.json")
     # Nunca el trabajo de instalación de la máquina real.
     monkeypatch.setattr(config, "SETUP_JOB_LOCK", data / "state" / "job.lock")
     monkeypatch.setattr(config, "SETUP_JOB_FILE", data / "state" / "job.json")
@@ -1014,6 +1016,7 @@ def machine(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(setup_command.detect, "detect", lambda **kw: state.detection)
+    monkeypatch.setattr(locations, "list_drives", lambda *a, **k: [])
     monkeypatch.setattr(preflight, "port_is_open", lambda port: False)
     monkeypatch.setattr(preflight, "check_uv", list)
     monkeypatch.setattr(comfyui_manager, "managed_pid", lambda: None)
@@ -1324,6 +1327,74 @@ def test_doctor_json_format_is_stable(machine):
         assert check["status"] in ("ok", "warn", "fail", "skip")
 
     json.dumps(result)
+
+
+def test_doctor_shows_the_install_folder_disk_and_free_space(machine, monkeypatch, capsys):
+    comfy = healthy_install(machine, manifest.load())
+    drive = locations.Drive(Path("/"), "ext4")
+    monkeypatch.setattr(locations, "mount_of", lambda path, system=None: drive)
+    monkeypatch.setattr(locations, "free_bytes", lambda path: 123_400_000_000)
+    checks = collect_checks()
+    check = checks["comfyui"]
+    assert check.status == doctor.OK
+    assert check.details["install_dir"] == str(comfy.parent)
+    assert check.details["models_dir"] == str(comfy / "models")
+    assert check.details["filesystem"] == "ext4"
+    assert check.details["free_bytes"] == 123_400_000_000
+    assert check.details["move_pending"] is None
+    assert "ext4" in check.message and "123.4 GB free" in check.message
+
+    result = doctor.to_json(list(checks.values()))
+    details = next(c for c in result["checks"] if c["layer"] == "comfyui")["details"]
+    assert details["install_dir"] == str(comfy.parent)
+    json.dumps(result)
+
+
+def test_doctor_reads_the_recorded_install_folder(machine):
+    comfy = healthy_install(machine, manifest.load())
+    records = InstallManifest.load(config.INSTALL_MANIFEST)
+    records.install_dir = str(machine.tmp / "disk")
+    records.models_dir = str(machine.tmp / "shelf")
+    records.save()
+    details = collect_checks()["comfyui"].details
+    assert details["install_dir"] == str(machine.tmp / "disk")
+    assert details["models_dir"] == str(machine.tmp / "shelf")
+    assert comfy.exists()
+
+
+def test_doctor_warns_about_a_move_under_way(machine):
+    healthy_install(machine, manifest.load())
+    config.MOVE_STATE.write_text(
+        json.dumps({"schema": 1, "source": "/old/comfyui", "destination": "/new"}),
+        encoding="utf-8",
+    )
+    check = collect_checks()["comfyui"]
+    assert check.status == doctor.WARN
+    assert "interrupted" in check.message
+    assert "update --move-to /new" in check.fix and "cancel" in check.fix
+    assert check.details["move_pending"] == {"destination": "/new", "source": "/old/comfyui"}
+    # La instalación sigue funcionando en el origen: el resto de capas se comprueban.
+    assert collect_checks()["environment"].status == doctor.OK
+    assert collect_checks()["models"].status == doctor.OK
+    assert doctor.to_json(list(collect_checks().values()))["ok"] is True
+
+
+def test_doctor_move_under_way_without_comfyui_says_how_to_finish(machine):
+    config.MOVE_STATE.parent.mkdir(parents=True, exist_ok=True)
+    config.MOVE_STATE.write_text(
+        json.dumps({"schema": 1, "source": "/old/comfyui", "destination": "/new"}),
+        encoding="utf-8",
+    )
+    check = collect_checks()["comfyui"]
+    assert check.status == doctor.FAIL
+    assert "update --move-to /new" in check.fix
+
+
+def test_doctor_unreadable_move_record_is_reported(machine):
+    healthy_install(machine, manifest.load())
+    config.MOVE_STATE.write_text("{broken", encoding="utf-8")
+    check = collect_checks()["comfyui"]
+    assert check.status == doctor.WARN and "unreadable" in check.fix
 
 
 def test_doctor_missing_comfy_skips_dependents(machine):

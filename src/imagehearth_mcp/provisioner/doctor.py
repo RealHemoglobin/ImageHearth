@@ -148,9 +148,55 @@ def check_config():
     )
 
 
+def pending_move(config):
+    """El traslado a medias (`move.json`) como {destination, source}, o None si no hay."""
+    path = getattr(config, "MOVE_STATE", None)
+
+    if path is None or not path.exists():
+        return None
+
+    try:
+        values = json.loads(path.read_text(encoding="utf-8"))
+        return {"destination": values["destination"], "source": values["source"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"destination": None, "source": None}
+
+
+def _move_fix(move, records, config):
+    if move["destination"] is None:
+        return f"{config.MOVE_STATE} is unreadable: delete it if no move is under way."
+
+    current = records.install_dir or str(config.COMFY_DIR.parent)
+    return (
+        f"Run `imagehearth-mcp update --move-to {move['destination']}` to finish the move, "
+        f"or `imagehearth-mcp update --move-to {current}` to cancel it."
+    )
+
+
+def folder_details(config, records):
+    """Dónde está instalado, en qué sistema de archivos y cuánto espacio queda."""
+    from imagehearth_mcp.provisioner import locations, models
+
+    comfy_dir = config.COMFY_DIR
+    drive = locations.mount_of(comfy_dir)
+
+    try:
+        free = locations.free_bytes(comfy_dir)
+    except OSError:
+        free = None
+
+    return {
+        "install_dir": records.install_dir or str(comfy_dir.parent),
+        "models_dir": str(models.resolve_dir(records, comfy_dir)),
+        "filesystem": (drive.fstype or None) if drive else None,
+        "free_bytes": free,
+    }
+
+
 def check_comfyui(config, records):
     from imagehearth_mcp.provisioner.detect import is_comfy_dir
 
+    move = pending_move(config)
     desktop = (config.COMFY_DIR / "custom_nodes").is_dir() and not (
         config.COMFY_DIR / "main.py"
     ).exists()
@@ -160,14 +206,34 @@ def check_comfyui(config, records):
             "path": str(config.COMFY_DIR),
             "mode": records.mode,
             "pinned_version": records.comfyui_version,
+            **folder_details(config, records),
+            "move_pending": move,
         }
-        return Check("comfyui", OK, f"Found in {config.COMFY_DIR}", details=details)
+        free = details["free_bytes"]
+        message = (
+            f"Found in {config.COMFY_DIR}. Install folder {details['install_dir']}, models "
+            f"{details['models_dir']}, {details['filesystem'] or 'unknown file system'}, "
+            + (f"{free / 1e9:.1f} GB free." if free is not None else "free space unknown.")
+        )
+
+        if move is None:
+            return Check("comfyui", OK, message, details=details)
+
+        return Check(
+            "comfyui",
+            WARN,
+            f"{message} A move to {move['destination'] or 'another folder'} was interrupted.",
+            _move_fix(move, records, config),
+            details,
+        )
 
     return Check(
         "comfyui",
         FAIL,
-        f"ComfyUI not found in {config.COMFY_DIR}.",
-        RERUN_SETUP,
+        f"ComfyUI not found in {config.COMFY_DIR}."
+        + (" A move to another folder was interrupted." if move else ""),
+        _move_fix(move, records, config) if move else RERUN_SETUP,
+        {"move_pending": move} if move else {},
     )
 
 
@@ -546,13 +612,13 @@ def collect(verify_hashes=False, session=requests, run=subprocess.run, detection
 
         checks["comfyui"] = check_comfyui(config, records)
 
-        if checks["comfyui"].status == OK:
+        if checks["comfyui"].status != FAIL:
             checks["environment"] = check_environment(config, run)
             checks["node"] = check_node(config, session)
 
         detection = detection or detect.detect(extra_paths=[config.COMFY_DIR])
 
-        if checks["comfyui"].status == OK and catalog is not None:
+        if checks["comfyui"].status != FAIL and catalog is not None:
             checks["custom_nodes"] = check_custom_nodes(config, records, catalog)
             checks["models"] = check_models(
                 config, records, catalog, verify_hashes, detection.system

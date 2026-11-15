@@ -184,6 +184,7 @@ Puedes empezar con `fast` y ejecutar `setup --profile full` más adelante: lo qu
 | `--managed` | Instala un ComfyUI propio, aunque exista otro |
 | `--attach RUTA` | Usa el ComfyUI que hay en `RUTA` |
 | `--install-node` | Permite instalar el nodo de estado en un ComfyUI adjunto |
+| `--install-dir RUTA` | Instala ComfyUI en `RUTA/comfyui` y los modelos en `RUTA/comfyui/models`, salvo que `--models-dir` diga otra cosa. No es compatible con `--attach` |
 | `--models-dir RUTA` | Guarda los modelos en `RUTA` y los comparte con `extra_model_paths.yaml` |
 | `--port PUERTO` | Puerto en el que escucha ComfyUI |
 | `--skip-smoke-test` | No genera la imagen de prueba |
@@ -193,6 +194,8 @@ Define `HF_TOKEN` si Hugging Face restringe el acceso a un modelo.
 #### macOS (sin probar)
 
 **ImageHearth nunca se ha ejecutado en un Mac, y macOS no tiene soporte.** Para probarlo, añade la opción al instalador: `curl -LsSf https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.sh | sh -s -- --experimental`. `setup` está preparado para Apple Silicon, con modelos GGUF (`mac-fast` 6,9 GB, `mac-quality` 19,2 GB, `mac-full` 27,6 GB) y el nodo `ComfyUI-GGUF`. Los workflows GGUF se han ejecutado en una GPU NVIDIA, lo que comprueba el grafo y los archivos pero no MPS. Los Mac con Intel no tienen soporte. Si lo pruebas, cuéntanos cómo ha ido, con la salida de `imagehearth-mcp doctor --json`.
+
+**Elegir dónde se instala.** ComfyUI y los modelos ocupan decenas de GB. `setup` interactivo pregunta la carpeta después del modo: la de siempre (recomendada), los otros discos que encuentra con su espacio libre, o una ruta que escribas. No se crea nada hasta que confirmes. Con `--install-dir RUTA` no pregunta. Antes de descargar, `setup` comprueba que puede escribir allí, que hay espacio y que el sistema de archivos admite los archivos: FAT32 no admite archivos de más de 4 GB, así que lo rechaza; las unidades de red o extraíbles, y en Windows las rutas con espacios o caracteres no ASCII, solo dan un aviso, y una ruta demasiado larga para Windows se rechaza si las rutas largas no están activadas. La carpeta se guarda en `config.toml` y en `install.json`, así que `update`, `doctor` y `uninstall` la usan; `uninstall` la borra solo si la creó `setup` y queda vacía. Una carpeta distinta sobre una instalación existente se rechaza: usa `update --move-to`. Desde un agente, `setup_status` lista las carpetas y `setup_start` acepta `install_dir`.
 
 **Usar un ComfyUI que ya tienes.** Con `--attach`, o eligiéndolo cuando te pregunte, ImageHearth lo usa en lugar de instalar otro y no descarga los modelos que ya tiene. Tu ComfyUI solo cambia si permites instalar el nodo de estado. ComfyUI Desktop debe estar abierto, porque ImageHearth no puede arrancarlo.
 
@@ -211,6 +214,12 @@ imagehearth-mcp update
 ```
 
 **Para tener una versión nueva de ImageHearth**, ejecuta de nuevo el instalador: sustituye la versión instalada por la que fija, conserva tu configuración, tus modelos y los agentes conectados, y no descarga lo que ya está. Luego reinicia tu agente. (A mano: `uv tool install --python 3.13 --force imagehearth-mcp`.) Este comando aplica la versión de ComfyUI y los modelos que fija la versión instalada de ImageHearth. Un ComfyUI adjunto no se toca, salvo el nodo de estado que haya instalado setup.
+
+```bash
+imagehearth-mcp update --move-to D:\ImageHearth
+```
+
+**Para mover una instalación a otra carpeta o disco**, `update --move-to RUTA` traslada a `RUTA/comfyui` el ComfyUI que instaló ImageHearth y los modelos que descargó. Muestra qué se mueve, su tamaño y el espacio libre, y pregunta una vez (`--yes` lo salta). Se niega mientras se genera una imagen o hay una instalación en curso, y para ComfyUI. En el mismo disco renombra; en otro copia, comprueba tamaño y SHA-256, crea de nuevo el entorno de Python y borra lo viejo solo al final. Hasta entonces sigue funcionando desde la carpeta antigua, así que si se interrumpe (Ctrl+C, corte de luz) ejecuta el mismo comando para continuar, o `update --move-to` con la carpeta actual para cancelarlo. No toca un ComfyUI adjunto ni los modelos que ImageHearth no descargó. Reinicia después tus agentes para que lean la carpeta nueva. `imagehearth-mcp doctor` muestra la carpeta de instalación, el disco y el espacio libre, y avisa de un traslado a medias.
 
 ```bash
 imagehearth-mcp uninstall

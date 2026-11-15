@@ -108,10 +108,10 @@ def test_quality_model_makes_no_sense_for_fast(machine):
 
 
 def test_interactive_choice_shows_size_vram_license_and_recommendation(machine, monkeypatch, capsys):
-    press(monkeypatch, "31")
+    press(monkeypatch, "131")
     setup_command.run(setup_args(profile="quality", accept_licenses=False, non_interactive=False))
     output = capsys.readouterr().out
-    assert "Step 1 of 2" in output and "Step 2 of 2" in output
+    assert "Step 2 of 3" in output and "Step 3 of 3" in output
 
     for name in ("flux-dev", "flux-schnell", "sdxl"):
         assert name in output
@@ -122,7 +122,7 @@ def test_interactive_choice_shows_size_vram_license_and_recommendation(machine, 
 
 
 def test_interactive_choice_ignores_unknown_keys(machine, monkeypatch):
-    press(monkeypatch, "xq9\r1")
+    press(monkeypatch, "1xq9\r1")
     setup_command.run(setup_args(profile="quality", accept_licenses=False, non_interactive=False))
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "flux-dev"
 

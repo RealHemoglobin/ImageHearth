@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -13,9 +14,11 @@ from imagehearth_mcp.provisioner import (
     ProvisionError,
     agent_setup,
     detect,
+    locations,
     manifest,
     models,
 )
+from imagehearth_mcp.provisioner.install_manifest import InstallManifest
 
 
 @pytest.fixture
@@ -43,8 +46,8 @@ class FakeProcess:
 def spawned(paths, monkeypatch):
     calls = []
 
-    def spawn(profile, existing, quality_model=""):
-        calls.append((profile, existing))
+    def spawn(profile, existing, quality_model="", install_dir=""):
+        calls.append((profile, existing, install_dir) if install_dir else (profile, existing))
         return FakeProcess()
 
     monkeypatch.setattr(agent_setup, "_spawn", spawn)
@@ -277,3 +280,144 @@ def test_import_of_server_stays_light():
         check=True,
     ).stdout
     assert json.loads(output) == []
+
+
+# Carpeta de instalación (fase 12)
+
+
+@pytest.fixture
+def roomy(monkeypatch):
+    monkeypatch.setattr(locations, "check_disk", lambda needs: [])
+
+
+def test_install_dir_is_optional_in_the_tool():
+    import asyncio
+
+    from imagehearth_mcp.server import mcp
+
+    tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
+    schema = tools["setup_start"].inputSchema
+    assert "install_dir" in schema["properties"]
+    assert "install_dir" not in schema["required"]
+    assert "install_dir" in tools["setup_start"].description
+    assert "install_folder" in tools["setup_status"].description
+
+
+def test_start_with_a_valid_install_dir(spawned, roomy, paths):
+    folder = paths / "disk" / "ImageHearth"
+    result = agent_setup.start("fast", True, install_dir=str(folder))
+    assert result["state"] == "running"
+    assert result["install_dir"] == str(folder)
+    assert spawned == [("fast", "", str(folder))]
+    # Nada se crea hasta que `setup` confirma.
+    assert not folder.exists()
+
+
+def test_start_with_an_empty_install_dir_uses_the_usual_place(spawned):
+    agent_setup.start("fast", True, install_dir="")
+    assert spawned == [("fast", "")]
+
+
+def test_start_reports_folder_warnings(spawned, roomy, paths, monkeypatch):
+    drive = locations.Drive(paths, "ext4", removable=True)
+    monkeypatch.setattr(locations, "mount_of", lambda path, system=None: drive)
+    result = agent_setup.start("fast", True, install_dir=str(paths / "usb"))
+    assert any("removable" in warning for warning in result["folder_warnings"])
+
+
+def test_start_refuses_a_relative_folder(spawned):
+    with pytest.raises(ValueError, match="absolute"):
+        agent_setup.start("fast", True, install_dir="models/here")
+
+    assert not spawned
+
+
+def test_start_refuses_install_dir_with_an_existing_comfyui(spawned, paths):
+    comfy = paths / "theirs"
+    (comfy / "comfy").mkdir(parents=True)
+    (comfy / "main.py").write_text("", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="can't be combined"):
+        agent_setup.start(
+            "fast", True, existing_comfyui=str(comfy), install_dir=str(paths / "disk")
+        )
+
+    assert not spawned
+
+
+def test_start_refuses_a_folder_without_space(spawned, paths, monkeypatch):
+    import shutil
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(shutil, "disk_usage", lambda path: SimpleNamespace(free=2_000_000_000))
+
+    with pytest.raises(ValueError, match=r"Nothing was started.*Not enough disk space"):
+        agent_setup.start("fast", True, install_dir=str(paths / "small"))
+
+    assert not spawned and agent_setup._read_job() == {}
+
+
+def test_start_refuses_a_folder_that_is_a_file(spawned, roomy, paths):
+    blocker = paths / "file"
+    blocker.write_text("x", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="is a file"):
+        agent_setup.start("fast", True, install_dir=str(blocker / "inside"))
+
+    assert not spawned
+
+
+def test_start_refuses_another_folder_on_an_existing_installation(spawned, roomy, paths):
+    records = InstallManifest(config.INSTALL_MANIFEST)
+    records.mode = "managed"
+    records.comfy_dir = str(paths / "comfyui")
+    records.save()
+
+    with pytest.raises(ValueError, match="update --move-to"):
+        agent_setup.start("fast", True, install_dir=str(paths / "elsewhere"))
+
+    agent_setup.start("fast", True, install_dir=str(paths))
+    assert len(spawned) == 1
+
+
+def test_process_passes_install_dir_to_setup(paths, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        "imagehearth_mcp.provisioner.setup.run", lambda args: seen.append(args) or 0
+    )
+    assert agent_setup.main(["fast", "", "", "/mnt/d/ImageHearth"]) == 0
+    assert seen[0].install_dir == "/mnt/d/ImageHearth" and seen[0].managed
+
+    assert agent_setup.main(["fast"]) == 0
+    assert seen[1].install_dir is None
+
+
+def test_status_lists_install_folders(paths, monkeypatch):
+    other = locations.Drive(paths / "disk2", "ext4", 250_000_000_000, removable=True)
+    system = locations.Drive(Path("/"), "ext4", 10_000_000_000, system=True)
+    monkeypatch.setattr(locations, "list_drives", lambda *a, **k: [system, other])
+    result = status(paths, monkeypatch)
+    folders = result["install_folder"]
+    assert folders["default"] == str(config.DATA_DIR)
+    assert folders["current"] is None
+    assert folders["drives"] == [
+        {
+            "path": str(paths / "disk2" / "ImageHearth"),
+            "free_gb": 250.0,
+            "filesystem": "ext4",
+            "network": False,
+            "removable": True,
+        }
+    ]
+    assert "another folder" in result["next_step"]
+
+
+def test_status_reports_the_current_folder(paths, monkeypatch):
+    monkeypatch.setattr(locations, "list_drives", lambda *a, **k: [])
+    records = InstallManifest(config.INSTALL_MANIFEST)
+    records.mode = "managed"
+    records.install_dir = str(paths / "disk" / "ImageHearth")
+    records.save()
+    assert status(paths, monkeypatch)["install_folder"]["current"] == str(
+        paths / "disk" / "ImageHearth"
+    )

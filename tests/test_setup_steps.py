@@ -29,19 +29,19 @@ def interactive(**kwargs):
 
 
 def test_full_run_only_with_keys(machine, monkeypatch, capsys):
-    press(monkeypatch, "231")
+    press(monkeypatch, "1231")
     assert setup_command.run(interactive()) == 0
     output = capsys.readouterr().out
 
-    for step in (1, 2, 3):
-        assert f"Step {step} of 3" in output
+    for step in (1, 2, 3, 4):
+        assert f"Step {step} of 4" in output
 
     records = InstallManifest.load(config.INSTALL_MANIFEST)
     assert (records.profile, records.quality_model) == ("quality", "sdxl")
 
 
 def test_enter_takes_the_recommended_answers(machine, monkeypatch):
-    press(monkeypatch, "\r\r\r")
+    press(monkeypatch, "\r\r\r\r")
     assert setup_command.run(interactive()) == 0
     records = InstallManifest.load(config.INSTALL_MANIFEST)
     assert records.profile == "full" and records.quality_model == "flux-dev"
@@ -49,27 +49,27 @@ def test_enter_takes_the_recommended_answers(machine, monkeypatch):
 
 def test_zero_goes_back_and_keeps_answers(machine, monkeypatch, capsys):
     # profile quality, model sdxl, back from the review to the model (default sdxl), accept.
-    press(monkeypatch, "230\r1")
+    press(monkeypatch, "1230\r1")
     assert setup_command.run(interactive()) == 0
     output = capsys.readouterr().out
-    assert output.count("Step 2 of 3") == 2
+    assert output.count("Step 3 of 4") == 2
     assert "Choice [3]" in output
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "sdxl"
 
 
 def test_profile_without_quality_removes_the_model_step(machine, monkeypatch, capsys):
     # quality, back from the model, fast: two steps left.
-    press(monkeypatch, "2" + "0" + "1" + "1")
+    press(monkeypatch, "1" + "2" + "0" + "1" + "1")
     assert setup_command.run(interactive()) == 0
     output = capsys.readouterr().out
-    assert "Step 1 of 3" in output and "Step 2 of 2" in output
+    assert "Step 2 of 4" in output and "Step 3 of 3" in output
     records = InstallManifest.load(config.INSTALL_MANIFEST)
     assert records.profile == "fast" and records.quality_model is None
 
 
 def test_zero_from_every_step_goes_back_one_at_a_time(machine, monkeypatch, capsys):
     # profile, model, review; back, back, back leaves with nothing written.
-    press(monkeypatch, "23" + "000")
+    press(monkeypatch, "123" + "0000")
     assert setup_command.run(interactive()) == 0
     assert "Nothing was changed." in capsys.readouterr().out
     assert not config.INSTALL_MANIFEST.exists()
@@ -77,18 +77,18 @@ def test_zero_from_every_step_goes_back_one_at_a_time(machine, monkeypatch, caps
 
 
 def test_steps_resolved_by_arguments_are_not_shown(machine, monkeypatch, capsys):
-    press(monkeypatch, "1")
+    press(monkeypatch, "11")
     assert setup_command.run(interactive(profile="fast")) == 0
     output = capsys.readouterr().out
-    assert "Step 1 of 1" in output and "Step 2" not in output
+    assert "Step 2 of 2" in output and "Step 3" not in output
     assert "Profiles:" not in output
 
 
 def test_quality_model_argument_hides_its_step(machine, monkeypatch, capsys):
-    press(monkeypatch, "21")
+    press(monkeypatch, "121")
     assert setup_command.run(interactive(quality_model="sdxl")) == 0
     output = capsys.readouterr().out
-    assert "Step 2 of 2" in output and "Quality models" not in output
+    assert "Step 3 of 3" in output and "Quality models" not in output
 
 
 def existing_comfy(machine):
@@ -102,7 +102,7 @@ def test_existing_comfy_adds_the_mode_step(machine, monkeypatch, capsys):
     press(monkeypatch, "1" + "1" + "1" + "n")
     assert setup_command.run(interactive(profile="fast")) == 0
     output = capsys.readouterr().out
-    assert "Step 1 of 2" in output and "Step 2 of 2" in output
+    assert "Step 1 of 3" in output and "Step 2 of 2" in output
     records = InstallManifest.load(config.INSTALL_MANIFEST)
     assert records.mode == "attached" and records.comfy_dir == str(comfy.resolve())
 
@@ -110,16 +110,16 @@ def test_existing_comfy_adds_the_mode_step(machine, monkeypatch, capsys):
 def test_existing_comfy_managed_option_and_back_to_mode(machine, monkeypatch):
     existing_comfy(machine)
     # Attach, review, back to the mode, managed, review.
-    press(monkeypatch, "1" + "0" + "2" + "1")
+    press(monkeypatch, "1" + "0" + "2" + "1" + "1")
     assert setup_command.run(interactive(profile="fast")) == 0
     assert InstallManifest.load(config.INSTALL_MANIFEST).mode == "managed"
 
 
 def test_managed_argument_hides_the_mode_step(machine, monkeypatch, capsys):
     existing_comfy(machine)
-    press(monkeypatch, "1")
+    press(monkeypatch, "11")
     assert setup_command.run(interactive(profile="fast", managed=True)) == 0
-    assert "Step 1 of 1" in capsys.readouterr().out
+    assert "Step 2 of 2" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("keys", ["\x03", "2\x03", "23\x03"])

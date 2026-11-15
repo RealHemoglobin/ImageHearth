@@ -25,7 +25,13 @@ Nothing is downloaded until these checks pass. If setup is interrupted, run it a
 
 | Message | What to do |
 |---|---|
-| `Not enough disk space` | Free some space, choose a smaller profile with `--profile`, or keep the models on another disk with `--models-dir` |
+| `Not enough disk space` | Free some space, choose a smaller profile with `--profile`, install on another disk with `--install-dir`, or keep only the models there with `--models-dir` |
+| `... is on a FAT32 disk, which can't hold files over 4 GB` | The models are bigger than FAT32 allows. Choose a disk formatted as NTFS, ext4 or exFAT. A FAT32 disk with only small files just warns |
+| `Can't write in ...` | You have no permission there, or the disk is read-only. Choose a folder you can write to |
+| `... is too long: some files would pass Windows' 260-character limit` | Choose a shorter folder such as `D:\ImageHearth`, or turn on `LongPathsEnabled` in Windows (then restart) |
+| `... is on a network drive` / `... is on a removable drive` / `... has spaces or non-ASCII characters` | Warnings only. Network drives are slow and fail if the connection drops, a removable drive stops ImageHearth while it is unplugged, and spaces or accents can break some of ComfyUI's tools |
+| `ImageHearth is already installed in ... setup doesn't move it` | `setup --install-dir` can't change an existing installation: run `imagehearth-mcp update --move-to PATH` |
+| `--install-dir and --attach can't be combined` | `--attach` uses a ComfyUI that already exists, and `--install-dir` says where ImageHearth installs its own. Use one |
 | `An NVIDIA GPU is present but nvidia-smi does not work` | Install the [current driver](https://www.nvidia.com/drivers), reboot and run setup again |
 | `NVIDIA driver ... may be too old` | A warning. Update the driver if ComfyUI can't use the GPU |
 | `has ... MiB of memory and the ... profile ... needs` | A warning: the quality model doesn't fit this GPU, and generation may be slow or fail. It's installed anyway; switch to a lighter one with `setup --quality-model flux-schnell` or `sdxl` if it does |
@@ -38,6 +44,8 @@ Nothing is downloaded until these checks pass. If setup is interrupted, run it a
 | `Non-interactive mode needs ...` | Add the option named in the message. Read the licenses before adding `--accept-licenses` |
 | `Nothing was downloaded: the licenses were not accepted` | You answered no. Nothing changed |
 | `Another setup, update or uninstall is running` | Wait for it to finish |
+
+**A move to another folder was interrupted** (Ctrl+C, power cut, no space, a file that doesn't match its SHA-256). Until its last step, `update --move-to` leaves ImageHearth working from the old folder, and `imagehearth-mcp doctor` warns about the move that was left half done with the commands to continue. Run the same `update --move-to PATH` to finish it: what was copied and verified is not copied again. To give it up, run `update --move-to` with the folder ImageHearth is installed in: it deletes what was copied to the destination and nothing else. A different destination is refused while one is half done, and so is `uninstall`. If it says a file doesn't match its SHA-256, the disk or the old copy is damaged: run `imagehearth-mcp doctor --verify-hashes`. Messages: `An image is being generated` (wait and repeat), `An installation started from an agent is running` (wait), `... is not empty` (choose another folder), `Non-interactive mode needs --yes` (add `--yes` after reading the plan). After a move, restart your agent sessions so the server reads the new folder.
 
 **A model switch was interrupted.** The previous model is deleted only after the new one is downloaded and verified, so you keep generating with the previous one (`imagehearth-mcp doctor` shows which is active). Run the same command again: the download resumes and the switch finishes. **Disk space during a switch:** both models are on disk at the same time, so setup needs room for the new one before it frees the old one; if it says `Not enough disk space`, free some or keep the models on another disk with `--models-dir`.
 

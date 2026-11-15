@@ -186,6 +186,7 @@ You can start with `fast` and run `setup --profile full` later: what's already t
 | `--managed` | Install a ComfyUI of its own, even if another exists |
 | `--attach PATH` | Use the existing ComfyUI in `PATH` |
 | `--install-node` | Allow installing the status node in an attached ComfyUI |
+| `--install-dir PATH` | Install ComfyUI in `PATH/comfyui`, and the models in `PATH/comfyui/models` unless `--models-dir` says otherwise. Not compatible with `--attach` |
 | `--models-dir PATH` | Keep the models in `PATH`, shared through `extra_model_paths.yaml` |
 | `--port PORT` | Port ComfyUI listens on |
 | `--skip-smoke-test` | Don't generate the test image |
@@ -195,6 +196,8 @@ Set `HF_TOKEN` if Hugging Face restricts access to a model.
 #### macOS (untested)
 
 **ImageHearth has never been run on a Mac, and macOS is not supported.** To try it, add the flag to the installer: `curl -LsSf https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.sh | sh -s -- --experimental`. Setup is prepared for Apple Silicon, with GGUF models (`mac-fast` 6.9 GB, `mac-quality` 19.2 GB, `mac-full` 27.6 GB) and the `ComfyUI-GGUF` node. The GGUF workflows were run on an NVIDIA GPU, which checks the graph and the files but not MPS. Macs with Intel aren't supported. If you try it, please report how it went, with the output of `imagehearth-mcp doctor --json`.
+
+**Choosing where it is installed.** ComfyUI and the models take tens of GB. Interactive `setup` asks for the folder after the mode: the usual place (recommended), the other disks it finds with their free space, or a path you type. Nothing is created until you confirm. With `--install-dir PATH` it doesn't ask. Before downloading, `setup` checks that it can write there, that there is room, and that the file system holds the files: FAT32 can't hold files over 4 GB, so it refuses; network and removable drives, and on Windows paths with spaces or non-ASCII characters, only get a warning, and a path too long for Windows is refused unless long paths are enabled. The folder is saved in `config.toml` and `install.json`, so `update`, `doctor` and `uninstall` use it; `uninstall` deletes it only if `setup` created it and it ends up empty. A different folder on an existing installation is refused: use `update --move-to`. Through an agent, `setup_status` lists the folders and `setup_start` accepts `install_dir`.
 
 **Using a ComfyUI you already have.** With `--attach`, or by choosing it when asked, ImageHearth uses it instead of installing another, and doesn't download the models it already has. Your ComfyUI is only changed if you allow the status node to be installed. ComfyUI Desktop has to be open, since ImageHearth can't start it.
 
@@ -213,6 +216,12 @@ imagehearth-mcp update
 ```
 
 **To get a new version of ImageHearth itself**, run the installer again: it replaces the installed version with the one it pins, keeps your configuration, models and connected agents, and doesn't download what is already there. Then restart your agent. (By hand: `uv tool install --python 3.13 --force imagehearth-mcp`.) This command applies the ComfyUI version and models pinned by the installed version of ImageHearth. An attached ComfyUI is left alone, except for a status node that setup installed.
+
+```bash
+imagehearth-mcp update --move-to D:\ImageHearth
+```
+
+**To move an installation to another folder or disk**, `update --move-to PATH` moves the ComfyUI that ImageHearth installed and the models it downloaded to `PATH/comfyui`. It shows what moves, its size and the free space, and asks once (`--yes` skips it). It refuses while an image is being generated or an installation is running, and stops ComfyUI. On the same disk it renames; on another it copies, checks size and SHA-256, creates the Python environment again and deletes the old files only at the end. Until then it keeps working from the old folder, so if it is interrupted (Ctrl+C, power cut) run the same command to continue, or `update --move-to` with the current folder to cancel it. It leaves alone an attached ComfyUI and models ImageHearth didn't download. Restart your agents afterwards so they read the new folder. `imagehearth-mcp doctor` shows the install folder, the disk and the free space, and warns about a move left half done.
 
 ```bash
 imagehearth-mcp uninstall

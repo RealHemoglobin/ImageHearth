@@ -33,6 +33,11 @@ PLACEHOLDER_PREFIX = "put_"
 
 
 def _update(args):
+    if getattr(args, "move_to", None):
+        from imagehearth_mcp.provisioner import move
+
+        return move.relocate(args)
+
     records = InstallManifest.load(config.INSTALL_MANIFEST)
 
     if not records.mode:
@@ -140,6 +145,12 @@ def _remove_comfy_dir(path):
             _remove(item)
 
 
+def _is_shipped_config(item, models_dir):
+    """Los `models/configs/*.yaml` vienen con el código de ComfyUI: no son de nadie más."""
+    relative = item.relative_to(models_dir).parts
+    return len(relative) == 2 and relative[0] == "configs" and item.suffix == ".yaml"
+
+
 def _prune_models_dir(path):
     """Borra la carpeta de modelos solo si quedan únicamente carpetas y marcadores."""
     if not path.is_dir():
@@ -148,11 +159,52 @@ def _prune_models_dir(path):
     leftovers = [
         item
         for item in path.rglob("*")
-        if item.is_file() and not item.name.startswith(PLACEHOLDER_PREFIX)
+        if item.is_file()
+        and not item.name.startswith(PLACEHOLDER_PREFIX)
+        and not _is_shipped_config(item, path)
     ]
 
     if not leftovers:
         _remove(path)
+
+
+def _prune_install_dir(records, install_dir=None):
+    """Borra la carpeta de instalación y las que setup creó hasta ella, solo si quedan vacías.
+
+    `install_dir`: otra carpeta que ya no es la actual (tras un traslado).
+    """
+    folder = install_dir or records.install_dir
+    path = Path(folder) if folder else None
+    entry = next(
+        (
+            e
+            for e in records.owned("install_dir")
+            if path is not None and Path(e["path"]) in (path, *path.parents)
+        ),
+        None,
+    )
+
+    if entry is None:
+        return
+
+    top = Path(entry["path"])
+
+    if not _is_safe(top):
+        return
+
+    while path.is_dir() and not any(path.iterdir()):
+        path.rmdir()
+
+        if path == top:
+            break
+
+        path = path.parent
+
+    if not top.exists():
+        records.forget(top)
+
+        if install_dir is None:
+            records.install_dir = None
 
 
 def _stop_managed():
@@ -193,6 +245,13 @@ def _decide_models(args, owned_models, interactive):
 def _uninstall(args):
     records = InstallManifest.load(config.INSTALL_MANIFEST)
 
+    if config.MOVE_STATE.exists():
+        raise ProvisionError(
+            "A move to another folder was interrupted. Nothing was removed: finish it with "
+            "`imagehearth-mcp update --move-to` (the same folder), or cancel it with "
+            "`update --move-to` and the current folder, and then run uninstall."
+        )
+
     # Sin registro, ImageHearth puede seguir en los agentes: se buscan igualmente.
     if not records.exists and agent_scan.scan(records).empty:
         print("No install record found: nothing was removed.")
@@ -213,6 +272,9 @@ def _uninstall(args):
 
     for connection in records.connections:
         print(f"  The ImageHearth entry of {connection['client']} ({connection['path']})")
+
+    for entry in records.owned("install_dir"):
+        print(f"  {entry['path']} (the install folder, only if it ends up empty)")
 
     print("  Any other ImageHearth entry or skill in your agents (it asks first, or use --yes)")
 
@@ -279,6 +341,9 @@ def _uninstall(args):
 
         if comfy_dir.is_dir() and not any(comfy_dir.iterdir()):
             comfy_dir.rmdir()
+
+    if not failures:
+        _prune_install_dir(records)
 
     if failures:
         records.save()
