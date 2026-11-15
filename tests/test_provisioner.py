@@ -991,6 +991,13 @@ def machine(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SETUP_JOB_FILE", data / "state" / "job.json")
     monkeypatch.setattr(config, "SETUP_JOB_LOG", data / "logs" / "job.log")
     monkeypatch.setattr(config, "PID_FILE", data / "state" / "comfyui.pid")
+    # `doctor` mira las configuraciones de los agentes: nunca las de la máquina real.
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+    for name in ("XDG_CONFIG_HOME", "CODEX_HOME", "HERMES_HOME"):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setenv("APPDATA", str(tmp_path / "home" / "AppData" / "Roaming"))
 
     state = SimpleNamespace(
         tmp=tmp_path,

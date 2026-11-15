@@ -13,7 +13,7 @@ import subprocess
 import sys
 import time
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -21,7 +21,7 @@ from platformdirs import user_config_path
 
 from imagehearth_mcp.engine import config
 from imagehearth_mcp.platform import files
-from imagehearth_mcp.provisioner import ProvisionError
+from imagehearth_mcp.provisioner import ProvisionError, agent_scan
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
 from imagehearth_mcp.provisioner.setup import ask
 
@@ -109,7 +109,7 @@ CLIENTS = {
             lambda: Path.home() / ".claude.json",
             _plain_entry,
             lambda exe, cmd: [exe, "mcp", "add", "--scope", "user", SERVER_NAME, "--", cmd],
-            lambda exe: [exe, "mcp", "remove", "--scope", "user", SERVER_NAME],
+            lambda exe, name=SERVER_NAME, scope="user": [exe, "mcp", "remove", "--scope", scope, name],
             lambda: Path.home() / ".claude" / "skills",
         ),
         Client(
@@ -142,7 +142,7 @@ CLIENTS = {
             lambda: Path.home() / ".gemini" / "settings.json",
             _plain_entry,
             lambda exe, cmd: [exe, "mcp", "add", "--scope", "user", SERVER_NAME, cmd],
-            lambda exe: [exe, "mcp", "remove", "--scope", "user", SERVER_NAME],
+            lambda exe, name=SERVER_NAME, scope="user": [exe, "mcp", "remove", "--scope", "user", name],
         ),
         # `codex mcp add` no fija el plazo; `opencode mcp add` y `hermes mcp add`
         # preguntan: se edita el archivo.
@@ -179,7 +179,7 @@ CLIENTS = {
             lambda: Path.home() / ".pi" / "agent" / "mcp.json",
             _pi_entry,
             lambda exe, cmd: [exe, "mcp", "add", SERVER_NAME, "--exposure", "direct", "--", cmd],
-            lambda exe: [exe, "mcp", "remove", SERVER_NAME],
+            lambda exe, name=SERVER_NAME, scope="user": [exe, "mcp", "remove", name],
             lambda: Path.home() / ".pi" / "agent" / "skills",
         ),
         Client(
@@ -351,11 +351,11 @@ def _write(path, text):
     files.replace(temporary, path)
 
 
-def _without_server(client, values):
+def _without_server(client, values, name=SERVER_NAME):
     """Copia de los valores sin nuestra entrada, y sin su sección si queda vacía."""
     result = dict(values)
     section = dict(result.get(client.key, {}))
-    section.pop(SERVER_NAME, None)
+    section.pop(name, None)
     result[client.key] = section
 
     if not section:
@@ -364,9 +364,9 @@ def _without_server(client, values):
     return result
 
 
-def _strip_toml(client, text):
+def _strip_toml(client, text, name=SERVER_NAME):
     header = re.compile(
-        rf"^\s*\[+\s*{re.escape(client.key)}\.{SERVER_NAME}\s*[\].]", re.MULTILINE
+        rf"^\s*\[+\s*{re.escape(client.key)}\.{re.escape(name)}\s*[\].]", re.MULTILINE
     )
     any_table = re.compile(r"^\s*\[", re.MULTILINE)
 
@@ -384,7 +384,7 @@ def _strip_toml(client, text):
     return text
 
 
-def _strip_yaml(client, text):
+def _strip_yaml(client, text, name=SERVER_NAME):
     lines = text.splitlines(keepends=True)
     result = []
     inside_section = False
@@ -403,7 +403,7 @@ def _strip_yaml(client, text):
         if skipping and code and current <= indent:
             skipping = False
 
-        own_entry = re.match(rf"['\"]?{SERVER_NAME}['\"]?\s*:", stripped)
+        own_entry = re.match(rf"['\"]?{re.escape(name)}['\"]?\s*:", stripped)
 
         if inside_section and code and not skipping and current > 0 and own_entry:
             skipping = True
@@ -458,14 +458,14 @@ def _edit_text(client, text, entry):
     return json.dumps(values, indent=2, ensure_ascii=False) + "\n"
 
 
-def _remove_text(client, text):
+def _remove_text(client, text, name=SERVER_NAME):
     if client.format == "toml":
-        return _strip_toml(client, text)
+        return _strip_toml(client, text, name)
 
     if client.format == "yaml":
-        return _empty_yaml_section(client, _strip_yaml(client, text))
+        return _empty_yaml_section(client, _strip_yaml(client, text, name))
 
-    values = _without_server(client, json.loads(text))
+    values = _without_server(client, json.loads(text), name)
     return json.dumps(values, indent=2, ensure_ascii=False) + "\n"
 
 
@@ -484,10 +484,11 @@ def _checked(client, path, before, new_text, entry):
     return new_text
 
 
-def _run_cli(argv):
+def _run_cli(argv, cwd=None):
     try:
         result = subprocess.run(
             argv,
+            cwd=cwd,
             stdin=subprocess.DEVNULL,
             capture_output=True,
             encoding="utf-8",
@@ -592,90 +593,205 @@ def connect(client, command, skill=True, records=None):
     return True
 
 
-def _remove_entry(client, path, command=None):
-    """Retira nuestra entrada; si otro la cambió, ya no es nuestra y se deja."""
-    text, values = _read_config(client, path)
-    current = (values.get(client.key) or {}).get(SERVER_NAME)
+def _remove_local(finding):
+    """Quita `projects.<ruta>.mcpServers.<nombre>` de `~/.claude.json` y deja el resto."""
+    text = finding.file.read_text(encoding="utf-8")
+    values = json.loads(text)
+    del values["projects"][finding.project]["mcpServers"][finding.name]
+    _write(finding.file, json.dumps(values, indent=2, ensure_ascii=False) + "\n")
 
-    if current is None:
-        return "absent"
 
-    if command is not None and _command_of(current) != [command]:
-        return "changed"
-
-    backup = _backup(path)
+def _retire(finding):
+    """Retira una entrada nuestra y editable. Con CLI oficial primero, con el archivo de reserva."""
+    client = CLIENTS[finding.agent]
+    backup = _backup(finding.file)
 
     if backup:
         print(f"Backup: {backup}")
 
     cli = _official_cli(client)
 
-    if cli and client.remove:
-        _run_cli(client.remove(cli))
+    if cli and client.remove and finding.scope in (agent_scan.USER, agent_scan.LOCAL, agent_scan.FILE):
+        cwd = finding.project if finding.scope == agent_scan.LOCAL else None
+
+        try:
+            _run_cli(client.remove(cli, finding.name, finding.scope), cwd)
+        except ProvisionError:
+            pass
+
+    if agent_scan.current_entry(finding) is not None:
+        if finding.scope == agent_scan.LOCAL:
+            _remove_local(finding)
+        else:
+            text, _ = _read_config(client, finding.file)
+            _write(finding.file, _remove_text(client, text, finding.name))
+
+    if agent_scan.current_entry(finding) is not None:
+        raise ProvisionError(f"the entry {finding.name} is still in {finding.file}")
+
+
+def _remove_skill_folder(skill, records):
+    if skill.path.is_symlink():
+        skill.path.unlink()
     else:
-        _write(path, _remove_text(client, text))
+        shutil.rmtree(skill.path, ignore_errors=True)
 
-    return "removed"
-
-
-def _remove_skill(client, records):
-    if client.skills is None:
-        return
-
-    target = client.skills() / SERVER_NAME
-
-    if records.is_owned(target):
-        shutil.rmtree(target, ignore_errors=True)
-        records.forget(target)
+    if records.entry(skill.path):
+        records.forget(skill.path)
         records.save()
 
 
-def disconnect(client, records=None):
+@dataclass
+class Report:
+    removed: list = field(default_factory=list)
+    pending: list = field(default_factory=list)
+    foreign: list = field(default_factory=list)
+    project: list = field(default_factory=list)
+    skills_removed: list = field(default_factory=list)
+    skills_kept: list = field(default_factory=list)
+    skills_legacy: list = field(default_factory=list)
+    failures: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
+
+
+def _confirm_unregistered(others, yes, interactive, report):
+    """Las entradas que `connect` no registró: se retiran con --yes o tras preguntar."""
+    if not others:
+        return []
+
+    if yes:
+        return others
+
+    if interactive:
+        print("ImageHearth entries that connect did not register:")
+
+        for finding in others:
+            print(f"  {agent_scan.describe(finding)}")
+
+        if ask("Remove them?"):
+            return others
+
+    report.pending = others
+    return []
+
+
+def _drop_connections(records, found_clients, blocked):
+    dropped = [
+        c
+        for c in records.connections
+        if c["client"] in found_clients and (c["client"], Path(c["path"])) not in blocked
+    ]
+
+    for connection in dropped:
+        records.connections.remove(connection)
+
+    if dropped:
+        records.save()
+
+
+def _disconnect(clients, records, yes, interactive):
+    found = agent_scan.scan(records, clients)
+    report = Report()
+    recorded = {(c["client"], Path(c["path"])) for c in records.connections}
+
+    for agent, path, message in found.errors:
+        if (agent, path) in recorded:
+            report.failures.append(f"{path}: {message}")
+        else:
+            report.warnings.append(message)
+
+    report.foreign = [f for f in found.entries if not f.ours]
+    report.project = [f for f in found.entries if f.ours and not f.editable]
+    ours = [f for f in found.entries if f.ours and f.editable]
+    registered = [f for f in ours if f.registered]
+    chosen = registered + _confirm_unregistered(
+        [f for f in ours if not f.registered], yes, interactive, report
+    )
+    blocked = {(f.agent, f.file) for f in report.pending}
+
+    for finding in chosen:
+        try:
+            _retire(finding)
+        except (OSError, ProvisionError, ValueError, KeyError) as error:
+            report.failures.append(f"{finding.file}: {error}")
+            blocked.add((finding.agent, finding.file))
+        else:
+            report.removed.append(finding)
+            print(f"Removed ImageHearth from {agent_scan.describe(finding)}.")
+
+    for skill in found.skills:
+        if skill.state in (agent_scan.OWNED, agent_scan.IDENTICAL):
+            _remove_skill_folder(skill, records)
+            report.skills_removed.append(skill)
+        elif skill.state == agent_scan.MODIFIED:
+            (report.skills_legacy if skill.name != SERVER_NAME else report.skills_kept).append(
+                skill
+            )
+
+    _drop_connections(records, {c.name for c in clients}, blocked | {(a, p) for a, p, _ in found.errors})
+    return report
+
+
+def print_report(report):
+    """Lo que no se retiró y por qué, con la orden para hacerlo, y el aviso de reinicio."""
+    for finding in report.foreign:
+        print(
+            f"Left as it is: {finding.name} in {finding.file} ({finding.agent}) runs "
+            f"{finding.command_text}, which is not ImageHearth."
+        )
+
+    for finding in report.project:
+        print(
+            f"Not edited: {finding.file} is part of a project and may be versioned. "
+            f"In {finding.project} run `claude mcp remove --scope project {finding.name}`."
+        )
+
+    for skill in report.skills_kept:
+        print(f"Skill left as it is: {skill.path} was modified. Delete it yourself if you want.")
+
+    for skill in report.skills_legacy:
+        print(f"Old skill left as it is: {skill.path}. Delete it yourself if you want.")
+
+    for message in report.warnings:
+        print(f"Could not check: {message}")
+
+    for agent in sorted({f.agent for f in report.pending}):
+        entries = [f for f in report.pending if f.agent == agent]
+
+        for finding in entries:
+            print(f"Not removed (connect did not register it): {agent_scan.describe(finding)}.")
+
+        print(f"  To remove them: imagehearth-mcp connect --remove {agent} --yes")
+
+    if report.removed or report.skills_removed:
+        print("Restart the agents you have open so they stop loading ImageHearth.")
+
+
+def disconnect(client, records=None, yes=False, interactive=None):
     records = records or InstallManifest.load(config.INSTALL_MANIFEST)
 
     if client.path is None:
         print(client.note.replace("choose Add and paste the snippet", "and remove it there"))
-        return
+        return None
 
-    known = next((c for c in records.connections if c["client"] == client.name), None)
-    outcome = _remove_entry(client, client.path())
-    _remove_skill(client, records)
+    interactive = sys.stdin.isatty() if interactive is None else interactive
+    report = _disconnect([client], records, yes, interactive)
 
-    if known:
-        records.connections.remove(known)
-        records.save()
+    if not report.removed and not report.skills_removed and not report.pending:
+        print(f"{client.label} had no ImageHearth entry.")
 
-    print(
-        f"Removed ImageHearth from {client.label}."
-        if outcome == "removed"
-        else f"{client.label} had no ImageHearth entry."
-    )
+    print_report(report)
+
+    for failure in report.failures:
+        print(f"Could not remove: {failure}")
+
+    return report
 
 
-def disconnect_all(records):
-    """Para `uninstall`: solo lo que `connect` registró. Devuelve los fallos."""
-    failures = []
-
-    for connection in list(records.connections):
-        client = CLIENTS.get(connection["client"])
-
-        if client is None:
-            continue
-
-        try:
-            outcome = _remove_entry(client, Path(connection["path"]), connection["command"])
-            _remove_skill(client, records)
-        except (OSError, ProvisionError) as error:
-            failures.append(f"{connection['path']}: {error}")
-            continue
-
-        if outcome == "changed":
-            print(f"Left as it is: the entry in {connection['path']} was changed by someone else.")
-
-        records.connections.remove(connection)
-        records.save()
-
-    return failures
+def disconnect_all(records, yes=False, interactive=False):
+    """Para `uninstall`: todos los clientes, no solo lo que `connect` registró."""
+    clients = [client for client in CLIENTS.values() if client.path is not None]
+    return _disconnect(clients, records, yes, interactive)
 
 
 def is_detected(client):
@@ -737,7 +853,7 @@ def run(args):
         return 0
 
     if args.remove:
-        disconnect(client)
+        disconnect(client, yes=args.yes)
         return 0
 
     connect(client, command, not args.no_skill)

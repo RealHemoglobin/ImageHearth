@@ -71,10 +71,31 @@ En Windows:
 
 ### Diagnóstico
 
+Linux, `HOME` temporal, Claude Code 2.1.322, `imagehearth-mcp` 0.1.0b3 instalado con `uv tool install` desde el commit de partida (código anterior a la fase). Causa en cada caso: lo que `uninstall` anterior no miraba.
+
 | Escenario | ¿Deja ImageHearth visible? | Archivo o ámbito | Fecha |
 |---|---|---|---|
+| `connect claude-code` + `uninstall` con registro intacto | No: `claude mcp list` sin ImageHearth | (entrada `user` retirada) | 2026-11-15 |
+| Entrada `imageengine` añadida a mano (`claude mcp add --scope user`) y `uninstall` | **Sí** | `~/.claude.json`, raíz `mcpServers`, ámbito `user` | 2026-11-15 |
+| Entrada `imagehearth` en ámbito `local` de un proyecto y `uninstall` | **Sí** | `~/.claude.json`, `projects.<ruta>.mcpServers`, ámbito `local` | 2026-11-15 |
+| Entrada en `.mcp.json` del proyecto (ámbito `project`) y `uninstall` | **Sí** ("Pending approval") | `<proyecto>/.mcp.json` | 2026-11-15 |
+| Registro `install.json` perdido y `uninstall` | **Sí**: el comando responde «No install record found: nothing was removed» y no mira los agentes | `~/.claude.json`, ámbito `user` | 2026-11-15 |
+| `uv tool uninstall` sin `uninstall` previo | Entrada `user` apuntando a un ejecutable que ya no existe; `doctor` anterior no la mostraba | `~/.claude.json` | 2026-11-15 |
+| Skill copiada sin registro | Se queda en `~/.claude/skills/imagehearth` (por el código: `_remove_skill` exige registro; no se probó con el código antiguo, sí con el nuevo, que la retira por ser idéntica) | `~/.claude/skills/imagehearth` | 2026-11-15 |
+| Comando cambiado por reinstalación con `uv` (otra ruta) | Por el código, `_remove_entry` devolvía `changed` y la dejaba; cubierto por test simulado, no reproducido con `uv` real | `~/.claude.json` | 2026-11-15 |
+| Sesión de Claude Code abierta durante la desinstalación | No reproducido: `claude -p` no deja una sesión interactiva abierta; el aviso de reinicio cubre la causa conocida | — | 2026-11-15 |
+
+La causa más probable del caso de partida es la combinación de **registro perdido** (el comando salía sin mirar los agentes) o una entrada **a mano / con el nombre antiguo / en otro ámbito**. Con `~/.claude.json` ya limpio el 2026-11-15 no se puede saber cuál fue exactamente.
 
 ### Comprobaciones
 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
+| `scripts/check.sh` | Verde: `ruff` limpio, 571 tests pasan en el repositorio y contra el wheel instalado | 2026-11-15 |
+| Prueba real Claude Code con el código nuevo: registro perdido + `imageengine` (`user`) + `imagehearth` (`local`) + `.mcp.json`, `uninstall --yes` | `user` y `local` retiradas; `.mcp.json` avisado con la orden y sin editar; tras retirarlo a mano, `claude mcp list` sin ImageHearth | 2026-11-15 |
+| Sesión nueva de Claude Code (`claude mcp list` desde la carpeta del proyecto) tras `uninstall` | Sin ImageHearth ni skill | 2026-11-15 |
+| `connect --remove claude-code` sin `--yes` y sin terminal | Entrada no registrada listada con la orden `connect --remove claude-code --yes`, sin tocar, código 0; con `--yes` la retira junto con la skill idéntica | 2026-11-15 |
+| Ciclo `connect` + `uninstall` con Claude Code, Codex, opencode y pi (`HOME` temporal) | Sin `imagehearth` en ningún archivo de configuración; `codex mcp list` y `pi mcp list` sin servidores. Hermes no está instalado: solo cubierto por tests simulados. `opencode` no estaba en el `PATH` de la prueba: solo se comprobó el archivo | 2026-11-15 |
+| Entrada `imagehearth` con comando ajeno y skill modificada tras `uninstall` | Ambas conservadas y avisadas | 2026-11-15 |
+| `doctor` desde la rama tras `uv tool uninstall` sin `uninstall` | Capa `agents` en aviso, entradas marcadas `ORPHAN` y `fix` con `connect --remove` por agente | 2026-11-15 |
+| Windows | Pendiente: lo hace el mantenedor | — |

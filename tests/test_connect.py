@@ -360,3 +360,327 @@ def test_docs_match_print():
         assert match.group(1) == connect.snippet(client, placeholder), client.name
         section = text[text.index(f"<!-- snippet:{client.name} -->") - 400 : match.start()]
         assert client.level.capitalize() in section, client.name
+
+
+# Desconexión completa: lo que `connect` no registró (fase 10)
+
+
+def connect_unregistered(client, skill=False):
+    """Conectado como antes de perder el registro: la entrada existe y `install.json` no."""
+    connect.connect(client, COMMAND, skill=skill)
+    config.INSTALL_MANIFEST.unlink(missing_ok=True)
+
+
+def write_json(path, values):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(values, indent=2), encoding="utf-8")
+
+
+def read_json(path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def claude_project(home, **servers):
+    """Un proyecto conocido por `~/.claude.json`, con su `.mcp.json` si hay `project`."""
+    folder = home / "work"
+    folder.mkdir(exist_ok=True)
+    project = servers.pop("project", None)
+
+    if project:
+        write_json(folder / ".mcp.json", {"mcpServers": project})
+
+    return folder, servers
+
+
+@pytest.fixture
+def uninstall_env(home, monkeypatch):
+    monkeypatch.setattr(maintenance, "_stop_managed", lambda: None)
+    monkeypatch.setattr(config, "SETUP_LOCK", home / "data" / "setup.lock")
+    monkeypatch.setattr(config, "CONFIG_FILE", home / "config.toml")
+    monkeypatch.setattr(config, "SETUP_JOB_FILE", home / "data" / "setup_job.json")
+    (home / "data").mkdir(exist_ok=True)
+    return argparse.Namespace(yes=True, keep_models=True, remove_models=False)
+
+
+def test_unregistered_entry_needs_confirmation(home, monkeypatch, capsys):
+    client = connect.CLIENTS["cursor"]
+    connect_unregistered(client)
+    monkeypatch.setattr(connect, "ask", lambda question: False)
+    connect.disconnect(client, interactive=True)
+    assert entry_of(client)
+    monkeypatch.setattr(connect, "ask", lambda question: True)
+    connect.disconnect(client, interactive=True)
+    assert "mcpServers" not in read_json(client.path())
+    assert len(backups(client)) >= 1
+    assert "Restart the agents" in capsys.readouterr().out
+
+
+def test_unregistered_entry_goes_with_yes(home):
+    client = connect.CLIENTS["cursor"]
+    connect_unregistered(client)
+    connect.disconnect(client, yes=True, interactive=False)
+    assert "mcpServers" not in read_json(client.path())
+
+
+def test_non_interactive_without_yes_lists_and_touches_nothing(home, capsys):
+    client = connect.CLIENTS["cursor"]
+    connect_unregistered(client)
+    connect.disconnect(client, interactive=False)
+    assert entry_of(client)
+    out = capsys.readouterr().out
+    assert "connect --remove cursor --yes" in out
+
+
+def test_old_name_imageengine_is_removed(home):
+    client = connect.CLIENTS["cursor"]
+    write_json(
+        client.path(),
+        {"mcpServers": {"imageengine": {"command": "/old/imageengine-mcp"}, "x": {"command": "/x"}}},
+    )
+    connect.disconnect(client, yes=True)
+    assert read_json(client.path()) == {"mcpServers": {"x": {"command": "/x"}}}
+
+
+def test_command_changed_by_a_reinstall_is_still_removed(home):
+    client = connect.CLIENTS["cursor"]
+    connect.connect(client, COMMAND, skill=False)
+    write_json(client.path(), {"mcpServers": {"imagehearth": {"command": "/new/path/imagehearth-mcp"}}})
+    connect.disconnect(client)
+    assert "mcpServers" not in read_json(client.path())
+
+
+def test_foreign_command_is_kept_and_reported(home, capsys):
+    client = connect.CLIENTS["cursor"]
+    write_json(client.path(), {"mcpServers": {"imagehearth": {"command": "/bin/other-tool"}}})
+    connect.disconnect(client, yes=True)
+    assert entry_of(client) == {"command": "/bin/other-tool"}
+    out = capsys.readouterr().out
+    assert "/bin/other-tool" in out
+    assert str(client.path()) in out
+
+
+def test_claude_code_local_scope_keeps_the_rest_of_the_project(home):
+    folder, _ = claude_project(home)
+    client = connect.CLIENTS["claude-code"]
+    write_json(
+        client.path(),
+        {
+            "numStartups": 3,
+            "mcpServers": {"keep": {"command": "/k"}},
+            "projects": {
+                str(folder): {
+                    "allowedTools": ["a"],
+                    "mcpServers": {
+                        "imageengine": {"command": "/o/imageengine-mcp"},
+                        "keep": {"command": "/k"},
+                    },
+                }
+            },
+        },
+    )
+    connect.disconnect(client, yes=True)
+    assert read_json(client.path()) == {
+        "numStartups": 3,
+        "mcpServers": {"keep": {"command": "/k"}},
+        "projects": {
+            str(folder): {"allowedTools": ["a"], "mcpServers": {"keep": {"command": "/k"}}}
+        },
+    }
+    assert len(backups(client)) >= 1
+
+
+def test_project_file_is_reported_and_not_edited(home, capsys):
+    folder, _ = claude_project(home, project={"imagehearth": {"command": COMMAND}})
+    client = connect.CLIENTS["claude-code"]
+    write_json(client.path(), {"projects": {str(folder): {"mcpServers": {}}}})
+    before = (folder / ".mcp.json").read_text(encoding="utf-8")
+    connect.disconnect(client, yes=True)
+    assert (folder / ".mcp.json").read_text(encoding="utf-8") == before
+    out = capsys.readouterr().out
+    assert "claude mcp remove --scope project imagehearth" in out
+    assert str(folder) in out
+
+
+def test_official_cli_is_used_per_scope(home, monkeypatch):
+    folder, _ = claude_project(home)
+    client = connect.CLIENTS["claude-code"]
+    write_json(
+        client.path(),
+        {
+            "mcpServers": {"imagehearth": {"command": COMMAND}},
+            "projects": {str(folder): {"mcpServers": {"imageengine": {"command": "/o/imageengine-mcp"}}}},
+        },
+    )
+    monkeypatch.setattr(connect.shutil, "which", lambda name: "/bin/claude")
+    calls = []
+
+    def fake(argv, cwd=None):
+        calls.append((argv, cwd))
+        values = read_json(client.path())
+
+        if "local" in argv:
+            del values["projects"][str(folder)]["mcpServers"]["imageengine"]
+        else:
+            del values["mcpServers"]["imagehearth"]
+
+        write_json(client.path(), values)
+
+    monkeypatch.setattr(connect, "_run_cli", fake)
+    connect.disconnect(client, yes=True)
+    assert (["/bin/claude", "mcp", "remove", "--scope", "local", "imageengine"], str(folder)) in calls
+    assert (["/bin/claude", "mcp", "remove", "--scope", "user", "imagehearth"], None) in calls
+
+
+def test_cli_that_leaves_the_entry_falls_back_to_the_file(home, monkeypatch):
+    client = connect.CLIENTS["claude-code"]
+    write_json(client.path(), {"mcpServers": {"imagehearth": {"command": COMMAND}, "x": {"command": "/x"}}})
+    monkeypatch.setattr(connect.shutil, "which", lambda name: "/bin/claude")
+    monkeypatch.setattr(connect, "_run_cli", lambda argv, cwd=None: None)
+    connect.disconnect(client, yes=True)
+    assert read_json(client.path()) == {"mcpServers": {"x": {"command": "/x"}}}
+
+
+def test_cli_that_fails_falls_back_to_the_file(home, monkeypatch):
+    client = connect.CLIENTS["claude-code"]
+    write_json(client.path(), {"mcpServers": {"imagehearth": {"command": COMMAND}}})
+    monkeypatch.setattr(connect.shutil, "which", lambda name: "/bin/claude")
+
+    def broken(argv, cwd=None):
+        raise ProvisionError("boom")
+
+    monkeypatch.setattr(connect, "_run_cli", broken)
+    connect.disconnect(client, yes=True)
+    assert "mcpServers" not in read_json(client.path())
+
+
+@pytest.mark.parametrize("name", ["codex", "hermes", "opencode", "pi", "gemini"])
+def test_every_format_is_cleaned_without_a_record(home, name):
+    client = connect.CLIENTS[name]
+    connect_unregistered(client)
+    connect.disconnect(client, yes=True)
+    text = client.path().read_text(encoding="utf-8")
+    assert "imagehearth" not in text
+    assert len(backups(client)) >= 1
+
+
+def test_old_name_in_toml_and_yaml(home):
+    codex = connect.CLIENTS["codex"]
+    codex.path().parent.mkdir(parents=True)
+    codex.path().write_text(
+        CODEX_CONFIG + '\n[mcp_servers.imageengine]\ncommand = "/o/imageengine-mcp"\n', encoding="utf-8"
+    )
+    hermes = connect.CLIENTS["hermes"]
+    hermes.path().parent.mkdir(parents=True)
+    hermes.path().write_text(
+        HERMES_CONFIG.replace("  other:", "  imageengine:\n    command: /o/imageengine-mcp\n  other:"),
+        encoding="utf-8",
+    )
+    connect.disconnect(codex, yes=True)
+    connect.disconnect(hermes, yes=True)
+    assert tomllib.loads(codex.path().read_text(encoding="utf-8"))["mcp_servers"] == {
+        "caveman": {"command": "/bin/caveman"}
+    }
+    assert set(yaml.safe_load(hermes.path().read_text(encoding="utf-8"))["mcp_servers"]) == {
+        "caveman",
+        "other",
+    }
+
+
+def test_skills_identical_removed_modified_kept_old_reported(home, capsys):
+    client = connect.CLIENTS["hermes"]
+    connect_unregistered(client, skill=True)
+    skill = client.skills() / "imagehearth"
+    assert skill.is_dir()
+    old = client.skills() / "imageengine"
+    old.mkdir()
+    (old / "SKILL.md").write_text("x", encoding="utf-8")
+    connect.disconnect(client, yes=True)
+    assert not skill.exists()
+    assert old.exists()
+    assert "Old skill left as it is" in capsys.readouterr().out
+
+    skill.mkdir()
+    (skill / "SKILL.md").write_text("mine", encoding="utf-8")
+    connect.disconnect(client, yes=True)
+    assert (skill / "SKILL.md").read_text(encoding="utf-8") == "mine"
+    assert "modified" in capsys.readouterr().out
+
+
+def test_broken_file_does_not_stop_the_other_agents(home, uninstall_env, capsys):
+    cursor = connect.CLIENTS["cursor"]
+    connect.connect(cursor, COMMAND, skill=False)
+    desktop = connect.CLIENTS["claude-desktop"]
+    desktop.path().parent.mkdir(parents=True)
+    desktop.path().write_text("{ nope", encoding="utf-8")
+    assert maintenance.uninstall(uninstall_env) == 0
+    assert "mcpServers" not in read_json(cursor.path())
+    assert desktop.path().read_text(encoding="utf-8") == "{ nope"
+    assert "Could not check" in capsys.readouterr().out
+
+
+def test_recorded_file_that_cannot_be_read_fails_uninstall(home, uninstall_env):
+    desktop = connect.CLIENTS["claude-desktop"]
+    connect.connect(desktop, COMMAND, skill=False)
+    desktop.path().write_text("{ nope", encoding="utf-8")
+    assert maintenance.uninstall(uninstall_env) == 1
+
+
+def test_uninstall_finds_entries_without_a_record(home, uninstall_env, capsys):
+    client = connect.CLIENTS["cursor"]
+    write_json(client.path(), {"mcpServers": {"imageengine": {"command": "/o/imageengine-mcp"}}})
+    assert maintenance.uninstall(uninstall_env) == 0
+    assert "mcpServers" not in read_json(client.path())
+    assert not config.INSTALL_MANIFEST.exists()
+    out = capsys.readouterr().out
+    assert "Restart the agents" in out
+    assert "uv tool uninstall imagehearth-mcp" in out
+
+
+def test_uninstall_without_record_and_without_entries_does_nothing(home, uninstall_env, capsys):
+    assert maintenance.uninstall(uninstall_env) == 0
+    assert "No install record found" in capsys.readouterr().out
+
+
+def test_uninstall_non_interactive_without_yes_lists_the_rest(home, uninstall_env, monkeypatch, capsys):
+    registered = connect.CLIENTS["cursor"]
+    connect.connect(registered, COMMAND, skill=False)
+    stray = connect.CLIENTS["claude-desktop"]
+    write_json(stray.path(), {"mcpServers": {"imagehearth": {"command": COMMAND}}})
+    monkeypatch.setattr(maintenance.sys, "stdin", mock.Mock(isatty=lambda: False))
+    # La confirmación general la da --yes de uninstall; las no registradas, no.
+    records = InstallManifest.load(config.INSTALL_MANIFEST)
+    report = connect.disconnect_all(records, yes=False, interactive=False)
+    assert report.failures == []
+    assert [f.agent for f in report.removed] == ["cursor"]
+    assert [f.agent for f in report.pending] == ["claude-desktop"]
+    assert entry_of(stray)
+    connect.print_report(report)
+    assert "connect --remove claude-desktop --yes" in capsys.readouterr().out
+
+
+def test_uninstall_with_yes_removes_the_unregistered_too(home, uninstall_env):
+    stray = connect.CLIENTS["claude-desktop"]
+    write_json(stray.path(), {"mcpServers": {"imagehearth": {"command": COMMAND}}})
+    connect.connect(connect.CLIENTS["cursor"], COMMAND, skill=False)
+    assert maintenance.uninstall(uninstall_env) == 0
+    assert "mcpServers" not in read_json(stray.path())
+
+
+def test_uninstall_keeps_foreign_things(home, uninstall_env):
+    client = connect.CLIENTS["hermes"]
+    connect_unregistered(client, skill=True)
+    skill = client.skills() / "imagehearth"
+    (skill / "SKILL.md").write_text("edited by me", encoding="utf-8")
+    connect.connect(connect.CLIENTS["cursor"], COMMAND, skill=False)
+    cursor = connect.CLIENTS["cursor"]
+    write_json(cursor.path(), {"mcpServers": {"imagehearth": {"command": "/bin/other-tool"}}})
+    assert maintenance.uninstall(uninstall_env) == 0
+    assert (skill / "SKILL.md").read_text(encoding="utf-8") == "edited by me"
+    assert entry_of(cursor) == {"command": "/bin/other-tool"}
+
+
+def test_connect_remove_clears_the_record(home):
+    client = connect.CLIENTS["cursor"]
+    connect.connect(client, COMMAND, skill=False)
+    connect.disconnect(client)
+    assert InstallManifest.load(config.INSTALL_MANIFEST).connections == []

@@ -73,6 +73,7 @@ Ask your agent to *"check the ImageHearth status"*:
 | Problem | What to do |
 |---|---|
 | The agent doesn't see the tools | Restart it. Then run `imagehearth-mcp connect --print <client>` and compare it with its configuration. See [agents](agents.md) |
+| ImageHearth still shows up after uninstalling | Run `imagehearth-mcp doctor` and read the `agents` check: it lists every entry and skill per agent and scope, marking those whose program no longer exists (`ORPHAN`). Remove them with `imagehearth-mcp connect --remove <client> --yes` (or `uninstall`, if the command is still installed). An entry in a project's `.mcp.json` is never edited: run `claude mcp remove --scope project imagehearth` in that folder. Then restart the agent. If the command is gone, delete the entry from the client's file by hand; see [removing ImageHearth](agents.md#removing-imagehearth) |
 | Tool calls stop after a few minutes | Raise the client's tool timeout. See [long generations](agents.md#long-generations) |
 | Images with FLUX Schnell or SDXL 1.0 look like paintings or cartoons | Short prompts come out painterly with these models. `style="auto"` (default) adds photographic cues unless the prompt names another medium; use `style="photo"` to force it, and describe the scene like a photograph (subject, light, lens). FLUX Dev needs no help |
 | Error about a model that isn't installed | Run the `imagehearth-mcp setup --profile ...` command in the error |

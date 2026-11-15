@@ -214,7 +214,7 @@ imagehearth-mcp update
 imagehearth-mcp uninstall
 ```
 
-Muestra qué va a borrar y borra solo lo que instaló setup. Los modelos necesitan una confirmación aparte (`--remove-models` o `--keep-models` para decidirlo de antemano, `--yes` para saltar la primera pregunta). Un ComfyUI o unos modelos que ya estaban nunca se tocan. Para quitar el propio comando, ejecuta `uv tool uninstall imagehearth-mcp`.
+Muestra qué va a borrar y borra solo lo que instaló setup. Los modelos necesitan una confirmación aparte (`--remove-models` o `--keep-models` para decidirlo de antemano, `--yes` para saltar la primera pregunta). Un ComfyUI o unos modelos que ya estaban nunca se tocan. También busca en cada agente las entradas de ImageHearth (`imagehearth` y el nombre antiguo `imageengine`) y las skills que `connect` no registró, en todos los ámbitos de Claude Code. Retira las que ejecutan ImageHearth, preguntando antes salvo con `--yes`; una entrada que ejecuta otro programa, una skill modificada y el `.mcp.json` de un proyecto se dejan y se avisan con la orden para quitarlos. Después reinicia los agentes que tengas abiertos. Para quitar el propio comando, ejecuta `uv tool uninstall imagehearth-mcp`. Si algo sigue apareciendo, `imagehearth-mcp doctor` lista todas las entradas que encuentra (véase [solución de problemas](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/troubleshooting.md#common-problems)).
 
 ### Configuración (opcional)
 

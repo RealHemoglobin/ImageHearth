@@ -395,28 +395,28 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 
 ### Diagnóstico
 
-- [ ] Reproducir el caso en Linux y en Windows: instalar, conectar Claude Code, desinstalar y comprobar con `claude mcp list` y en una sesión nueva. Repetir con una sesión abierta durante la desinstalación.
-- [ ] Documentar en la spec la causa real y qué archivo o ámbito retenía la entrada.
+- [ ] Reproducir el caso en Linux (hecho, ver la spec) y en Windows (pendiente, mantenedor): instalar, conectar Claude Code, desinstalar y comprobar con `claude mcp list` y en una sesión nueva. Repetir con una sesión abierta durante la desinstalación.
+- [x] Documentar en la spec la causa real y qué archivo o ámbito retenía la entrada.
 
 ### Desconexión
 
-- [ ] **Buscar por nombre, no solo por registro:** `uninstall` y `connect --remove` buscan en cada cliente conocido las entradas `imagehearth` e `imageengine`, estén registradas o no. Las registradas se retiran como ahora. Las no registradas se listan y se retiran tras confirmación (o con `--yes`), con copia de seguridad.
-- [ ] **Todos los ámbitos de Claude Code:** `user`, `local` (cada proyecto de `~/.claude.json`) y `project` (`.mcp.json` en las carpetas de proyecto que conozca `~/.claude.json`). En `.mcp.json`, que suele estar versionado, solo se avisa y se da la orden para retirarlo, sin editarlo.
-- [ ] Hacer lo mismo en Codex, opencode, Hermes, pi, Gemini CLI y los editores con archivo de configuración.
-- [ ] Una entrada cuyo comando apunta a otro ejecutable de ImageHearth (nombre `imagehearth-mcp` o `imageengine-mcp`) se considera nuestra. Solo se deja la que apunta a un programa ajeno, y se dice cuál y dónde.
-- [ ] Skills: retirar también las carpetas `imagehearth` cuyo contenido coincida con la skill del paquete (comparando `SKILL.md`), aunque no consten en el registro. Una carpeta modificada por el usuario se deja y se avisa.
-- [ ] Usar la CLI oficial (`claude mcp remove`) en cada ámbito cuando exista, y comprobar después con el archivo que la entrada ya no está, como hace `connect` al añadirla.
-- [ ] Al terminar, recordar que se reinicien los agentes abiertos y dar la orden `uv tool uninstall imagehearth-mcp` para quitar el propio comando.
+- [x] **Buscar por nombre, no solo por registro:** `uninstall` y `connect --remove` buscan en cada cliente conocido las entradas `imagehearth` e `imageengine`, estén registradas o no. Las registradas se retiran como ahora. Las no registradas se listan y se retiran tras confirmación (o con `--yes`), con copia de seguridad.
+- [x] **Todos los ámbitos de Claude Code:** `user`, `local` (cada proyecto de `~/.claude.json`) y `project` (`.mcp.json` en las carpetas de proyecto que conozca `~/.claude.json`). En `.mcp.json`, que suele estar versionado, solo se avisa y se da la orden para retirarlo, sin editarlo.
+- [x] Hacer lo mismo en Codex, opencode, Hermes, pi, Gemini CLI y los editores con archivo de configuración.
+- [x] Una entrada cuyo comando apunta a otro ejecutable de ImageHearth (nombre `imagehearth-mcp` o `imageengine-mcp`) se considera nuestra. Solo se deja la que apunta a un programa ajeno, y se dice cuál y dónde.
+- [x] Skills: retirar también las carpetas `imagehearth` cuyo contenido coincida con la skill del paquete (comparando `SKILL.md`), aunque no consten en el registro. Una carpeta modificada por el usuario se deja y se avisa.
+- [x] Usar la CLI oficial (`claude mcp remove`) en cada ámbito cuando exista, y comprobar después con el archivo que la entrada ya no está, como hace `connect` al añadirla.
+- [x] Al terminar, recordar que se reinicien los agentes abiertos y dar la orden `uv tool uninstall imagehearth-mcp` para quitar el propio comando.
 
 ### `doctor`
 
-- [ ] Listar las entradas de ImageHearth encontradas en cada agente y ámbito, con la ruta del comando, y marcar las huérfanas (ejecutable inexistente o duplicadas).
-- [ ] Sugerir `connect --remove <agente>` para las huérfanas.
+- [x] Listar las entradas de ImageHearth encontradas en cada agente y ámbito, con la ruta del comando, y marcar las huérfanas (ejecutable inexistente o duplicadas).
+- [x] Sugerir `connect --remove <agente>` para las huérfanas.
 
 ### Pruebas
 
-- [ ] Pruebas simuladas: entrada no registrada, nombre antiguo `imageengine`, ámbito `local`, comando cambiado por reinstalación, skill sin registro y skill modificada por el usuario.
-- [ ] Prueba real etiquetada con Claude Code: conectar, desinstalar y comprobar que `claude mcp list` no muestra ImageHearth en ningún ámbito.
+- [x] Pruebas simuladas: entrada no registrada, nombre antiguo `imageengine`, ámbito `local`, comando cambiado por reinstalación, skill sin registro y skill modificada por el usuario.
+- [x] Prueba real etiquetada con Claude Code: conectar, desinstalar y comprobar que `claude mcp list` no muestra ImageHearth en ningún ámbito.
 
 **Listo cuando:**
 

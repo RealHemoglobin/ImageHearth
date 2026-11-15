@@ -32,6 +32,7 @@ LAYERS = (
     "port",
     "ollama",
     "memory",
+    "agents",
 )
 RERUN_SETUP = "Run `imagehearth-mcp setup`."
 
@@ -480,6 +481,48 @@ def check_memory():
     return Check("memory", OK, f"memory_mode = {state['mode']}.{found}", details=state)
 
 
+def _entry_details(finding):
+    return {
+        "agent": finding.agent,
+        "scope": finding.scope,
+        "name": finding.name,
+        "file": str(finding.file),
+        "project": finding.project,
+        "command": finding.command,
+        "ours": finding.ours,
+        "registered": finding.registered,
+        "orphan": finding.orphan,
+        "reason": finding.reason,
+    }
+
+
+def check_agents(records):
+    """Entradas y skills de ImageHearth en los agentes. Solo lee."""
+    from imagehearth_mcp.provisioner import agent_scan
+
+    found = agent_scan.scan(records)
+    ours = [f for f in found.entries if f.ours]
+    orphans = [f for f in ours if f.orphan]
+    skills = [s for s in found.skills if s.state != agent_scan.ABSENT]
+    details = {
+        "entries": [_entry_details(f) for f in found.entries],
+        "skills": [
+            {"agent": s.agent, "path": str(s.path), "name": s.name, "state": s.state}
+            for s in skills
+        ],
+        "errors": [{"agent": a, "file": str(p), "error": m} for a, p, m in found.errors],
+    }
+    message = f"{len(ours)} ImageHearth entries and {len(skills)} skills in your agents."
+    status = WARN if orphans or found.errors else OK
+    fix = ""
+
+    if orphans:
+        agents = sorted({f.agent for f in orphans})
+        fix = "; ".join(f"imagehearth-mcp connect --remove {agent}" for agent in agents)
+
+    return Check("agents", status, message, fix, details)
+
+
 def collect(verify_hashes=False, session=requests, run=subprocess.run, detection=None):
     """Una comprobación por capa; una capa que depende de otra rota queda en skip."""
     checks = {}
@@ -521,6 +564,7 @@ def collect(verify_hashes=False, session=requests, run=subprocess.run, detection
         checks["port"] = check_port(config, session)
         checks["ollama"] = check_ollama(config, session)
         checks["memory"] = check_memory()
+        checks["agents"] = check_agents(records)
 
     return [
         checks.get(layer) or Check(layer, SKIP, "Skipped: a layer it needs failed.")
@@ -536,6 +580,28 @@ def to_json(checks):
     }
 
 
+def _agent_lines(check):
+    if check.layer != "agents":
+        return []
+
+    lines = []
+
+    for entry in check.details.get("entries", ()):
+        command = " ".join(str(part) for part in entry["command"] or () if part) or "(none)"
+        where = f"{entry['agent']} {entry['scope']}"
+        if not entry["ours"]:
+            kind = "not ImageHearth"
+        else:
+            kind = "registered" if entry["registered"] else "not registered"
+            kind += ", ORPHAN" if entry["orphan"] else ""
+
+        lines.append(f"{where}: {entry['name']} -> {command} [{kind}] ({entry['file']})")
+
+    lines += [f"skill {s['agent']}: {s['name']} {s['state']} ({s['path']})" for s in check.details.get("skills", ())]
+    lines += [f"could not read {e['file']}: {e['error']}" for e in check.details.get("errors", ())]
+    return lines
+
+
 def run(args):
     checks = collect(args.verify_hashes)
 
@@ -544,6 +610,9 @@ def run(args):
     else:
         for check in checks:
             print(f"[{check.status.upper():4}] {check.layer:12} {check.message}")
+
+            for line in _agent_lines(check):
+                print(f"       {line}")
 
             if check.fix:
                 print(f"       fix: {check.fix}")

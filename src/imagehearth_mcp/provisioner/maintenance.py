@@ -10,6 +10,7 @@ from imagehearth_mcp.engine import comfyui_manager, config
 from imagehearth_mcp.platform import locks, processes
 from imagehearth_mcp.provisioner import (
     ProvisionError,
+    agent_scan,
     comfyui,
     connect,
     detect,
@@ -192,7 +193,8 @@ def _decide_models(args, owned_models, interactive):
 def _uninstall(args):
     records = InstallManifest.load(config.INSTALL_MANIFEST)
 
-    if not records.exists:
+    # Sin registro, ImageHearth puede seguir en los agentes: se buscan igualmente.
+    if not records.exists and agent_scan.scan(records).empty:
         print("No install record found: nothing was removed.")
         return 0
 
@@ -212,6 +214,8 @@ def _uninstall(args):
     for connection in records.connections:
         print(f"  The ImageHearth entry of {connection['client']} ({connection['path']})")
 
+    print("  Any other ImageHearth entry or skill in your agents (it asks first, or use --yes)")
+
     if not owned and not records.settings and not records.connections:
         print("  Nothing besides, optionally, the downloaded models.")
 
@@ -228,7 +232,10 @@ def _uninstall(args):
             return 0
 
     remove_models = _decide_models(args, owned_models, interactive)
-    _stop_managed()
+
+    if records.exists:
+        _stop_managed()
+
     failures = []
 
     def attempt(entry, remover):
@@ -252,7 +259,9 @@ def _uninstall(args):
     for entry in owned:
         attempt(entry, _remove_comfy_dir if entry["kind"] == "comfyui" else _remove)
 
-    failures.extend(connect.disconnect_all(records))
+    report = connect.disconnect_all(records, args.yes, interactive)
+    failures.extend(report.failures)
+    connect.print_report(report)
 
     if not failures:
         try:
@@ -302,6 +311,7 @@ def _uninstall(args):
         config.INSTALL_MANIFEST.unlink(missing_ok=True)
         print("Removed.")
 
+    print("To remove the program itself, run `uv tool uninstall imagehearth-mcp`.")
     return 0
 
 

@@ -10,7 +10,26 @@ imagehearth-mcp connect --print <client>  # print the snippet, change nothing
 imagehearth-mcp connect --remove <client>
 ```
 
-`connect` backs up the file first (`<file>.imagehearth-<date>.bak`), keeps your other entries, can be repeated without duplicating anything, and copies no environment variables or secrets. It uses the absolute path of the executable. It refuses to touch a file it can't parse. `imagehearth-mcp uninstall` removes what `connect` recorded, unless you changed the entry yourself. Where the client supports skills, the optional skill is installed too (`--no-skill` to skip it); the server's own instructions are enough without it.
+`connect` backs up the file first (`<file>.imagehearth-<date>.bak`), keeps your other entries, can be repeated without duplicating anything, and copies no environment variables or secrets. It uses the absolute path of the executable. It refuses to touch a file it can't parse. `imagehearth-mcp uninstall` and `connect --remove` look for ImageHearth by name, not only in what `connect` recorded; see [Removing ImageHearth](#removing-imagehearth). Where the client supports skills, the optional skill is installed too (`--no-skill` to skip it); the server's own instructions are enough without it.
+
+## Removing ImageHearth
+
+`imagehearth-mcp uninstall` (all clients) and `imagehearth-mcp connect --remove <client>` (one) search each client's configuration for entries named `imagehearth` or the old `imageengine`:
+
+- An entry is ImageHearth's if it runs an executable called `imagehearth-mcp` or `imageengine-mcp` (with or without `.exe`), wherever it is, even after `uv` reinstalled the tool in another path. Anything else is left alone and reported with the agent, file and command.
+- Entries `connect` recorded are removed. Entries it didn't record (added by hand, recorded before the install record existed, or with a lost record) are listed and removed after you confirm, or with `--yes`. Without a terminal and without `--yes` they are only listed, with the command to remove them, and the exit code is 0.
+- The official CLI is used when there is one, and the file is checked afterwards; if the entry is still there, the file is edited. Every change is backed up first.
+- The skill folder `imagehearth` is removed if `connect` installed it or if its `SKILL.md` is identical to the package's. A modified one is kept, and an old `imageengine` skill is only reported.
+
+Claude Code keeps entries in three scopes:
+
+| Scope | Where | What happens |
+|---|---|---|
+| `user` | `mcpServers` in `~/.claude.json` | Removed (`claude mcp remove --scope user`) |
+| `local` | `projects.<folder>.mcpServers` in `~/.claude.json` | Removed (`claude mcp remove --scope local`, run in that folder) |
+| `project` | `.mcp.json` in each project `~/.claude.json` knows | Not edited, as it is often versioned: you get the command, `claude mcp remove --scope project imagehearth` in that folder |
+
+Restart the agents you have open, because they keep the tools until then, and run `uv tool uninstall imagehearth-mcp` to remove the command itself. `imagehearth-mcp doctor` lists what it finds per agent and scope.
 
 ## Support levels
 
