@@ -26,7 +26,7 @@ from imagehearth_mcp.provisioner import (
 from imagehearth_mcp.provisioner import setup as setup_command
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
 from tests.test_catalog import install, models_dir, tiny  # noqa: F401
-from tests.test_provisioner import fake_download, machine, setup_args, torch_ok  # noqa: F401
+from tests.test_provisioner import fake_download, machine, press, setup_args, torch_ok  # noqa: F401
 
 REAL_ENSURE = models.ensure_models
 
@@ -108,18 +108,10 @@ def test_quality_model_makes_no_sense_for_fast(machine):
 
 
 def test_interactive_choice_shows_size_vram_license_and_recommendation(machine, monkeypatch, capsys):
-    monkeypatch.setattr(setup_command, "is_interactive", lambda args: True)
-    answers = iter(["sdxl"])
-    prompts = []
-
-    def fake_input(prompt):
-        prompts.append(prompt)
-        return next(answers)
-
-    monkeypatch.setattr("builtins.input", fake_input)
-    setup_command.run(setup_args(profile="quality", non_interactive=False))
+    press(monkeypatch, "31")
+    setup_command.run(setup_args(profile="quality", accept_licenses=False, non_interactive=False))
     output = capsys.readouterr().out
-    assert "Quality model [flux-dev]" in prompts[0]
+    assert "Step 1 of 2" in output and "Step 2 of 2" in output
 
     for name in ("flux-dev", "flux-schnell", "sdxl"):
         assert name in output
@@ -129,14 +121,18 @@ def test_interactive_choice_shows_size_vram_license_and_recommendation(machine, 
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "sdxl"
 
 
-def test_interactive_choice_rejects_an_unknown_model(machine, monkeypatch):
-    monkeypatch.setattr(setup_command, "is_interactive", lambda args: True)
-    monkeypatch.setattr("builtins.input", lambda prompt: "nope")
+def test_interactive_choice_ignores_unknown_keys(machine, monkeypatch):
+    press(monkeypatch, "xq9\r1")
+    setup_command.run(setup_args(profile="quality", accept_licenses=False, non_interactive=False))
+    assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "flux-dev"
 
-    with pytest.raises(ProvisionError, match="Unknown quality model"):
-        setup_command.run(setup_args(profile="quality", non_interactive=False))
 
+def test_exit_from_the_first_step_changes_nothing(machine, monkeypatch, capsys):
+    press(monkeypatch, "0")
+    assert setup_command.run(setup_args(profile="quality", non_interactive=False)) == 0
+    assert "Nothing was changed." in capsys.readouterr().out
     assert machine.downloads == []
+    assert not config.INSTALL_MANIFEST.exists()
 
 
 def test_cli_accepts_the_three_models():
@@ -198,16 +194,24 @@ def test_switch_needs_confirmation_when_not_interactive(machine):
     assert "flux_dev" in present(machine)
 
 
-def test_interactive_switch_declined_changes_nothing(machine, monkeypatch):
+def test_interactive_switch_declined_changes_nothing(machine, monkeypatch, capsys):
     setup_command.run(setup_args(profile="quality", quality_model="flux-dev"))
-    monkeypatch.setattr(setup_command, "is_interactive", lambda args: True)
-    monkeypatch.setattr("builtins.input", lambda prompt: "n")
-
-    with pytest.raises(ProvisionError, match="not confirmed"):
-        setup_command.run(setup_args(profile="quality", quality_model="sdxl", non_interactive=False))
-
+    press(monkeypatch, "0")
+    assert setup_command.run(
+        setup_args(profile="quality", quality_model="sdxl", non_interactive=False)
+    ) == 0
+    output = capsys.readouterr().out
+    assert "Step 1 of 1" in output and "FLUX.1 Dev ->" in output
     assert "flux_dev" in present(machine)
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "flux-dev"
+
+
+def test_interactive_switch_confirmed(machine, monkeypatch):
+    setup_command.run(setup_args(profile="quality", quality_model="flux-dev"))
+    press(monkeypatch, "1")
+    setup_command.run(setup_args(profile="quality", quality_model="sdxl", non_interactive=False))
+    assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "sdxl"
+    assert "flux_dev" not in present(machine)
 
 
 def test_running_setup_again_keeps_the_installed_model(machine):

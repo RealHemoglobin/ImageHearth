@@ -143,6 +143,8 @@ Setup detecta tu hardware y cualquier ComfyUI existente, propone un perfil y mue
 
 #### Elegir el modelo de calidad
 
+**Cómo se responde.** Cada pregunta muestra opciones numeradas: pulsa un número para elegirla (sin Enter), o Enter para la recomendada. Las de sí o no se responden con una tecla (`y`, `s` o `n`). **0 vuelve** a la pregunta anterior conservando tus respuestas; en la primera, sale sin cambiar nada. Cada pregunta indica `Step N of M` y no se escribe ni se descarga nada hasta que aceptes el resumen final. Ctrl+C sale en cualquier momento sin dejar nada a medias. Sin terminal (tubería, algunos IDE) o con `--non-interactive`, setup lee un número y Enter por línea, o necesita las opciones en la línea de comandos.
+
 Con `quality` o `full`, setup pregunta qué modelo instalar para la generación de alta calidad. Solo hay uno instalado a la vez. Muestra de cada uno el tamaño de descarga, la memoria de GPU mínima, la licencia y si permite uso comercial, marca el recomendado para tu GPU y avisa de los que no caben. En modo no interactivo, pasa `--quality-model`; sin él, setup usa el recomendado y lo indica.
 
 | Modelo | `--quality-model` | Licencia | Uso comercial | Descarga | Memoria de GPU | Recomendado desde |

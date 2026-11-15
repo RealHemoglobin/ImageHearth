@@ -15,6 +15,7 @@ from imagehearth_mcp.provisioner import (
     connect,
     detect,
     manifest,
+    menu,
     models,
     preflight,
     quality,
@@ -23,7 +24,6 @@ from imagehearth_mcp.provisioner import (
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
 from imagehearth_mcp.provisioner.setup import (
     ATTACHED,
-    ask,
     is_interactive,
     show_summary,
 )
@@ -69,7 +69,7 @@ def _update(args):
                     "--accept-licenses to download the models listed above."
                 )
 
-            if not ask("Accept these licenses and start downloading?"):
+            if not menu.confirm("Accept these licenses and start downloading?"):
                 raise ProvisionError("Nothing was changed.")
 
         issues = preflight.check_disk({models_dir: pending_bytes})
@@ -184,7 +184,7 @@ def _decide_models(args, owned_models, interactive):
         for entry in owned_models
         if Path(entry["path"]).exists()
     )
-    return ask(
+    return menu.confirm(
         f"Also remove the {len(owned_models)} downloaded models "
         f"({manifest.format_size(size)})?"
     )
@@ -227,7 +227,7 @@ def _uninstall(args):
                 "Nothing was removed. Non-interactive mode needs --yes."
             )
 
-        if not ask("Continue?"):
+        if not menu.confirm("Continue?"):
             print("Nothing was removed.")
             return 0
 

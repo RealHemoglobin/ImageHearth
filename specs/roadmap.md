@@ -435,23 +435,23 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 
 ### Interacción
 
-- [ ] Componente de menú común en `provisioner/` usado por todas las preguntas de `setup`, `update`, `uninstall` y `connect --detect`: perfil, modelo de `quality`, variante, modo (gestionado o adjunto), carpeta de instalación ([fase 12](#fase-12-carpeta-de-instalación)), LoRAs ([fase 13](#fase-13-loras-para-sdxl-10)) y confirmaciones.
-- [ ] Opciones numeradas del 1 al 9, con la recomendada marcada y elegida con Enter. Pulsar un número la elige al instante y muestra la elección en la misma línea.
-- [ ] **0 vuelve atrás** en todas las preguntas hasta la confirmación final (licencias y espacio). En la primera pregunta, 0 sale sin cambiar nada. Volver atrás conserva las respuestas posteriores como valor por defecto si siguen siendo válidas.
-- [ ] Las preguntas de sí o no aceptan `s`, `y` o `n` con una sola tecla, sin Enter.
-- [ ] Ctrl+C sale limpio en cualquier pregunta, sin traza, y no deja nada a medias.
-- [ ] Con más de 9 opciones (por ejemplo, varias instalaciones de ComfyUI detectadas o el catálogo de LoRAs) se pasa a escribir el número y pulsar Enter. Las listas de selección múltiple usan números separados por comas.
-- [ ] Lectura de una tecla con `termios`/`tty` en Linux y macOS y con `msvcrt.getwch` en Windows, restaurando siempre la terminal. Si no hay terminal interactiva (tubería, IDE o `--non-interactive`), se mantiene la lectura por línea y los argumentos de la CLI como ahora.
+- [x] Componente de menú común en `provisioner/` usado por todas las preguntas de `setup`, `update`, `uninstall` y `connect --detect`: perfil, modelo de `quality`, variante, modo (gestionado o adjunto), carpeta de instalación ([fase 12](#fase-12-carpeta-de-instalación)), LoRAs ([fase 13](#fase-13-loras-para-sdxl-10)) y confirmaciones.
+- [x] Opciones numeradas del 1 al 9, con la recomendada marcada y elegida con Enter. Pulsar un número la elige al instante y muestra la elección en la misma línea.
+- [x] **0 vuelve atrás** en todas las preguntas hasta la confirmación final (licencias y espacio). En la primera pregunta, 0 sale sin cambiar nada. Volver atrás conserva las respuestas posteriores como valor por defecto si siguen siendo válidas.
+- [x] Las preguntas de sí o no aceptan `s`, `y` o `n` con una sola tecla, sin Enter.
+- [x] Ctrl+C sale limpio en cualquier pregunta, sin traza, y no deja nada a medias.
+- [x] Con más de 9 opciones (por ejemplo, varias instalaciones de ComfyUI detectadas o el catálogo de LoRAs) se pasa a escribir el número y pulsar Enter. Las listas de selección múltiple usan números separados por comas.
+- [x] Lectura de una tecla con `termios`/`tty` en Linux y macOS y con `msvcrt.getwch` en Windows, restaurando siempre la terminal. Si no hay terminal interactiva (tubería, IDE o `--non-interactive`), se mantiene la lectura por línea y los argumentos de la CLI como ahora.
 
 ### Flujo de `setup`
 
-- [ ] Reorganizar `setup` como una secuencia de pasos con estado, para poder volver al anterior sin repetir la detección de hardware.
-- [ ] Mostrar al principio de cada pregunta en qué paso se está (`Paso 2 de 5`).
-- [ ] La confirmación final resume todas las respuestas y ofrece 0 para volver y cambiar alguna.
+- [x] Reorganizar `setup` como una secuencia de pasos con estado, para poder volver al anterior sin repetir la detección de hardware.
+- [x] Mostrar al principio de cada pregunta en qué paso se está (`Paso 2 de 5`).
+- [x] La confirmación final resume todas las respuestas y ofrece 0 para volver y cambiar alguna.
 
 ### Pruebas
 
-- [ ] Pruebas simuladas con una entrada de teclas inyectada: elegir por número, Enter para la recomendada, 0 para volver atrás desde cada paso, tecla no válida ignorada, Ctrl+C y lectura por línea sin terminal.
+- [x] Pruebas simuladas con una entrada de teclas inyectada: elegir por número, Enter para la recomendada, 0 para volver atrás desde cada paso, tecla no válida ignorada, Ctrl+C y lectura por línea sin terminal.
 - [ ] Prueba manual en Linux (bash y zsh) y Windows (PowerShell y Windows Terminal).
 
 **Listo cuando:**

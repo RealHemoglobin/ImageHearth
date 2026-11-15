@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from imagehearth_mcp.engine import config
-from imagehearth_mcp.provisioner import ProvisionError, connect, maintenance
+from imagehearth_mcp.provisioner import ProvisionError, connect, maintenance, menu
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
 
 COMMAND = "/opt/bin/imagehearth-mcp"
@@ -346,6 +346,55 @@ def test_detect_needs_yes_without_terminal(home, monkeypatch):
     assert client.path().exists()
 
 
+def detect_two(home, monkeypatch):
+    for name in ("cursor", "claude-desktop"):
+        client = connect.CLIENTS[name]
+        client.path().parent.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(connect.sys, "stdin", mock.Mock(isatty=lambda: True))
+    monkeypatch.setattr(connect, "is_detected", lambda client: client.name in ("cursor", "claude-desktop"))
+    return connect.CLIENTS["cursor"], connect.CLIENTS["claude-desktop"]
+
+
+def press(monkeypatch, text):
+    chars = iter(text)
+    monkeypatch.setattr(menu, "DEFAULT_READER", lambda: next(chars))
+
+
+def test_detect_enter_connects_all(home, monkeypatch):
+    first, second = detect_two(home, monkeypatch)
+    press(monkeypatch, "\r\r")
+    assert connect._detect(argparse.Namespace(yes=False, no_skill=True), COMMAND) == 0
+    assert first.path().exists() and second.path().exists()
+
+
+def test_detect_asks_each_client_yes_no(home, monkeypatch):
+    first, second = detect_two(home, monkeypatch)
+    order = [c for c in connect.CLIENTS if c in ("cursor", "claude-desktop")]
+    press(monkeypatch, "1" + "2" if order[0] == "cursor" else "2" + "1")
+    connect._detect(argparse.Namespace(yes=False, no_skill=True), COMMAND)
+    assert first.path().exists() and not second.path().exists()
+
+
+def test_detect_back_returns_to_previous_client(home, monkeypatch):
+    first, second = detect_two(home, monkeypatch)
+    # Sí al primero, atrás desde el segundo, No al primero, Sí al segundo.
+    press(monkeypatch, "1" + "0" + "2" + "1")
+    connect._detect(argparse.Namespace(yes=False, no_skill=True), COMMAND)
+    names = [c for c in connect.CLIENTS if c in ("cursor", "claude-desktop")]
+    connected = {"cursor": first, "claude-desktop": second}
+    assert not connected[names[0]].path().exists()
+    assert connected[names[1]].path().exists()
+
+
+def test_detect_zero_connects_nothing(home, monkeypatch, capsys):
+    first, second = detect_two(home, monkeypatch)
+    press(monkeypatch, "0")
+    assert connect._detect(argparse.Namespace(yes=False, no_skill=True), COMMAND) == 0
+    assert "Nothing was changed." in capsys.readouterr().out
+    assert not first.path().exists() and not second.path().exists()
+
+
 def test_docs_match_print():
     """Cada fragmento de docs/agents.md es lo que imprime `connect --print`."""
     docs = Path(__file__).parent.parent / "docs" / "agents.md"
@@ -405,10 +454,10 @@ def uninstall_env(home, monkeypatch):
 def test_unregistered_entry_needs_confirmation(home, monkeypatch, capsys):
     client = connect.CLIENTS["cursor"]
     connect_unregistered(client)
-    monkeypatch.setattr(connect, "ask", lambda question: False)
+    monkeypatch.setattr(connect.menu, "confirm", lambda *args, **kwargs: False)
     connect.disconnect(client, interactive=True)
     assert entry_of(client)
-    monkeypatch.setattr(connect, "ask", lambda question: True)
+    monkeypatch.setattr(connect.menu, "confirm", lambda *args, **kwargs: True)
     connect.disconnect(client, interactive=True)
     assert "mcpServers" not in read_json(client.path())
     assert len(backups(client)) >= 1

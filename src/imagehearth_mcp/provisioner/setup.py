@@ -12,6 +12,7 @@ from imagehearth_mcp.provisioner import (
     comfyui,
     detect,
     manifest,
+    menu,
     models,
     preflight,
     quality,
@@ -41,10 +42,6 @@ def is_interactive(args):
     return not args.non_interactive and sys.stdin.isatty()
 
 
-def ask(question):
-    return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
-
-
 def propose_profile(detection, catalog):
     """El mayor perfil que caben en la memoria de la GPU y en el disco."""
     gpu = detection.primary_gpu
@@ -70,7 +67,8 @@ def _fits_resolve(catalog, profile, vram):
     return True
 
 
-def choose_profile(args, detection, catalog, interactive):
+def choose_profile(args, detection, catalog, interactive, default=None, back_label="Back"):
+    """El perfil base. En interactivo, un menú: devuelve el perfil o `menu.BACK`."""
     profiles = catalog.profiles_for(detection.system)
     names = ", ".join(profiles)
 
@@ -91,18 +89,23 @@ def choose_profile(args, detection, catalog, interactive):
             f"(this machine suits {proposed})."
         )
 
-    print("\nProfiles:")
+    options = [
+        menu.Option(
+            name,
+            f"{name:8} {('from ' if profile.quality else '') + format_size(profile.bytes):>13}  "
+            f"{profile.description}",
+            recommended=name == proposed,
+        )
+        for name, profile in profiles.items()
+    ]
+    answer = menu.choose(
+        "Profiles:",
+        options,
+        default=default if default in profiles else proposed,
+        back_label=back_label,
+    )
 
-    for name, profile in profiles.items():
-        size = format_size(profile.bytes)
-        print(f"  {name:8} {('from ' if profile.quality else '') + size:>13}  {profile.description}")
-
-    answer = input(f"Profile [{proposed}]: ").strip().lower() or proposed
-
-    if answer not in profiles:
-        raise ProvisionError(f"Unknown profile {answer!r}.")
-
-    return profiles[answer]
+    return answer if answer is menu.BACK else profiles[answer]
 
 
 @dataclass(frozen=True)
@@ -113,7 +116,9 @@ class Selection:
     legacy: bool = False
 
 
-def choose_quality_model(args, catalog, profile, vram, installed, interactive):
+def choose_quality_model(
+    args, catalog, profile, vram, installed, interactive, default=None, back_label="Back"
+):
     """Qué modelo de `quality` se instala. Los perfiles sin `quality` no tienen."""
     asked = getattr(args, "quality_model", None)
 
@@ -139,8 +144,16 @@ def choose_quality_model(args, catalog, profile, vram, installed, interactive):
         sdxl = catalog.quality_models["sdxl"].title
         print(f"\nThis installation uses {quality.LEGACY}, which is no longer offered.")
 
-        if interactive and ask(f"Switch to {sdxl} and delete {quality.LEGACY}?"):
-            return Selection("sdxl")
+        if interactive:
+            switch = menu.confirm(
+                f"Switch to {sdxl} and delete {quality.LEGACY}?", allow_back=True
+            )
+
+            if switch is menu.BACK:
+                return menu.BACK
+
+            if switch:
+                return Selection("sdxl")
 
         print(f"Keeping {quality.LEGACY}. To switch: imagehearth-mcp setup --quality-model sdxl")
         return Selection("sdxl", legacy=True)
@@ -149,7 +162,6 @@ def choose_quality_model(args, catalog, profile, vram, installed, interactive):
         return Selection(installed.name)
 
     recommended = catalog.recommend(vram)
-    default = installed.name if installed else recommended
 
     if not interactive:
         print(
@@ -159,20 +171,26 @@ def choose_quality_model(args, catalog, profile, vram, installed, interactive):
         )
         return Selection(recommended)
 
-    print("\nQuality models (only one is installed at a time):")
+    if default not in catalog.quality_models:
+        default = installed.name if installed and not installed.legacy else recommended
+
+    options = []
 
     for info in quality.choices(catalog, vram, installed):
-        print(f"  {quality.format_choice(info)}")
+        first, _, rest = quality.format_choice(info).partition("\n")
+        options.append(menu.Option(info["name"], first, rest.strip()))
 
-    answer = input(f"Quality model [{default}]: ").strip().lower() or default
+    answer = menu.choose(
+        "Quality models (only one is installed at a time):",
+        options,
+        default=default,
+        back_label=back_label,
+    )
 
-    if answer not in catalog.quality_models:
-        raise ProvisionError(f"Unknown quality model {answer!r}. Choose one of: {names}.")
-
-    return Selection(answer)
+    return answer if answer is menu.BACK else Selection(answer)
 
 
-def choose_mode(args, detection, records, interactive):
+def choose_mode(args, detection, records, interactive, default=None, back_label="Back"):
     """Devuelve (modo, carpeta, puerto por defecto)."""
     default_dir = config.DATA_DIR / "comfyui"
 
@@ -205,22 +223,33 @@ def choose_mode(args, detection, records, interactive):
             "decision: add --attach PATH to use it or --managed to install another."
         )
 
-    print("\nFound an existing ComfyUI. Using it avoids duplicating tens of GB:")
+    previous = None
 
-    for number, install in enumerate(detection.comfy_installs, start=1):
-        print(f"  {number}. {install.path} ({install.kind})")
+    if default is not None:
+        previous = "m" if default[0] == MANAGED else next(
+            (n for n, i in enumerate(detection.comfy_installs) if Path(i.path) == default[1]),
+            None,
+        )
 
-    print("  m. Install a separate ComfyUI managed by ImageHearth")
-    answer = input("Choice [1]: ").strip().lower() or "1"
+    options = [
+        menu.Option(number, f"{install.path} ({install.kind})")
+        for number, install in enumerate(detection.comfy_installs)
+    ]
+    options.append(menu.Option("m", "Install a separate ComfyUI managed by ImageHearth"))
+    answer = menu.choose(
+        "Found an existing ComfyUI. Using it avoids duplicating tens of GB:",
+        options,
+        default=previous if previous is not None else 0,
+        back_label=back_label,
+    )
+
+    if answer is menu.BACK:
+        return menu.BACK
 
     if answer == "m":
         return MANAGED, default_dir, config.COMFY_PORT
 
-    try:
-        install = detection.comfy_installs[int(answer) - 1]
-    except (ValueError, IndexError):
-        raise ProvisionError(f"Invalid choice {answer!r}.") from None
-
+    install = detection.comfy_installs[answer]
     port = detect.DESKTOP_PORT if install.kind == "desktop" else config.COMFY_PORT
     return ATTACHED, Path(install.path), port
 
@@ -267,7 +296,7 @@ def require_acceptance(args, interactive):
             "accept the licenses listed above."
         )
 
-    if not ask("Accept these licenses and start downloading?"):
+    if not menu.confirm("Accept these licenses and start downloading?"):
         raise ProvisionError("Nothing was downloaded: the licenses were not accepted.")
 
 
@@ -318,7 +347,7 @@ def install_nodes(args, profile, comfy_dir, records, mode, interactive):
         allowed = mode == MANAGED or args.install_node
 
         if not allowed and interactive:
-            allowed = ask(f"Install {node.folder}, which this profile needs, in {comfy_dir}?")
+            allowed = menu.confirm(f"Install {node.folder}, which this profile needs, in {comfy_dir}?")
 
         if not comfyui.install_custom_node(node, comfy_dir, records, allowed):
             raise ProvisionError(
@@ -331,7 +360,7 @@ def install_attached(args, comfy_dir, records, interactive):
     allowed = args.install_node
 
     if not allowed and interactive and not comfyui.node_is_current(comfy_dir):
-        allowed = ask(f"Install the ImageHearth status node in {comfy_dir}?")
+        allowed = menu.confirm(f"Install the ImageHearth status node in {comfy_dir}?")
 
     if not comfyui.install_node(comfy_dir, records, allowed):
         print(
@@ -376,8 +405,8 @@ def apply_config(args, mode, comfy_dir, port, records):
         )
 
 
-def _plan_change(args, catalog, records, models_dir, base, profile, installed, selection, vram, interactive):
-    """El cambio de modelo de `quality` que pide esta ejecución, confirmado; o None."""
+def _plan_change(args, catalog, records, models_dir, base, profile, installed, selection, vram):
+    """El cambio de modelo de `quality` que pide esta ejecución, sin confirmar; o None."""
     if not profile.quality or installed is None or selection.legacy:
         return None
 
@@ -389,21 +418,300 @@ def _plan_change(args, catalog, records, models_dir, base, profile, installed, s
         catalog, effective, installed, vram, records.precision, records.edit_precision
     )
     keep = catalog.resolve(effective, selection.name, vram, getattr(args, "variant", None))
-    change = quality.plan_change(catalog, records, models_dir, old, profile, keep, installed)
-    quality.show_change(change, catalog)
+    return quality.plan_change(catalog, records, models_dir, old, profile, keep, installed)
 
-    if not getattr(args, "yes", False):
-        if not interactive:
+
+@dataclass
+class Answers:
+    """Lo respondido hasta ahora. Se conserva al volver atrás."""
+
+    mode: tuple | None = None
+    base: object = None
+    quality: Selection | None = None
+    quality_for: str | None = None
+
+
+@dataclass(frozen=True)
+class Plan:
+    mode: str
+    comfy_dir: Path
+    port: int
+    models_dir: Path
+    selection: Selection
+    profile: object
+    change: object
+    pending: int
+    torch: object
+
+
+class _Run:
+    """Lo fijo de una ejecución: argumentos, catálogo, registro y detección (una vez)."""
+
+    def __init__(self, args, catalog, records, detection, interactive):
+        self.args = args
+        self.catalog = catalog
+        self.records = records
+        self.detection = detection
+        self.interactive = interactive
+        gpu = detection.primary_gpu
+        self.vram = gpu.vram_mib if gpu else 0
+
+    def models_dir(self, comfy_dir):
+        args = self.args
+        found = Path(args.models_dir).expanduser().resolve() if args.models_dir else None
+        return found or models.resolve_dir(self.records, comfy_dir)
+
+    def installed(self, comfy_dir):
+        return quality.current(self.catalog, self.records, self.models_dir(comfy_dir))
+
+    def asks_mode(self):
+        args = self.args
+        return bool(
+            self.interactive
+            and not args.attach
+            and not args.managed
+            and not self.records.mode
+            and self.detection.comfy_installs
+        )
+
+    def asks_profile(self):
+        return self.interactive and not self.args.profile
+
+    def asks_quality(self, base):
+        return bool(
+            self.interactive
+            and base is not None
+            and base.quality
+            and not getattr(self.args, "quality_model", None)
+        )
+
+    def _may_ask_quality(self, base):
+        """Antes de elegir perfil, se cuenta el paso del modelo si algún perfil lo tiene."""
+        if base is not None or not self.asks_profile() or getattr(self.args, "quality_model", None):
+            return False
+
+        profiles = self.catalog.profiles_for(self.detection.system)
+        return any(profile.quality for profile in profiles.values())
+
+    def asks_review(self, answers):
+        """La confirmación final: licencias y, con un cambio de modelo, ese cambio."""
+        args = self.args
+
+        if not self.interactive:
+            return False
+
+        if not args.accept_licenses:
+            return True
+
+        if getattr(args, "yes", False):
+            return False
+
+        if answers.mode is None or answers.base is None:
+            return False
+
+        selection = self._selection(answers)
+
+        if selection is None:
+            return False
+
+        comfy_dir = answers.mode[1]
+        installed = self.installed(comfy_dir)
+        profile = self._profile(answers.base, selection)
+        change = _plan_change(
+            args, self.catalog, self.records, self.models_dir(comfy_dir), answers.base,
+            profile, installed, selection, self.vram,
+        )
+        return change is not None
+
+    def _selection(self, answers):
+        if answers.base is None:
+            return None
+
+        if not answers.base.quality:
+            return Selection()
+
+        return answers.quality
+
+    def _profile(self, base, selection):
+        forced = getattr(self.args, "variant", None)
+
+        if selection.legacy:
+            return self.catalog.legacy_profile(base, self.vram, forced)
+
+        return self.catalog.resolve(base, selection.name, self.vram, forced)
+
+    def steps(self, answers):
+        found = []
+
+        if self.asks_mode():
+            found.append("mode")
+
+        if self.asks_profile():
+            found.append("profile")
+
+        if self.asks_quality(answers.base) or self._may_ask_quality(answers.base):
+            found.append("quality")
+
+        if self.asks_review(answers):
+            found.append("review")
+
+        return found
+
+    def resolve_fixed(self, answers):
+        """Lo que ya deciden los argumentos o la detección. Los errores salen antes de preguntar."""
+        if answers.mode is None and not self.asks_mode():
+            answers.mode = choose_mode(self.args, self.detection, self.records, self.interactive)
+
+        if answers.base is None and not self.asks_profile():
+            answers.base = choose_profile(self.args, self.detection, self.catalog, self.interactive)
+
+        base = answers.base
+
+        if (
+            base is not None
+            and answers.mode is not None
+            and not self.asks_quality(base)
+            and answers.quality_for != base.name
+        ):
+            answers.quality = choose_quality_model(
+                self.args, self.catalog, base, self.vram,
+                self.installed(answers.mode[1]), self.interactive,
+            )
+            answers.quality_for = base.name
+
+    def plan(self, answers):
+        mode, comfy_dir, default_port = answers.mode
+        selection = self._selection(answers)
+        base = answers.base
+        models_dir = self.models_dir(comfy_dir)
+        installed = self.installed(comfy_dir)
+        profile = self._profile(base, selection)
+        change = _plan_change(
+            self.args, self.catalog, self.records, models_dir, base, profile, installed,
+            selection, self.vram,
+        )
+        torch = self.catalog.pytorch.get(self.detection.platform.index)
+        return Plan(
+            mode, comfy_dir, self.args.port or default_port, models_dir, selection, profile,
+            change, models.pending_bytes(profile.models, models_dir), torch,
+        )
+
+
+def _ask_step(run, answers, name, back_label):
+    """Pregunta un paso. Devuelve `menu.BACK` o None; la respuesta queda en `answers`."""
+    args = run.args
+
+    if name == "mode":
+        result = choose_mode(
+            args, run.detection, run.records, True, default=answers.mode, back_label=back_label
+        )
+
+        if result is not menu.BACK:
+            answers.mode = result
+            answers.quality_for = None
+
+        return result
+
+    if name == "profile":
+        default = answers.base.name if answers.base else None
+        result = choose_profile(
+            args, run.detection, run.catalog, True, default=default, back_label=back_label
+        )
+
+        if result is not menu.BACK:
+            answers.base = result
+
+        return result
+
+    if name == "quality":
+        comfy_dir = answers.mode[1]
+        default = answers.quality.name if answers.quality and not answers.quality.legacy else None
+        result = choose_quality_model(
+            args, run.catalog, answers.base, run.vram, run.installed(comfy_dir), True,
+            default=default, back_label=back_label,
+        )
+
+        if result is not menu.BACK:
+            answers.quality = result
+            answers.quality_for = answers.base.name
+
+        return result
+
+    return None
+
+
+def _review(run, answers, ask):
+    """Resumen y confirmación. Con `ask`, devuelve `menu.BACK` si se vuelve atrás."""
+    plan = run.plan(answers)
+
+    if plan.profile.variant_of:
+        print(
+            f"\nFor {run.vram} MiB of GPU memory the {plan.profile.variant_of} profile "
+            "uses its gguf variant."
+        )
+
+    if plan.change is not None:
+        quality.show_change(plan.change, run.catalog)
+
+        if not ask and not getattr(run.args, "yes", False):
             raise ProvisionError(
                 "Nothing was changed. Non-interactive mode needs --yes to switch the "
                 "quality model."
             )
 
-        if not ask("Switch the quality model?"):
-            raise ProvisionError("Nothing was changed: the switch was not confirmed.")
+        quality.require_idle()
 
-    quality.require_idle()
-    return change
+    show_summary(
+        run.catalog, plan.profile, plan.mode, plan.comfy_dir, plan.models_dir, plan.pending,
+        plan.torch,
+    )
+
+    if not ask:
+        require_acceptance(run.args, run.interactive)
+        return plan
+
+    options = [menu.Option(True, "Accept the licenses above and install")]
+
+    if menu.choose("", options, default=True) is menu.BACK:
+        return menu.BACK
+
+    return plan
+
+
+def _collect(run):
+    """Los pasos de `setup`, con 0 para volver. None si se sale sin cambiar nada."""
+    answers = Answers()
+    index = 0
+    plan = None
+
+    while True:
+        run.resolve_fixed(answers)
+        steps = run.steps(answers)
+
+        if index >= len(steps):
+            return answers, plan
+
+        name = steps[index]
+        print(f"\nStep {index + 1} of {len(steps)}")
+        back_label = "Exit without changing anything" if index == 0 else "Back"
+
+        if name == "review":
+            result = _review(run, answers, True)
+
+            if result is not menu.BACK:
+                return answers, result
+        else:
+            result = _ask_step(run, answers, name, back_label)
+
+        if result is menu.BACK:
+            if index == 0:
+                print("Nothing was changed.")
+                return None, None
+
+            index -= 1
+            continue
+
+        index += 1
 
 
 def _setup(args):
@@ -432,30 +740,18 @@ def _setup(args):
 
     require_experimental(args, detection)
 
-    mode, comfy_dir, default_port = choose_mode(args, detection, records, interactive)
-    base = choose_profile(args, detection, catalog, interactive)
-    vram = gpu.vram_mib if gpu else 0
-    port = args.port or default_port
-    models_dir = Path(args.models_dir).expanduser().resolve() if args.models_dir else None
-    models_dir = models_dir or models.resolve_dir(records, comfy_dir)
-    installed = quality.current(catalog, records, models_dir)
-    selection = choose_quality_model(args, catalog, base, vram, installed, interactive)
-    forced = getattr(args, "variant", None)
+    run_state = _Run(args, catalog, records, detection, interactive)
+    answers, plan = _collect(run_state)
 
-    if selection.legacy:
-        profile = catalog.legacy_profile(base, vram, forced)
-    else:
-        profile = catalog.resolve(base, selection.name, vram, forced)
+    if answers is None:
+        return 0
 
-    if profile.variant_of:
-        print(f"\nFor {vram} MiB of GPU memory the {profile.variant_of} profile uses its gguf variant.")
+    if plan is None:
+        plan = _review(run_state, answers, False)
 
-    change = _plan_change(args, catalog, records, models_dir, base, profile, installed, selection, vram, interactive)
-    pending = models.pending_bytes(profile.models, models_dir)
-    torch = catalog.pytorch.get(detection.platform.index)
-
-    show_summary(catalog, profile, mode, comfy_dir, models_dir, pending, torch)
-    require_acceptance(args, interactive)
+    mode, comfy_dir, port = plan.mode, plan.comfy_dir, plan.port
+    models_dir, profile, selection = plan.models_dir, plan.profile, plan.selection
+    change, pending, torch = plan.change, plan.pending, plan.torch
 
     run_preflight(detection, profile, torch, mode, comfy_dir, models_dir, port, pending, catalog)
 

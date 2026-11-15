@@ -24,6 +24,7 @@ from imagehearth_mcp.provisioner import (
     doctor,
     maintenance,
     manifest,
+    menu,
     models,
     preflight,
     settings,
@@ -1083,14 +1084,19 @@ def test_summary_lists_licenses_and_links(capsys, tmp_path):
         assert entry.url in output
 
 
-def test_interactive_refusal_downloads_nothing(machine, monkeypatch):
+def press(monkeypatch, text):
+    """`setup` interactivo con estas teclas, sin terminal real."""
+    chars = iter(text)
     monkeypatch.setattr(setup_command, "is_interactive", lambda args: True)
-    monkeypatch.setattr("builtins.input", lambda prompt: "n")
+    monkeypatch.setattr(menu, "DEFAULT_READER", lambda: next(chars))
 
-    with pytest.raises(ProvisionError, match="not accepted"):
-        setup_command.run(setup_args(accept_licenses=False, non_interactive=False))
 
+def test_interactive_exit_downloads_nothing(machine, monkeypatch, capsys):
+    press(monkeypatch, "0")
+    assert setup_command.run(setup_args(accept_licenses=False, non_interactive=False)) == 0
+    assert "Nothing was changed." in capsys.readouterr().out
     assert machine.downloads == []
+    assert not config.INSTALL_MANIFEST.exists()
 
 
 def test_non_interactive_needs_profile(machine):

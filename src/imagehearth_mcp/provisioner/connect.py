@@ -21,9 +21,8 @@ from platformdirs import user_config_path
 
 from imagehearth_mcp.engine import config
 from imagehearth_mcp.platform import files
-from imagehearth_mcp.provisioner import ProvisionError, agent_scan
+from imagehearth_mcp.provisioner import ProvisionError, agent_scan, menu
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
-from imagehearth_mcp.provisioner.setup import ask
 
 SERVER_NAME = "imagehearth"
 EXECUTABLE = "imagehearth-mcp"
@@ -668,7 +667,7 @@ def _confirm_unregistered(others, yes, interactive, report):
         for finding in others:
             print(f"  {agent_scan.describe(finding)}")
 
-        if ask("Remove them?"):
+        if menu.confirm("Remove them?"):
             return others
 
     report.pending = others
@@ -801,6 +800,34 @@ def is_detected(client):
     return client.path is not None and client.path().parent.exists()
 
 
+def _ask_each(found):
+    """Pregunta por cada cliente: 1 Sí, 2 No, 0 Atrás (al primero, sale). Devuelve la lista o BACK."""
+    answers = {}
+    index = 0
+
+    while index < len(found):
+        client = found[index]
+        answer = menu.choose(
+            f"Connect {client.label} ({client.level})?",
+            [menu.Option("yes", "Yes"), menu.Option("no", "No")],
+            default="yes",
+            allow_back=True,
+            back_label="Back" if index else "Exit without connecting anything",
+        )
+
+        if answer is menu.BACK:
+            if index == 0:
+                return menu.BACK
+
+            index -= 1
+            continue
+
+        answers[client.name] = answer == "yes"
+        index += 1
+
+    return [client for client in found if answers.get(client.name)]
+
+
 def _detect(args, command):
     found = [client for client in CLIENTS.values() if is_detected(client)]
 
@@ -811,15 +838,24 @@ def _detect(args, command):
     records = InstallManifest.load(config.INSTALL_MANIFEST)
     interactive = sys.stdin.isatty()
 
-    for client in found:
-        print(f"Found {client.label} ({client.level}).")
+    if args.yes or not interactive:
+        for client in found:
+            print(f"Found {client.label} ({client.level}).")
 
     if not args.yes and not interactive:
         raise ProvisionError("Nothing was changed. Non-interactive mode needs --yes.")
 
-    for client in found:
-        if args.yes or ask(f"Connect {client.label}?"):
-            connect(client, command, not args.no_skill, records)
+    if args.yes:
+        chosen = found
+    else:
+        chosen = _ask_each(found)
+
+        if chosen is menu.BACK:
+            print("Nothing was changed.")
+            return 0
+
+    for client in chosen:
+        connect(client, command, not args.no_skill, records)
 
     return 0
 

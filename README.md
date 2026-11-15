@@ -145,6 +145,8 @@ Setup detects your hardware and any existing ComfyUI, proposes a profile, and sh
 
 #### Choosing the quality model
 
+**Answering the questions.** Each question lists numbered options: press a number to choose it (no Enter), or Enter for the recommended one. Yes/no questions take one key (`y`, `s` or `n`). **0 goes back** to the previous question with your answers kept; on the first one it exits without changing anything. Every question shows `Step N of M`, and nothing is written or downloaded until you accept the final summary. Ctrl+C leaves at any point without a trace. Without a terminal (a pipe, some IDEs) or with `--non-interactive`, setup reads a number and Enter per line, or needs the options on the command line.
+
 With `quality` or `full`, setup asks which model to install for high-quality generation. Only one is installed at a time. It shows each one's download size, minimum GPU memory, license and whether it allows commercial use, marks the one recommended for your GPU and warns about those that don't fit it. In non-interactive mode, pass `--quality-model`; without it, setup uses the recommended one and says so.
 
 | Model | `--quality-model` | License | Commercial use | Download | GPU memory | Recommended from |

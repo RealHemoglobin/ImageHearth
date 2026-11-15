@@ -58,10 +58,10 @@ En Windows:
 
 ## Lista para fusionar
 
-- [ ] `scripts/check.sh` en verde en Linux.
+- [x] `scripts/check.sh` en verde en Linux.
 - [ ] Validaciones manuales en Linux completadas.
 - [ ] **Mantenedor:** validación en Windows.
-- [ ] `README.md`, `README.es.md` y `docs/troubleshooting.md` actualizados.
+- [x] `README.md`, `README.es.md` y `docs/troubleshooting.md` actualizados.
 - [ ] Roadmap con las tareas hechas marcadas y la fase como completada.
 - [ ] Cambios revisados por el usuario, que realiza el commit.
 
@@ -69,11 +69,11 @@ En Windows:
 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
-| `scripts/check.sh` | Pendiente | — |
-| `setup` solo con teclas en bash | Pendiente | — |
-| `setup` solo con teclas en zsh | Pendiente | — |
-| 0 desde cada paso y cambio de perfil | Pendiente | — |
-| Ctrl+C en cada pregunta y terminal restaurada | Pendiente | — |
-| `connect --detect`, `connect --remove` y `uninstall` | Pendiente | — |
-| Tubería y `--non-interactive` | Pendiente | — |
+| `scripts/check.sh` | Verde: ruff, 617 tests y tests contra el wheel | 2026-11-15 |
+| `setup` solo con teclas en bash | Hasta la confirmación final en un pty real, sin aceptar (no se descargó nada) | 2026-11-15 |
+| `setup` solo con teclas en zsh | Igual, con `zsh -f -i` | 2026-11-15 |
+| 0 desde cada paso y cambio de perfil | 0 desde confirmación, modelo y perfil en bash; el cambio de perfil con `Step N of M` recalculado, en tests simulados | 2026-11-15 |
+| Ctrl+C en cada pregunta y terminal restaurada | Perfil, modelo y confirmación en bash y zsh: código 130, `stty -a` igual, sin `install.json` | 2026-11-15 |
+| `connect --detect`, `connect --remove` y `uninstall` | `connect --detect` (subconjunto y 0) en pty con `HOME` temporal; `--remove` y `uninstall` solo en tests simulados | 2026-11-15 |
+| Tubería y `--non-interactive` | Mismos errores y mensajes que antes (necesita `--accept-licenses` / `--profile`) | 2026-11-15 |
 | Windows (PowerShell y Windows Terminal) | Pendiente: lo hace el mantenedor | — |

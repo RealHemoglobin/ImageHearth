@@ -41,6 +41,8 @@ Nothing is downloaded until these checks pass. If setup is interrupted, run it a
 
 **A model switch was interrupted.** The previous model is deleted only after the new one is downloaded and verified, so you keep generating with the previous one (`imagehearth-mcp doctor` shows which is active). Run the same command again: the download resumes and the switch finishes. **Disk space during a switch:** both models are on disk at the same time, so setup needs room for the new one before it frees the old one; if it says `Not enough disk space`, free some or keep the models on another disk with `--models-dir`.
 
+**The keys do nothing, or the menus show up as plain lines.** Setup reads one key at a time only in a real terminal. Some IDE consoles and pipes aren't one: there, type the number and press Enter, or avoid the questions with the arguments (`--profile`, `--quality-model`, `--attach` or `--managed`, `--accept-licenses`) and `--non-interactive`. If the terminal behaves oddly after an interruption, run `stty sane` (Linux and macOS) or open a new window.
+
 If Hugging Face restricts access to a model, set `HF_TOKEN` and run setup again.
 
 ## `doctor` results
