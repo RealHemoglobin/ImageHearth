@@ -34,7 +34,7 @@ El comando instala uv y el paquete, detecta el hardware, propone un perfil, mues
 | 11. Menús por número en `setup` | Cada pregunta se responde con una tecla y la 0 vuelve atrás | M | 3, 9 |
 | 12. Carpeta de instalación | ComfyUI y modelos en el disco que elija el usuario, y se pueden mover | M | 3, 11 |
 | 13. LoRAs para SDXL 1.0 | Catálogo curado de LoRAs que el agente lista y aplica | M | 9, 11 |
-| 14. Análisis de modelos | Comparativa de modelos para 8, 16, 24 y 32 GB o más, con decisión | M | 9 |
+| 14. Análisis de modelos | Comparativa de modelos para 8, 16, 24 y 32 GB o más, con decisión; selector múltiple con flechas en `setup` | M | 9, 13 |
 | 15. Nuevos modelos | Los modelos elegidos en la fase 14, con la misma interfaz | L | 11, 14 |
 | 16. v1.0 | macOS experimental y matriz de pruebas completa | M | 6–13, 15 |
 
@@ -544,7 +544,7 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 
 **Objetivo:** decidir, con mediciones, qué modelos de generación y edición distintos de SDXL y FLUX.1 merece la pena añadir para tarjetas de 8, 16, 24 y 32 GB o más, sin cambiar la interfaz de ImageHearth.
 
-**Resultado:** un documento `specs/<fecha>-analisis-modelos/analysis.md` con la comparativa y una recomendación por nivel de VRAM. No se cambia código del producto.
+**Resultado:** un documento `specs/<fecha>-analisis-modelos/analysis.md` con la comparativa y una recomendación por nivel de VRAM. No se cambia código del producto, salvo el [selector múltiple con flechas](#selector-múltiple-con-flechas), añadido a esta fase el 2026-11-15.
 
 ### Candidatos
 
@@ -571,7 +571,16 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 - [ ] Tabla final por nivel (8, 16, 24 y 32+ GB): modelo recomendado para `quality`, para edición y alternativa de licencia comercial.
 - [ ] Indicar cuáles se integran en la fase 15, cuáles se descartan y por qué, y qué perfiles o variantes cambian.
 
-**Listo cuando:** el documento tiene mediciones reales de cada candidato preseleccionado en los cuatro niveles y el usuario ha cerrado qué modelos se integran.
+### Selector múltiple con flechas
+
+Cambio pequeño del instalador, independiente del análisis. Hoy las listas de selección múltiple de `setup` (las LoRAs de la [fase 13](#fase-13-loras-para-sdxl-10)) piden escribir números separados por comas.
+
+- [ ] Con terminal interactiva, `choose_many` muestra las opciones con `[x]`/`[ ]`: ↑ y ↓ mueven el cursor, espacio marca o desmarca, Enter instala las marcadas desde cualquier fila (también desde la fila final `Install selected (N)`) y 0 o la fila `Back` vuelven atrás.
+- [ ] `read_key` lee las flechas en Linux, macOS y Windows; en Windows se activan las secuencias VT de la consola para repintar la lista en el sitio.
+- [ ] Sin terminal se mantienen los números separados por comas; los menús de una opción, `--non-interactive` y `--loras` no cambian.
+- [ ] Pruebas simuladas con teclas inyectadas y prueba manual en Linux; Windows, opcional.
+
+**Listo cuando:** el documento tiene mediciones reales de cada candidato preseleccionado en los cuatro niveles, el usuario ha cerrado qué modelos se integran y el paso `LoRAs` de `setup` se responde con flechas, espacio y Enter.
 
 ## Fase 15: Nuevos modelos de generación
 

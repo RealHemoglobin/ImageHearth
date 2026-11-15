@@ -2,7 +2,7 @@
 
 Rama: `feature/analisis-modelos`. Sin commits del asistente: los cambios se dejan en el árbol de trabajo para revisión. Los pasos marcados como **usuario** o **mantenedor** no los ejecuta el asistente.
 
-Orden: primero el estudio sin descargas y la lista corta, que el usuario aprueba; después la herramienta, las mediciones y la comparativa; por último el documento y la decisión. La tarea 2 es una parada obligatoria.
+Orden: primero el estudio sin descargas y la lista corta, que el usuario aprueba; después la herramienta, las mediciones y la comparativa; por último el documento y la decisión. La tarea 2 es una parada obligatoria. La tarea 10 (selector múltiple con flechas) no depende del análisis: se puede hacer mientras se espera la aprobación de la tarea 2 o al final, antes de la validación.
 
 ## 1. Estudio previo (sin descargas)
 
@@ -61,4 +61,19 @@ Orden: primero el estudio sin descargas y la lista corta, que el usuario aprueba
 
 1. Rellenar la [evidencia](validation.md#evidencia).
 2. `scripts/check.sh` en verde.
-3. `git status --short`: solo cambios en `scripts/` y en esta carpeta de specs, más el roadmap.
+3. `git status --short`: solo cambios en `scripts/`, esta carpeta de specs, el roadmap y los ficheros del selector (tarea 10).
+
+## 10. Selector múltiple con flechas
+
+1. `read_key`: devolver `"UP"` y `"DOWN"`. En Linux y macOS, tras leer `ESC` dentro del mismo `cbreak`, esperar con `select` un tiempo corto (unos 50 ms) y leer `[`/`O` y la letra; Esc solo o secuencias desconocidas devuelven `""`. En Windows, traducir `\xe0`/`\x00` + `H`/`P` en lugar de descartarlos.
+2. `_Reader.key`: normalizar también las secuencias en bruto (`\x1b[A`, `\x1b[B`, `\x1bOA`, `\x1bOB`) que lleguen carácter a carácter desde un lector inyectado, para que los tests puedan usar cualquiera de las dos formas.
+3. `choose_many` en modo teclas: estado con cursor y marcas; dibujar título, ayuda, opciones, `→ Install selected (N)` y `← Back`; repintar en el sitio con ANSI tras cada tecla (subir tantas líneas como se dibujaron y borrarlas); aplicar las teclas de [requirements](requirements.md#selector-múltiple-con-flechas); al terminar, dejar la lista final y `Selected: ...`.
+4. Windows: activar el procesamiento VT de la consola con `ctypes` (`GetStdHandle`, `GetConsoleMode`, `SetConsoleMode` con `ENABLE_VIRTUAL_TERMINAL_PROCESSING`); si falla, usar la línea con comas.
+5. Mantener la rama por línea (sin terminal) tal como está, con números separados por comas, `none` y Enter.
+6. Revisar el texto del paso `LoRAs` en `setup.choose_loras`; cambiarlo solo si menciona la entrada por comas.
+7. Tests en `tests/test_menu.py`: moverse con ↓/↑ y marcar con espacio; vuelta al llegar a los extremos; desmarcar; Enter desde una opción y desde `Install selected`; Enter sobre `← Back` y 0 devuelven `BACK`; enviar sin marcadas devuelve `[]`; marcas iniciales con `default=None` y con `default`; teclas desconocidas y Esc ignoradas; Ctrl+C; sin `allow_back` no aparece `← Back` y 0 se ignora; secuencias en bruto y nombres; el contador `(N)` se actualiza; la línea `Selected:` final.
+8. Tests de `read_key` con `termios`/`select` y `msvcrt` simulados: flechas, Esc solo y teclas especiales desconocidas.
+9. Ajustar los tests que hoy envían números separados por comas con lector inyectado (`test_lora_install.py`, `test_setup_steps.py`, `test_quality_model.py`): pasar a flechas y espacio, o a la fixture de lectura por línea donde lo que se prueba es la entrada por comas. Anotar en la validación los tests cambiados.
+10. Prueba manual en un pty real en Linux (bash y zsh): `setup` con SDXL 1.0 en un `HOME` temporal, paso `LoRAs`, sin llegar a descargar; comprobar repintado, Ctrl+C con la terminal restaurada y 0 volviendo al paso anterior.
+11. Prueba manual en Windows (PowerShell y Windows Terminal) por el **mantenedor**, opcional como el resto de Windows de la fase.
+12. Roadmap: marcar las casillas del apartado del selector en la fase 14.

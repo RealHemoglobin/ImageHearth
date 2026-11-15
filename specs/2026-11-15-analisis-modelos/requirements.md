@@ -15,6 +15,13 @@ Estado de partida, comprobado el 2026-11-15:
 - La máquina de medición es Linux con una RTX 4090 de 24 GB y 59 GB de RAM.
 - La versión de ComfyUI está fijada en el provisionador (`provisioner/comfyui.py`, `pin.version`).
 
+Además, a petición del usuario el 2026-11-15, la fase incluye un cambio de producto pequeño e independiente del análisis: el **selector múltiple con flechas** en `setup`. Estado de partida:
+
+- `provisioner/menu.py` (fase 11): `choose` elige una opción con una tecla (1–9) o con número y Enter si hay más de 9; `choose_many` pide siempre una línea con números separados por comas (`Enter for all, or numbers separated by commas:`), Enter acepta las marcadas, `none` no elige ninguna (si hay marcas iniciales) y 0 vuelve atrás.
+- Su único uso es `setup.choose_loras` (paso `LoRAs` de `setup` al elegir SDXL 1.0), con las instaladas marcadas al empezar.
+- `read_key` lee una tecla con `termios`/`tty` en Linux y macOS y con `msvcrt.getwch` en Windows, donde descarta las teclas especiales (prefijo `\x00` o `\xe0`), así que hoy las flechas no se leen en ningún sistema.
+- Los tests inyectan teclas con un lector (`tests/test_menu.py::keys`) y cubren la lectura por línea sin terminal con la fixture `lines`.
+
 ## Alcance
 
 1. **Estudio previo sin descargas** de todos los candidatos vigentes con soporte en ComfyUI: licencia, tamaños, precisiones, codificadores, soporte nativo o por nodos, capacidades.
@@ -24,10 +31,13 @@ Estado de partida, comprobado el 2026-11-15:
 5. **Comparativa visual** con los mismos prompts y semilla, guardada junto al documento.
 6. **Documento** `analysis.md` en esta carpeta con criterios, mediciones, tabla por nivel y recomendación.
 7. **Decisión del usuario** sobre qué se integra en la fase 15, escrita en el documento y trasladada al roadmap.
+8. **Selector múltiple con flechas** en `menu.choose_many` cuando hay terminal interactiva: flechas para moverse, espacio para marcar o desmarcar, Enter para instalar las marcadas y 0 para volver atrás.
 
 ## Fuera de alcance
 
-- Cualquier cambio en `src/` (paquete, motor, servidor, provisionador), `models.toml` o los workflows del producto. Eso es la fase 15.
+- Cualquier cambio en `src/` (paquete, motor, servidor, provisionador), `models.toml` o los workflows del producto para integrar modelos. Eso es la fase 15. La única excepción es el selector múltiple (`provisioner/menu.py` y, si hace falta, `provisioner/setup.py`).
+- Flechas en los menús de una sola opción (`choose`), también en los de más de 9 opciones: siguen por número.
+- Cambiar la lectura por línea sin terminal o los argumentos de la CLI (`--loras`).
 - Integrar en el producto nodos personalizados o una versión nueva de ComfyUI.
 - LoRAs para modelos nuevos, upscaling o vídeo.
 - Medir en macOS.
@@ -54,14 +64,30 @@ Estado de partida, comprobado el 2026-11-15:
 | Cierre | El usuario elige qué modelos se integran en la fase 15 y para qué nivel; la decisión se escribe en `analysis.md` y en la fase 15 del roadmap |
 | Idioma | Documento en español, como el resto de `specs/`; prompts y salida del script en inglés |
 
+### Selector múltiple con flechas
+
+| Tema | Decisión |
+|---|---|
+| Cuándo se usa | En `choose_many` siempre que haya lectura de teclas (terminal interactiva o lector inyectado en los tests). Sin terminal (tubería, IDE) se mantiene la línea con números separados por comas, `none` y Enter, igual que hoy. `--non-interactive` y `--loras` no cambian |
+| Pantalla | Título, una línea de ayuda `↑/↓ move · Space mark · Enter install · 0 back` (sin `0 back` si no se permite volver), las opciones con `[x]` o `[ ]` y su detalle como hoy, y al final dos filas: `→ Install selected (N)` con el número de marcadas y `← Back` (solo con `allow_back`, con su `back_label`). El cursor se indica con `>` al principio de la fila |
+| Teclas | ↑ y ↓ mueven el cursor por las opciones y las dos filas finales, y dan la vuelta al llegar a un extremo. Espacio marca o desmarca la opción bajo el cursor (sobre las filas finales no hace nada). Enter envía las marcadas esté donde esté el cursor, salvo sobre `← Back`, que vuelve atrás. 0 vuelve atrás desde cualquier fila. Ctrl+C sale limpio como en el resto. Cualquier otra tecla se ignora |
+| Marcas iniciales | Las de hoy: `default=None` marca todas; con `default`, las indicadas (en `setup`, las LoRAs ya instaladas). Enviar sin ninguna marcada devuelve la lista vacía, que sustituye al `none` de la línea |
+| Valor devuelto | El mismo que hoy: las `key` marcadas en el orden de las opciones, o `BACK`. `setup.choose_loras` no cambia de contrato |
+| Lectura de flechas | `read_key` devuelve las flechas como `"UP"` y `"DOWN"`: en Linux y macOS lee la secuencia completa (`ESC [ A`/`B` y `ESC O A`/`B`) dentro del mismo modo `cbreak`, con un tiempo de espera corto tras `ESC` para distinguirlo de una pulsación de Esc sola (que se ignora); en Windows traduce `\xe0`/`\x00` seguidos de `H`/`P`. Las demás teclas especiales siguen devolviendo `""`. El lector inyectado de los tests acepta tanto los nombres como las secuencias en bruto |
+| Repintado | Se redibuja la lista en el sitio con secuencias ANSI (subir el cursor y borrar líneas), sin limpiar la pantalla. En Windows se activa el procesamiento de secuencias VT de la consola con `ctypes` (`SetConsoleMode`) antes de dibujar; si no se puede activar, se vuelve a la línea con comas |
+| Al terminar | Queda impresa la lista con las marcas finales y una línea con lo elegido (`Selected: a, b` o `Selected: none`), para que el historial de la terminal muestre la respuesta, como hacen los menús de una tecla |
+| Menús de una opción | Sin cambios |
+
 ## Restricciones
 
-- No se cambia código del producto ni sus datos; el script de medición importa del paquete solo lo que ya expone (`catalog`, `config`, `paths`, `processes`, `spawn`), como `measure_profiles.py`.
+- No se cambia código del producto ni sus datos, salvo el selector múltiple; el script de medición importa del paquete solo lo que ya expone (`catalog`, `config`, `paths`, `processes`, `spawn`), como `measure_profiles.py`.
 - No se toca la instalación del usuario ni el ComfyUI gestionado: todo en carpetas temporales del script.
 - Las descargas usan `HF_TOKEN` si un repositorio lo exige y no se aceptan licencias en nombre del usuario: si un modelo exige aceptar condiciones en Hugging Face, se le pide al usuario.
 - Espacio en disco: antes de descargar la lista corta se suma su tamaño y se confirma con el usuario que hay sitio.
 - No medir con modelos de lenguaje cargados en la GPU (el script se niega, como `measure_profiles.py`).
 - `scripts/check.sh` sigue en verde (`ruff` cubre `scripts/`).
+- El selector múltiple usa solo la biblioteca estándar, restaura siempre la terminal (también con Ctrl+C o una excepción) y funciona en Linux y Windows; macOS preparado sin probar.
+- Los menús de una opción, la lectura por línea y el modo no interactivo se comportan exactamente igual que antes.
 - Sin commits del asistente.
 
 ## Entregables
@@ -71,3 +97,5 @@ Estado de partida, comprobado el 2026-11-15:
 - `specs/2026-11-15-analisis-modelos/measurements/*.json`.
 - `specs/2026-11-15-analisis-modelos/comparison/*.jpg`.
 - `specs/roadmap.md`: casillas de la fase 14 y, una vez decidido, la lista de modelos de la fase 15.
+- `src/imagehearth_mcp/provisioner/menu.py`: `read_key` con flechas y `choose_many` con el selector; `provisioner/setup.py` solo si el texto del paso `LoRAs` lo necesita.
+- Tests en `tests/test_menu.py` y ajustes de los que hoy envían números separados por comas con un lector inyectado (`tests/test_lora_install.py`, `tests/test_setup_steps.py`, `tests/test_quality_model.py`).
