@@ -39,32 +39,52 @@ def _build_parser():
         help="What to install. The mac-* profiles are only for macOS.",
     )
     setup.add_argument(
+        "--fast-models",
+        metavar="NAMES",
+        help="Models for fast generation (quick drafts): a comma-separated list of "
+        "name[:precision], e.g. klein-4b,z-image-turbo:int8. The first is the default. "
+        "Choose from: sdxl-turbo, z-image-turbo, klein-4b. Without a precision, the one "
+        "recommended for the GPU. On an existing installation the list fixes the set: the "
+        "missing models are downloaded first and the others deleted afterwards. Without "
+        "it the fast models are left as they are.",
+    )
+    setup.add_argument(
+        "--quality-models",
+        metavar="NAMES",
+        help="Models for high-quality generation (quality and full profiles), same format. "
+        "Choose from: sdxl, flux-dev, flux-schnell, chroma-hd, qwen-image, hidream-full. "
+        "flux-dev has a non-commercial license; hidream-full shows the Llama 3.1 license. "
+        "Choosing others replaces the installed ones: downloaded first, deleted afterwards.",
+    )
+    setup.add_argument(
+        "--edit-models",
+        metavar="NAMES",
+        help="Models for image editing (full profile), same format. Choose from: kontext, "
+        "klein-4b, qwen-image-edit.",
+    )
+    setup.add_argument(
         "--quality-model",
-        choices=("flux-dev", "flux-schnell", "sdxl"),
-        help="Model for quality or full. flux-dev: best detail, non-commercial license, "
-        "20 GB of VRAM recommended. flux-schnell: fast, Apache-2.0, 12 GB. sdxl: SDXL 1.0, "
-        "OpenRAIL++, 8 GB. Without it a new install uses the one recommended for the GPU "
-        "and an existing install keeps its model. Choosing another replaces the current "
-        "one: it is downloaded first and the old one deleted afterwards.",
+        metavar="NAME",
+        help="Same as --quality-models with one model (kept from earlier versions).",
     )
     setup.add_argument(
         "--loras",
         metavar="NAMES",
         help="Style LoRAs for SDXL 1.0: a comma-separated list of names, all or none. On "
         "an existing installation it fixes the set: the ones missing are downloaded and "
-        "the others deleted. Without it the LoRAs are left as they are. Only with the "
-        "sdxl quality model.",
+        "the others deleted. Without it the LoRAs are left as they are. Needs sdxl "
+        "among the quality models.",
     )
     setup.add_argument(
         "--variant",
         choices=("fp8", "gguf"),
-        help="Force the precision of the quality model (and of image editing in full) "
-        "instead of the one that fits the GPU memory.",
+        help="Precision for the models that don't name one with name:precision, where they "
+        "have it, instead of the one recommended for the GPU memory.",
     )
     setup.add_argument(
         "--yes",
         action="store_true",
-        help="Confirm switching the quality model without asking.",
+        help="Confirm replacing or removing installed models without asking.",
     )
     setup.add_argument(
         "--experimental",

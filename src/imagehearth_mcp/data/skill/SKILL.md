@@ -9,13 +9,13 @@ description: Generate, edit and compose images using the centralized ImageHearth
 
 ImageHearth is the centralized image generation and editing engine shared by all AI agents.
 
-It uses:
-- ComfyUI as the image generation backend.
-- SDXL Turbo for fast generation.
-- One high-quality model of the user's choice: FLUX Dev (non-commercial license), FLUX Schnell (Apache-2.0, 4 steps) or SDXL 1.0 (OpenRAIL++, takes negative prompts).
-- FLUX Kontext for image editing and multi-reference composition.
+It uses ComfyUI as the image generation backend, with models of three kinds ("capabilities"). The user installs one or more of each, and one of them is the default:
 
-What is available depends on the profile the user installed. Only SDXL Turbo is present with `fast`; `quality` adds the quality model the user chose with `imagehearth-mcp setup --quality-model flux-dev|flux-schnell|sdxl` (`list_workflows` and `get_engine_status` say which is active and whether its license allows commercial use) and `full` adds FLUX Kontext, which needs at least 12 GB of GPU memory and is non-commercial. Only one quality model is installed at a time; changing it is `setup` again, or `setup_start` with another `quality_model`: tell the user it replaces the current one.
+- **Fast** (`quality="fast"`): SDXL Turbo, Z-Image-Turbo or FLUX.2 Klein 4B. Seconds per image.
+- **High quality** (`quality="high"`): SDXL 1.0 (takes negative prompts and LoRAs), FLUX Dev (non-commercial), FLUX Schnell, Chroma1-HD, Qwen-Image (good at text in images) or HiDream-I1 Full.
+- **Editing** (`image_paths`): FLUX.2 Klein 4B (seconds, one reference), Qwen-Image-Edit (minutes, one reference, changes more than asked) or FLUX Kontext (non-commercial, up to six references).
+
+What is available depends on the profile the user installed: `fast` has only the fast models, `quality` adds the quality ones and `full` adds editing. `list_workflows` shows the installed models and which one is the default of each capability. Changing the set is `imagehearth-mcp setup --fast-models ... --quality-models ... --edit-models ...` (names with an optional `:precision`), or `setup_start` with `fast_models`, `quality_models` and `edit_models`: a list fixes the set of that capability, so tell the user what it replaces.
 
 - A centralized orchestration layer for GPU memory management.
 - MCP as the agent-independent interface.
@@ -36,12 +36,13 @@ Parameters:
 - `mode` (string, optional): `auto`, `generate` or `edit`. Default: `auto`.
 - `quality` (string, optional): `fast` or `high`. Default: `fast`.
 - `image_paths` (array of strings, optional): Up to six reference image paths.
-- `workflow` (string, optional): Explicit generation workflow override.
+- `model` (string, optional): An installed model from `list_workflows` to use instead of the default of what the request needs. See "Choosing a model".
+- `workflow` (string, optional): Explicit generation workflow override. Leave empty; it can't be combined with `model`.
 - `width` (integer, optional): Output width. Default: automatic.
 - `height` (integer, optional): Output height. Default: automatic.
-- `negative_prompt` (string, optional): Elements to avoid during generation. SDXL models apply it; other backends return a warning.
+- `negative_prompt` (string, optional): Elements to avoid during generation. SDXL, Chroma1-HD, Qwen-Image and HiDream apply it; the FLUX and Z-Image models and editing return a warning.
 - `style` (string, optional): `auto`, `photo` or `none`. Photographic cues for FLUX Schnell and SDXL 1.0. Default: `auto`.
-- `loras` (array, optional): Style LoRAs, only with `quality="high"` when the quality model is SDXL 1.0. See "Style LoRAs".
+- `loras` (array, optional): Style LoRAs, only with `quality="high"` and the SDXL 1.0 model. See "Style LoRAs".
 - `include_image` (boolean, optional): Also return the picture, for models with vision. Default: false, because it uses context. The path stays on the first line.
 
 ### Automatic routing
@@ -49,7 +50,7 @@ Parameters:
 When `mode="auto"`:
 
 - No reference images: generate a new image.
-- One or more reference images: edit or compose using FLUX Kontext.
+- One or more reference images: edit or compose with the installed editing model (the default one unless you pass `model`).
 
 When `mode="generate"`:
 
@@ -59,28 +60,37 @@ When `mode="generate"`:
 When `mode="edit"`:
 
 - At least one reference image is required.
-- Uses FLUX Kontext.
-- Supports up to six reference images.
+- Uses the installed editing model (the default one, or `model`).
+- FLUX Kontext supports up to six reference images; FLUX.2 Klein 4B and Qwen-Image-Edit take one, and keep its size (`width` and `height` are ignored with a warning).
 
 ### Quality selection
 
 For generation without references:
 
-- `fast`: SDXL Turbo.
-- `high`: the quality model the user installed (FLUX Dev, FLUX Schnell or SDXL 1.0). Negative prompts only apply to SDXL 1.0. FLUX Schnell and SDXL 1.0 draw painterly unless told otherwise: `style="auto"` (default) adds photographic cues unless the prompt names another medium, but for realism still write the prompt like a photograph (subject, light, lens).
+- `fast`: the default fast model.
+- `high`: the default quality model. FLUX Schnell and SDXL 1.0 draw painterly unless told otherwise: `style="auto"` (default) adds photographic cues unless the prompt names another medium, but for realism still write the prompt like a photograph (subject, light, lens).
 
-Quality does not change the editing backend. Image editing always uses FLUX Kontext.
+Quality does not change the editing model: editing uses the installed editing model.
+
+### Choosing a model
+
+Several models can be installed for each capability. Without `model`, `create_image` uses the default of the capability the request needs (fast, high quality, or editing when there are `image_paths`).
+
+1. When the user asks for a specific model ("use Chroma", "with Klein"), or you want to know what is installed (speed, license, what each is for), call `list_workflows` once. Each item has `model` (the name to pass), `capability`, `precision`, `default`, `license`, `commercial_use` and, when measured, `seconds` per image on this GPU.
+2. Pass the `model` name: `create_image(prompt="a fox", quality="high", model="chroma-hd")`. In a list of prompts, `model` can be set per item or as a common value.
+3. The model must be installed and have the capability the request needs. Otherwise the call fails before touching the GPU, says what is installed and the `imagehearth-mcp setup` command that installs the rest: tell the user, it needs them to run it. Never invent a name, never use another model without being asked, and don't combine `model` with `workflow`.
+4. If the user doesn't care, don't pass `model`. Use the `commercial_use` field when the user needs commercial images: FLUX Dev and Kontext are not.
 
 ### Style LoRAs
 
 With SDXL 1.0 as the quality model, the user can install small style LoRAs (pixel art, watercolor, anime, extra detail...). When the user asks for a style:
 
-1. Call `list_workflows` and look at the item with `active: true`. If it is `sdxl_base`, it has a `loras` list of the installed ones: `name`, `description`, `category`, `trigger_words` and the recommended `weight`.
-2. If one fits, pass it in `create_image` with `quality="high"`: `loras=["pixel-art"]`, or with a weight (0 to 2): `loras=[{"name": "watercolor", "weight": 0.6}]`. At most 3 per image, each once. A name alone uses its recommended weight.
+1. Call `list_workflows` and look at the item with `model: "sdxl"`. It has a `loras` list of the installed ones: `name`, `description`, `category`, `trigger_words` and the recommended `weight`.
+2. If one fits, pass it in `create_image` with `quality="high"` (and `model="sdxl"` if SDXL 1.0 isn't the default): `loras=["pixel-art"]`, or with a weight (0 to 2): `loras=[{"name": "watercolor", "weight": 0.6}]`. At most 3 per image, each once. A name alone uses its recommended weight.
 3. Do not add the activation words yourself: they are added to the prompt if missing. `style="auto"` adds no photographic cues when a LoRA asks for another medium.
 4. Never invent a name. If none fits or the list is empty, generate without LoRAs. If the user wants a LoRA that is not installed, the error names the command (`imagehearth-mcp setup --loras ...`): tell the user, it needs them to run it.
 
-LoRAs do not work with `quality="fast"`, FLUX or editing: the call fails before touching the GPU and the error says why. In a list of prompts, `loras` can be set per item or as a common value, like the other fields. The PNG records them in `ImageHearth-LoRAs`.
+LoRAs do not work with `quality="fast"`, with any model but SDXL 1.0, or with editing: the call fails before touching the GPU and the error says why. In a list of prompts, `loras` can be set per item or as a common value, like the other fields. The PNG records them in `ImageHearth-LoRAs`.
 
 ### Dimensions
 
@@ -175,11 +185,11 @@ The result has one line per item, in the order you gave:
 
 ### list_workflows
 
-List the generation workflows whose models are installed. The item of the quality model has `active: true`; when it is SDXL 1.0 it also has the installed style `loras`.
+List the installed models, one item per model (`model`, `capability`, `precision`, `default`, `license`, `commercial_use`, `seconds`). The `sdxl` item also has the installed style `loras`.
 
-Use this tool to inspect the available workflow catalog. It is checked on every call, so a later `setup` shows up without a restart.
+Use this tool to inspect what is installed and to pick a `model` for `create_image`. It is checked on every call, so a later `setup` shows up without a restart.
 
-The internal Kontext template is not listed and cannot be selected. Use `create_image` with `image_paths` for Kontext operations.
+The editing templates are internal and cannot be selected as a workflow. Use `create_image` with `image_paths` (and `model`) for editing.
 
 ### get_engine_status
 
@@ -218,9 +228,9 @@ Use only when `get_engine_status` reports `recovery_required`.
 
 `setup_start` installs ComfyUI and a profile. It needs `profile` and `accept_licenses`, refuses experimental profiles, and keeps running if the agent disconnects.
 
-Before calling `setup_start`, tell the user the profile, download size and licenses, and wait for their clear yes. Never accept licenses on their behalf.
+Before calling `setup_start`, tell the user the profile, the models of each capability (`models` in `setup_status`: precisions with size, measured seconds per image on this GPU, license, commercial use, fit and which is recommended; they can choose several, the first is the default), the total download size and the licenses (HiDream also downloads Meta's Llama 3.1 text encoder under its own license), and wait for their clear yes. Never accept licenses or choose models on their behalf. Pass the choice in `fast_models`, `quality_models` and `edit_models`, each a list of `name` or `name:precision`. On an existing installation a list fixes the set of that capability: what isn't listed is deleted after the new models are verified, so list the installed ones to keep. Omitted or empty: that capability is left as it is.
 
-If the user chooses SDXL 1.0, also ask whether they want style LoRAs and which: `setup_status` lists them under `loras` with category, size and license. Pass the chosen names in `loras` (`["all"]` for every one). On an existing installation `loras` fixes the set: the ones not listed are deleted, so include the installed ones to keep. An empty list changes nothing.
+If the user chooses SDXL 1.0 (`sdxl`), also ask whether they want style LoRAs and which: `setup_status` lists them under `loras` with category, size and license. Pass the chosen names in `loras` (`["all"]` for every one). On an existing installation `loras` fixes the set: the ones not listed are deleted, so include the installed ones to keep. An empty list changes nothing.
 
 ## Image creation guidelines
 

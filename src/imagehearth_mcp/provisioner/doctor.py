@@ -402,20 +402,37 @@ def lora_state(records, catalog, models_dir, extra_paths, verify_hashes):
 
 
 def check_models(config, records, catalog, verify_hashes, system):
-    from imagehearth_mcp.provisioner import models, quality
+    from imagehearth_mcp.provisioner import ProvisionError, models, selection
+    from imagehearth_mcp.provisioner.manifest import ModelSet
 
     models_dir = models.resolve_dir(records, config.COMFY_DIR)
     profiles = catalog.profiles_for(system)
     extra_paths = models.extra_search_paths(config.COMFY_DIR)
     expected = records.profile or next(iter(profiles), "fast")
-    installed = quality.current(catalog, records, models_dir)
+    installed = selection.installed_set(catalog, records, models_dir)
+    legacy = selection.is_legacy(catalog, records, models_dir)
     problems = {}
     complete = {}
 
     for name, base in profiles.items():
-        profile = quality.resolve_for(
-            catalog, base, installed, 0, records.precision, records.edit_precision
-        )
+        if installed is None:
+            have = catalog.recommended_set(base, 0)
+        else:
+            # Only the capabilities this profile has: a smaller profile is checked on its own.
+            have = ModelSet(
+                {cap: picks for cap, picks in installed.picks.items() if cap in base.capabilities},
+                installed.defaults,
+            )
+
+        try:
+            profile = catalog.build_set(base, have)
+        except ProvisionError:
+            complete[name] = False
+            continue
+
+        if legacy:
+            profile = selection.keep_realvisxl(catalog, profile)
+
         states = models.inspect(profile.models, models_dir, extra_paths)
         bad = [item for item in states if item.state != models.PRESENT]
 
@@ -476,24 +493,52 @@ def check_models(config, records, catalog, verify_hashes, system):
 
 
 def check_quality_model(config, records, catalog):
-    """Modelo de `quality` activo con su licencia, y si la instalación es de antes de la fase 9."""
-    from imagehearth_mcp.provisioner import models, quality
+    """The models installed per capability, the default quality model's license and legacy state."""
+    from imagehearth_mcp.provisioner import models, quality, selection
 
-    installed = quality.current(
-        catalog, records, models.resolve_dir(records, config.COMFY_DIR)
+    models_dir = models.resolve_dir(records, config.COMFY_DIR)
+    installed = quality.current(catalog, records, models_dir)
+    model_set = selection.installed_set(catalog, records, models_dir)
+    listing = {}
+
+    for capability in ("fast", "high", "edit"):
+        picks = model_set.of(capability) if model_set else ()
+        default = model_set.default(capability) if model_set else None
+        listing[capability] = [
+            {"model": pick.model, "precision": pick.precision, "default": pick == default}
+            for pick in picks
+        ]
+
+    summary = " ".join(
+        f"{selection.CAPABILITY_LABELS[cap]}: "
+        + ", ".join(
+            f"{item['model']} {item['precision']}" + (" (default)" if item["default"] and len(items) > 1 else "")
+            for item in items
+        )
+        + "."
+        for cap, items in listing.items()
+        if items
     )
 
     if installed is None:
-        return Check("quality_model", SKIP, "The installed profile has no quality model.")
+        return Check(
+            "quality_model",
+            SKIP,
+            "The installed profile has no quality model." + (f" {summary}" if summary else ""),
+            details={"models": listing},
+        )
 
-    model = catalog.quality_model(installed.name)
+    default = model_set.default("high") if model_set else None
+    name = default.model if default and not installed.legacy else installed.name
+    model = catalog.quality_model(name) if name in catalog.quality_models else catalog.catalog[name]
     license = catalog.licenses[model.license]
     details = {
-        "name": installed.name,
+        "name": name,
         "title": model.title,
         "license": license.name,
         "commercial_use": license.commercial,
         "legacy": installed.legacy,
+        "models": listing,
     }
 
     if installed.legacy:
@@ -502,7 +547,7 @@ def check_quality_model(config, records, catalog):
             WARN,
             f"{quality.LEGACY} is no longer offered; it still generates. Moving to "
             f"{model.title} downloads it and deletes {quality.LEGACY}.",
-            "Run `imagehearth-mcp setup --quality-model sdxl`.",
+            "Run `imagehearth-mcp setup --quality-models sdxl`.",
             details,
         )
 
@@ -510,7 +555,7 @@ def check_quality_model(config, records, catalog):
     return Check(
         "quality_model",
         OK,
-        f"{model.title} ({license.name}, {use}).",
+        f"{model.title} ({license.name}, {use}). {summary}".rstrip(),
         details=details,
     )
 

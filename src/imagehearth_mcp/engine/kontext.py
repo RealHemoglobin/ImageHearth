@@ -13,11 +13,16 @@ from imagehearth_mcp.engine.orchestrator import generation_session
 from imagehearth_mcp.engine.result import ImageResult
 from imagehearth_mcp.engine.validation import (
     fit_to_limits,
-    resolve_edit_workflow,
+    resolve_edit_model,
     validate_dimensions,
     validate_prompt,
 )
-from imagehearth_mcp.engine.workflow_runner import save_session_image
+from imagehearth_mcp.engine.workflow_runner import (
+    fill_markers,
+    has_markers,
+    loader_values,
+    save_session_image,
+)
 
 log = get_logger("kontext")
 
@@ -37,7 +42,7 @@ TEMPLATE_INPUT_NODES = {
 }
 
 
-def normalize_image_paths(image_path=None, image_paths=None):
+def normalize_image_paths(image_path=None, image_paths=None, limit=None):
     paths = []
 
     if image_path:
@@ -62,10 +67,11 @@ def normalize_image_paths(image_path=None, image_paths=None):
     if not unique:
         raise ValueError("Provide at least one image.")
 
-    if len(unique) > config.MAX_REFERENCES:
-        raise ValueError(
-            f"Kontext accepts at most {config.MAX_REFERENCES} images."
-        )
+    limit = limit or config.MAX_REFERENCES
+
+    if len(unique) > limit:
+        who = "Kontext" if limit == config.MAX_REFERENCES else "This model"
+        raise ValueError(f"{who} accepts at most {limit} images.")
 
     for path in unique:
         if not path.is_file():
@@ -257,6 +263,26 @@ def build_workflow(
     return workflow
 
 
+def build_marker_workflow(uploaded_images, prompt, filename, model, workflow_name):
+    """An editing template with %NAME% markers (FLUX.2 Klein, Qwen-Image-Edit).
+
+    The result takes the size of the reference, scaled by the workflow itself.
+    """
+    workflow = json.loads((config.WORKFLOWS_DIR / f"{workflow_name}.json").read_text(encoding="utf-8"))
+
+    if len(uploaded_images) != 1:
+        raise ValueError(f"{model.title} edits one image at a time.")
+
+    values = {
+        "PROMPT": prompt,
+        "IMAGE": uploaded_images[0],
+        "SEED": random.randint(0, 2**64 - 1),
+        "PREFIX": filename,
+        **loader_values(model),
+    }
+    return fill_markers(workflow, values)
+
+
 @dataclass
 class PreparedEdit:
     """A validated edit request, ready to run in a session."""
@@ -268,15 +294,44 @@ class PreparedEdit:
     height: int
     image_id: str
     warnings: list[str] = field(default_factory=list)
+    # The installed catalog model that edits.
+    model: object = None
 
 
-def prepare_edit(prompt, image_path=None, image_paths=None, width=0, height=0):
-    """Validate the request and its references. Touches neither GPU nor session."""
+def _uses_markers(workflow_name):
+    template = config.WORKFLOWS_DIR / f"{workflow_name}.json"
+    return has_markers(json.loads(template.read_text(encoding="utf-8")))
+
+
+def prepare_edit(
+    prompt, image_path=None, image_paths=None, width=0, height=0, model=None, negative_prompt=""
+):
+    """Validate the request and its references. Touches neither GPU nor session.
+
+    `model` is the installed editing model (`catalog.resolve_model("edit", ...)`); empty
+    uses the default of the editing capability.
+    """
     validate_prompt(prompt)
-    workflow_name = resolve_edit_workflow()
+    model = model or resolve_edit_model()
+    workflow_name = model.workflow
+    limit = model.max_references
 
-    paths = normalize_image_paths(image_path, image_paths)
+    paths = normalize_image_paths(image_path, image_paths, limit)
+    asked_size = bool(width or height)
     width, height, warning = output_dimensions(paths[0], width, height)
+    warnings = []
+
+    if asked_size and _uses_markers(workflow_name):
+        warnings.append(
+            f"{model.title} keeps the size of the reference: width and height are ignored."
+        )
+
+    if negative_prompt:
+        who = "FLUX Kontext" if model.name == "kontext" else model.title
+        warnings.append(f"{who} ignores negative_prompt.")
+
+    if warning:
+        warnings.append(warning)
 
     return PreparedEdit(
         workflow_name=workflow_name,
@@ -285,7 +340,8 @@ def prepare_edit(prompt, image_path=None, image_paths=None, width=0, height=0):
         width=width,
         height=height,
         image_id=f"kontext_{uuid.uuid4().hex[:12]}",
-        warnings=[warning] if warning else [],
+        warnings=warnings,
+        model=model,
     )
 
 
@@ -296,14 +352,21 @@ def run_in_session(session, prepared, timeout=config.KONTEXT_TIMEOUT):
         for index, path in enumerate(prepared.paths, start=1)
     ]
 
-    workflow = build_workflow(
-        uploaded_images=uploaded_images,
-        prompt=prepared.prompt,
-        width=prepared.width,
-        height=prepared.height,
-        filename=f"{config.COMFY_SUBFOLDER}/{prepared.image_id}",
-        workflow_name=prepared.workflow_name,
-    )
+    filename = f"{config.COMFY_SUBFOLDER}/{prepared.image_id}"
+
+    if _uses_markers(prepared.workflow_name):
+        workflow = build_marker_workflow(
+            uploaded_images, prepared.prompt, filename, prepared.model, prepared.workflow_name
+        )
+    else:
+        workflow = build_workflow(
+            uploaded_images=uploaded_images,
+            prompt=prepared.prompt,
+            width=prepared.width,
+            height=prepared.height,
+            filename=filename,
+            workflow_name=prepared.workflow_name,
+        )
 
     log.info("Independent references: %s", len(prepared.paths))
     log.info("Output dimensions: %sx%s", prepared.width, prepared.height)
@@ -314,6 +377,7 @@ def run_in_session(session, prepared, timeout=config.KONTEXT_TIMEOUT):
         timeout,
         config.OUTPUT_DIR / f"{prepared.image_id}.png",
         prepared.workflow_name.removesuffix(".json"),
+        model=prepared.model,
     )
 
     return ImageResult(destination, list(prepared.warnings))
@@ -326,8 +390,10 @@ def generate(
     image_paths=None,
     width=0,
     height=0,
+    model=None,
+    negative_prompt="",
 ):
-    prepared = prepare_edit(prompt, image_path, image_paths, width, height)
+    prepared = prepare_edit(prompt, image_path, image_paths, width, height, model, negative_prompt)
 
     with generation_session(prepared.workflow_name) as session:
         result = run_in_session(session, prepared, timeout)

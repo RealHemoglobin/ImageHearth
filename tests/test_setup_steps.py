@@ -20,60 +20,81 @@ from tests.test_provisioner import (  # noqa: F401
 )
 from tests.test_quality_model import idle  # noqa: F401
 
-# Linux, GPU de 24 GB: perfiles fast (1), quality (2), full (3); modelos flux-dev (1),
-# flux-schnell (2), sdxl (3).
+# Linux, GPU de 24 GB: perfiles fast (1), quality (2), full (3). Cada capacidad pide sus
+# modelos con selección múltiple (Enter acepta lo recomendado) y la precisión de cada uno que
+# tenga varias. Recomendado a 24 GB: Z-Image-Turbo bf16, Qwen-Image fp8 y Qwen-Image-Edit fp8.
+
+DOWN = "\x1b[B"
+# SDXL 1.0 is the first quality model and the recommended Qwen-Image the fifth: mark one,
+# unmark the other.
+SDXL = " " + DOWN * 4 + " " + "\r"
 
 
 def interactive(**kwargs):
-    return setup_args(**{"profile": None, "accept_licenses": False, "non_interactive": False, **kwargs})
+    return setup_args(
+        **{
+            "profile": None,
+            "accept_licenses": False,
+            "non_interactive": False,
+            "fast_models": "sdxl-turbo",
+            **kwargs,
+        }
+    )
 
 
 def test_full_run_only_with_keys(machine, monkeypatch, capsys):
-    # folder, profile quality, model sdxl, no LoRAs (Enter), accept.
-    press(monkeypatch, "123\r1")
-    assert setup_command.run(interactive()) == 0
+    # folder, profile quality, recommended fast model and precision, SDXL 1.0, no LoRAs, accept.
+    press(monkeypatch, "12" + "\r" + "\r" + SDXL + "\r" + "1")
+    assert setup_command.run(interactive(fast_models=None)) == 0
     output = capsys.readouterr().out
 
-    for step in (1, 2, 3, 4, 5):
-        assert f"Step {step} of 5" in output
+    for step in (1, 2, 3, 4, 5, 6, 7):
+        assert f"Step {step} of " in output
 
+    assert "Step 7 of 7" in output
     records = InstallManifest.load(config.INSTALL_MANIFEST)
     assert (records.profile, records.quality_model) == ("quality", "sdxl")
+    assert records.models["fast"] == [{"model": "z-image-turbo", "precision": "bf16"}]
 
 
 def test_enter_takes_the_recommended_answers(machine, monkeypatch):
-    press(monkeypatch, "\r\r\r\r")
-    assert setup_command.run(interactive()) == 0
+    # folder, profile, then models and precision of fast, quality and editing, and accept.
+    press(monkeypatch, "\r" * 9)
+    assert setup_command.run(interactive(fast_models=None)) == 0
     records = InstallManifest.load(config.INSTALL_MANIFEST)
-    assert records.profile == "full" and records.quality_model == "flux-dev"
+    assert records.profile == "full" and records.quality_model == "qwen-image"
+    assert records.models == {
+        "fast": [{"model": "z-image-turbo", "precision": "bf16"}],
+        "high": [{"model": "qwen-image", "precision": "fp8"}],
+        "edit": [{"model": "qwen-image-edit", "precision": "fp8"}],
+    }
 
 
 def test_zero_goes_back_and_keeps_answers(machine, monkeypatch, capsys):
-    # profile quality, model sdxl, no LoRAs; back from the review to the LoRAs and from there
-    # to the model (default sdxl), on to the LoRAs again and accept.
-    press(monkeypatch, "123\r" "0" "0" "\r" "\r" "1")
-    assert setup_command.run(interactive()) == 0
+    # profile quality, SDXL 1.0, no LoRAs; back from the review to the LoRAs and from there
+    # to the models (SDXL 1.0 still marked), on to the LoRAs again and accept.
+    press(monkeypatch, "12" + "\r" + "\r" + SDXL + "\r" + "0" + "0" + "\r" + "\r" + "1")
+    assert setup_command.run(interactive(fast_models=None)) == 0
     output = capsys.readouterr().out
-    assert output.count("Step 3 of 5") == 2
-    assert "Choice [3]" in output
+    assert output.count("Step 5 of 7") == 2 and output.count("Step 6 of 7") == 3
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "sdxl"
 
 
-def test_profile_without_quality_removes_the_model_step(machine, monkeypatch, capsys):
-    # quality, back from the model, fast: two steps left.
-    press(monkeypatch, "1" + "2" + "0" + "1" + "1")
-    assert setup_command.run(interactive()) == 0
+def test_profile_without_quality_removes_the_model_steps(machine, monkeypatch, capsys):
+    # quality, back from the fast models, fast, its model and precision, accept.
+    press(monkeypatch, "1" + "2" + "0" + "1" + "\r" + "\r" + "1")
+    assert setup_command.run(interactive(fast_models=None)) == 0
     output = capsys.readouterr().out
-    assert "Step 2 of 5" in output and "Step 3 of 3" in output
+    assert "Step 5 of 5" in output
     records = InstallManifest.load(config.INSTALL_MANIFEST)
     assert records.profile == "fast" and records.quality_model is None
 
 
 def test_zero_from_every_step_goes_back_one_at_a_time(machine, monkeypatch, capsys):
-    # folder, profile, model, then back from the LoRAs, the model, the profile and the folder
-    # leaves with nothing written.
-    press(monkeypatch, "123" + "0" + "000")
-    assert setup_command.run(interactive()) == 0
+    # folder, profile, fast models and precision, SDXL 1.0, then back from the LoRAs, the
+    # models, the precision, the models, the profile and the folder leaves with nothing written.
+    press(monkeypatch, "12" + "\r" + "\r" + SDXL + "000000")
+    assert setup_command.run(interactive(fast_models=None)) == 0
     assert "Nothing was changed." in capsys.readouterr().out
     assert not config.INSTALL_MANIFEST.exists()
     assert machine.downloads == []
@@ -84,7 +105,7 @@ def test_steps_resolved_by_arguments_are_not_shown(machine, monkeypatch, capsys)
     assert setup_command.run(interactive(profile="fast")) == 0
     output = capsys.readouterr().out
     assert "Step 2 of 2" in output and "Step 3" not in output
-    assert "Profiles:" not in output
+    assert "Profiles:" not in output and "Fast models" not in output
 
 
 def test_quality_model_argument_hides_its_step(machine, monkeypatch, capsys):
@@ -92,6 +113,18 @@ def test_quality_model_argument_hides_its_step(machine, monkeypatch, capsys):
     assert setup_command.run(interactive(quality_model="sdxl")) == 0
     output = capsys.readouterr().out
     assert "Step 4 of 4" in output and "Quality models" not in output
+
+
+def test_several_models_ask_for_the_default(machine, monkeypatch, capsys):
+    # fast profile: mark Klein 4B (third) as well as the recommended Z-Image-Turbo (second),
+    # precision of Z-Image-Turbo, then the default (the second in the list).
+    press(monkeypatch, "1" + DOWN + DOWN + " " + "\r" + "\r" + "2" + "1")
+    assert setup_command.run(interactive(profile="fast", fast_models=None)) == 0
+    output = capsys.readouterr().out
+    assert "Default fast model" in output
+    records = InstallManifest.load(config.INSTALL_MANIFEST)
+    assert [item["model"] for item in records.models["fast"]] == ["z-image-turbo", "klein-4b"]
+    assert records.defaults["fast"] == "klein-4b"
 
 
 def existing_comfy(machine):

@@ -71,9 +71,18 @@ def require_installed(name, what=None):
         )
 
 
-def resolve_edit_workflow():
-    smallest = min(catalog.minimum_vram_mib(name) for name in catalog.VARIANTS["edit"])
+def resolve_edit_model(model=""):
+    """The installed model an edit uses: `model` or the default of the editing capability."""
     total = gpu.total_mib()
+    installed = catalog.installed_models("edit", total)
+
+    if installed:
+        from imagehearth_mcp.provisioner import manifest
+
+        known = manifest.load().catalog
+        smallest = min(known[item.name].min_vram_mib for item in installed)
+    else:
+        smallest = min(catalog.minimum_vram_mib(name) for name in catalog.variants()["edit"])
 
     if total is not None and total < smallest:
         raise ValueError(
@@ -81,9 +90,15 @@ def resolve_edit_workflow():
             f"memory and this GPU has {total} MiB. Image generation still works."
         )
 
-    name = catalog.choose("edit", total)
-    require_installed(name, "Image editing")
-    return name
+    if not model and not catalog.default_model("edit"):
+        # Nothing installed for editing: the same error as ever, naming the profile.
+        require_installed(catalog.choose("edit", total), "Image editing")
+
+    return catalog.resolve_model("edit", model)
+
+
+def resolve_edit_workflow():
+    return resolve_edit_model().workflow
 
 
 def resolve_workflow(workflow, quality):
@@ -96,7 +111,9 @@ def resolve_workflow(workflow, quality):
 
         selected = workflow
     else:
-        selected = catalog.choose(quality)
+        capability = "high" if quality == "high" else "fast"
+        default = catalog.default_model(capability)
+        selected = default.workflow if default else catalog.choose(quality)
 
     if selected in config.INTERNAL_WORKFLOWS:
         raise ValueError(

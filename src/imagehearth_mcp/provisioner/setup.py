@@ -2,7 +2,7 @@
 
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from imagehearth_mcp.engine import comfyui_manager, config
@@ -17,6 +17,7 @@ from imagehearth_mcp.provisioner import (
     models,
     preflight,
     quality,
+    selection,
     settings,
     smoke,
 )
@@ -34,6 +35,7 @@ PROFILE_ORDER = (
     "mac-full",
 )
 MAX_DRIVES = menu.MAX_SINGLE_KEY - 2
+CAPABILITY_LABELS = {"fast": "fast", "high": "quality", "edit": "editing"}
 UNTESTED_MACOS = (
     "macOS is prepared but has never been run on a real Mac: ComfyUI, ComfyUI-GGUF, "
     "FLUX and Kontext may not work on MPS."
@@ -52,21 +54,15 @@ def propose_profile(detection, catalog):
     proposed = next(iter(profiles), "fast")
 
     for name, profile in profiles.items():
-        size = catalog.resolve(profile, None, vram).bytes if _fits_resolve(catalog, profile, vram) else 0
+        try:
+            size = catalog.build_set(profile, catalog.recommended_set(profile, vram)).bytes
+        except ProvisionError:
+            size = 0
 
         if vram >= catalog.min_vram_mib(profile) and detection.disk_free_bytes > size:
             proposed = name
 
     return proposed
-
-
-def _fits_resolve(catalog, profile, vram):
-    try:
-        catalog.resolve(profile, None, vram)
-    except ProvisionError:
-        return False
-
-    return True
 
 
 def choose_profile(args, detection, catalog, interactive, default=None, back_label="Back"):
@@ -110,86 +106,213 @@ def choose_profile(args, detection, catalog, interactive, default=None, back_lab
     return answer if answer is menu.BACK else profiles[answer]
 
 
-@dataclass(frozen=True)
-class Selection:
-    """El modelo de `quality` elegido. `legacy`: se mantiene RealVisXL."""
+CAPABILITY_FLAGS = {"fast": "fast_models", "high": "quality_models", "edit": "edit_models"}
+CAPABILITY_OPTIONS = {"fast": "--fast-models", "high": "--quality-models", "edit": "--edit-models"}
+CAPABILITY_TITLES = {
+    "fast": "Fast models (quick drafts)",
+    "high": "Quality models (detailed images)",
+    "edit": "Editing models",
+}
 
-    name: str | None = None
-    legacy: bool = False
+
+def asked_models(args, capability):
+    """The `name[:precision]` list passed for a capability, or None if it wasn't passed."""
+    value = getattr(args, CAPABILITY_FLAGS[capability], None)
+
+    if capability == "high" and not value:
+        value = getattr(args, "quality_model", None)
+
+    if not value:
+        return None
+
+    if isinstance(value, str):
+        value = value.split(",")
+
+    texts = [str(part).strip() for part in value if str(part).strip()]
+    return texts or None
 
 
-def choose_quality_model(
-    args, catalog, profile, vram, installed, interactive, default=None, back_label="Back"
-):
-    """Qué modelo de `quality` se instala. Los perfiles sin `quality` no tienen."""
-    asked = getattr(args, "quality_model", None)
+def _with_variant(catalog, capability, texts, variant):
+    """`--variant`: the precision of the models that don't name one, where they have it."""
+    if not variant:
+        return texts
 
-    if not profile.quality:
-        if asked:
+    found = []
+
+    for text in texts:
+        name = text.partition(":")[0].strip()
+        model = catalog.catalog.get(name)
+
+        if ":" not in text and model is not None:
+            option = model.option(variant)
+
+            if option is not None and option.workflow(capability):
+                text = f"{name}:{option.precision}"
+
+        found.append(text)
+
+    return found
+
+
+def requested_models(args, catalog, profile, vram, installed=None):
+    """The models the arguments ask for, as a selection.Request. Errors come before any question.
+
+    A model without a precision keeps the one it has if it is installed; otherwise it gets
+    the one recommended for this GPU.
+    """
+    picks, defaults = {}, {}
+    variant = getattr(args, "variant", None)
+
+    for capability in manifest.CAPABILITIES:
+        texts = asked_models(args, capability)
+
+        if texts is None:
+            continue
+
+        if capability not in profile.capabilities:
+            have = [
+                name
+                for name, other in catalog.profiles_for("linux").items()
+                if capability in other.capabilities
+            ]
             raise ProvisionError(
-                f"The {profile.name} profile has no quality model: --quality-model "
-                "only applies to quality and full."
+                f"The {profile.name} profile has no {capability} models: "
+                f"{CAPABILITY_OPTIONS[capability]} only applies to {' and '.join(have)}."
             )
 
-        return Selection()
+        chosen = catalog.parse_picks(capability, _with_variant(catalog, capability, texts, variant), vram)
 
-    names = ", ".join(catalog.quality_models)
+        for index, text in enumerate(texts):
+            have = installed.pick(capability, chosen[index].model) if installed else None
 
-    if asked:
-        if asked not in catalog.quality_models:
-            raise ProvisionError(f"Unknown quality model {asked!r}. Choose one of: {names}.")
+            if ":" not in text and have is not None and not variant:
+                chosen[index] = have
 
-        return Selection(asked)
+        picks[capability] = tuple(chosen)
+        defaults[capability] = chosen[0].model
 
-    if installed is not None and installed.legacy:
-        # Nada destructivo sin que el usuario lo pida: RealVisXL sigue generando.
-        sdxl = catalog.quality_models["sdxl"].title
-        print(f"\nThis installation uses {quality.LEGACY}, which is no longer offered.")
+    return selection.Request(picks, defaults)
 
-        if interactive:
-            switch = menu.confirm(
-                f"Switch to {sdxl} and delete {quality.LEGACY}?", allow_back=True
-            )
 
-            if switch is menu.BACK:
-                return menu.BACK
+def format_seconds(measure):
+    if measure is None or measure.seconds is None:
+        return "not measured"
 
-            if switch:
-                return Selection("sdxl")
+    return f"{measure.seconds:.0f} s" if measure.seconds >= 10 else f"{measure.seconds:.1f} s"
 
-        print(f"Keeping {quality.LEGACY}. To switch: imagehearth-mcp setup --quality-model sdxl")
-        return Selection("sdxl", legacy=True)
 
-    if installed is not None and not interactive:
-        return Selection(installed.name)
+def model_option_label(info):
+    """One line of the models menu: title, size and time of the recommended precision, license."""
+    best = next((item for item in info["precisions"] if item["recommended"]), info["precisions"][0])
+    commercial = "commercial use" if info["commercial_use"] else "non-commercial"
+    seconds = "?" if best["seconds"] is None else (
+        f"{best['seconds']:.0f} s" if best["seconds"] >= 10 else f"{best['seconds']:.1f} s"
+    )
+    return (
+        f"{info['title']:22} {format_size(best['download_bytes']):>8}  {seconds:>5}  "
+        f"{info['license'].name}, {commercial}"
+    )
 
-    recommended = catalog.recommend(vram)
 
-    if not interactive:
-        print(
-            f"\nQuality model: {catalog.quality_model(recommended).title}, recommended for "
-            f"{vram or 'unknown'} MiB of GPU memory. Choose another with --quality-model "
-            f"({names})."
-        )
-        return Selection(recommended)
-
-    if default not in catalog.quality_models:
-        default = installed.name if installed and not installed.legacy else recommended
-
+def model_options(catalog, capability, vram, installed_names=()):
+    """The menu options of a capability: recommended and installed models are flagged."""
     options = []
 
-    for info in quality.choices(catalog, vram, installed):
-        first, _, rest = quality.format_choice(info).partition("\n")
-        options.append(menu.Option(info["name"], first, rest.strip()))
+    for info in catalog.describe_catalog(capability, vram):
+        flags = []
 
-    answer = menu.choose(
-        "Quality models (only one is installed at a time):",
+        if info["name"] in installed_names:
+            flags.append("installed")
+
+        detail = ", ".join(
+            f"{item['precision']} {format_size(item['download_bytes'])}"
+            + ("" if item["fits"] else " (needs more GPU memory)")
+            for item in info["precisions"]
+        )
+
+        if any(item["fits"] is False for item in info["precisions"]) and not any(
+            item["fits"] for item in info["precisions"]
+        ):
+            detail += f"\nWARNING: needs at least {info['precisions'][0]['min_vram_mib']} MiB of GPU memory"
+
+        label = model_option_label(info)
+        label += f"  [{', '.join(flags)}]" if flags else ""
+        options.append(menu.Option(info["name"], label, detail, recommended=info["recommended"]))
+
+    return options
+
+
+def choose_models(catalog, capability, vram, installed_names, default, back_label="Back"):
+    """The models of a capability, by multiple selection. `menu.BACK` goes back."""
+    options = model_options(catalog, capability, vram, installed_names)
+
+    if default is None:
+        default = list(installed_names) or [
+            item.key for item in options if item.recommended
+        ] or [options[0].key]
+
+    while True:
+        answer = menu.choose_many(
+            f"{CAPABILITY_TITLES[capability]} (mark one or more):",
+            options,
+            back_label=back_label,
+            default=default,
+        )
+
+        if answer is menu.BACK:
+            return menu.BACK
+
+        if answer:
+            return tuple(answer)
+
+        print("Choose at least one model.")
+        default = [item.key for item in options if item.recommended] or [options[0].key]
+
+
+def precision_options(catalog, capability, name, vram):
+    info = next(item for item in catalog.describe_catalog(capability, vram) if item["name"] == name)
+    options = []
+
+    for item in info["precisions"]:
+        seconds = "not measured" if item["seconds"] is None else f"{item['seconds']:g} s per image"
+        vram_text = "" if item["vram_mib"] is None else f", {item['vram_mib'] / 1024:.1f} GB of GPU memory"
+        spill = ""
+
+        if item["offload_mib"]:
+            spill = f", {item['offload_mib'] / 1024:.0f} GB moves to RAM"
+
+        label = f"{item['precision']:8} {format_size(item['download_bytes']):>8}  {seconds}{vram_text}{spill}"
+        detail = "" if item["fits"] else (
+            f"WARNING: needs at least {item['min_vram_mib']} MiB of GPU memory"
+        )
+        options.append(menu.Option(item["precision"], label, detail, recommended=item["recommended"]))
+
+    return options
+
+
+def choose_precision(catalog, capability, name, vram, default=None, back_label="Back"):
+    """The precision of one model. `menu.BACK` goes back."""
+    options = precision_options(catalog, capability, name, vram)
+    recommended = next((item.key for item in options if item.recommended), options[0].key)
+    valid = {item.key for item in options}
+
+    return menu.choose(
+        f"{catalog.catalog[name].title} precision:",
         options,
-        default=default,
+        default=default if default in valid else recommended,
         back_label=back_label,
     )
 
-    return answer if answer is menu.BACK else Selection(answer)
+
+def choose_default(catalog, capability, names, default=None, back_label="Back"):
+    """Which of several models is the default of a capability. `menu.BACK` goes back."""
+    options = [menu.Option(name, catalog.catalog[name].title) for name in names]
+    return menu.choose(
+        f"Default {CAPABILITY_LABELS[capability]} model (used when a request names none):",
+        options,
+        default=default if default in names else names[0],
+        back_label=back_label,
+    )
 
 
 def parse_loras(text, catalog):
@@ -313,7 +436,10 @@ def show_summary(
 ):
     print(f"\nProfile: {profile.name} ({profile.description})")
 
-    if profile.quality_model:
+    if profile.model_set is not None:
+        for line in selection.describe_set(catalog, profile.model_set):
+            print(line)
+    elif profile.quality_model:
         print(f"Quality model: {profile.quality_model} ({profile.precision})")
 
     if folder is not None:
@@ -511,30 +637,19 @@ def apply_config(args, mode, comfy_dir, port, records, models_dir=None):
         )
 
 
-def _plan_change(args, catalog, records, models_dir, base, profile, installed, selection, vram):
-    """El cambio de modelo de `quality` que pide esta ejecución, sin confirmar; o None."""
-    if not profile.quality or installed is None or selection.legacy:
-        return None
-
-    if not installed.legacy and installed.name == selection.name:
-        return None
-
-    effective = catalog.profiles[_higher_profile(records.profile, base.name)]
-    old = quality.resolve_for(
-        catalog, effective, installed, vram, records.precision, records.edit_precision
-    )
-    keep = catalog.resolve(effective, selection.name, vram, getattr(args, "variant", None))
-    return quality.plan_change(catalog, records, models_dir, old, profile, keep, installed)
-
-
 @dataclass
 class Answers:
     """Lo respondido hasta ahora. Se conserva al volver atrás."""
 
     mode: tuple | None = None
     base: object = None
-    quality: Selection | None = None
-    quality_for: str | None = None
+    # capability -> names marked in its step; None until asked.
+    picks: dict = field(default_factory=dict)
+    # (capability, model) -> precision chosen; capability -> default model.
+    precisions: dict = field(default_factory=dict)
+    defaults: dict = field(default_factory=dict)
+    # The profile the picks were made for: they are dropped if it changes.
+    picks_for: str | None = None
     # LoRAs chosen in the step; None until asked.
     loras: tuple | None = None
 
@@ -562,13 +677,15 @@ class Plan:
     comfy_dir: Path
     port: int
     models_dir: Path
-    selection: Selection
+    models: object
     profile: object
     change: object
     pending: int
     torch: object
     folder: Path | None = None
     loras: LoraPlan | None = None
+    # The installation keeps RealVisXL as its SDXL: nothing replaced it in this run.
+    legacy_kept: bool = False
 
 
 def choose_folder(run, back_label="Back"):
@@ -735,11 +852,11 @@ class _Run:
         return answers.mode[0] == MANAGED
 
     def _resolved_profile(self, answers):
-        if answers.base is None:
+        if answers.base is None or answers.mode is None:
             return None
 
         try:
-            return self._profile(answers.base, self._selection(answers) or Selection())
+            return self.resolve_models(answers)[1]
         except ProvisionError:
             return None
 
@@ -780,7 +897,16 @@ class _Run:
         return issues
 
     def installed(self, comfy_dir):
-        return quality.current(self.catalog, self.records, self.models_dir(comfy_dir))
+        """The ModelSet the installation has, or None if nothing is installed."""
+        return selection.installed_set(self.catalog, self.records, self.models_dir(comfy_dir))
+
+    def legacy(self, comfy_dir):
+        """Whether the installation still has RealVisXL as its quality model."""
+        return selection.is_legacy(self.catalog, self.records, self.models_dir(comfy_dir))
+
+    def effective_base(self, base):
+        """A run never lowers the profile: the higher of the recorded one and the chosen one."""
+        return self.catalog.profiles[_higher_profile(self.records.profile, base.name)]
 
     def asks_mode(self):
         args = self.args
@@ -795,24 +921,8 @@ class _Run:
     def asks_profile(self):
         return self.interactive and not self.args.profile
 
-    def asks_quality(self, base):
-        return bool(
-            self.interactive
-            and base is not None
-            and base.quality
-            and not getattr(self.args, "quality_model", None)
-        )
-
-    def _may_ask_quality(self, base):
-        """Antes de elegir perfil, se cuenta el paso del modelo si algún perfil lo tiene."""
-        if base is not None or not self.asks_profile() or getattr(self.args, "quality_model", None):
-            return False
-
-        profiles = self.catalog.profiles_for(self.detection.system)
-        return any(profile.quality for profile in profiles.values())
-
     def asks_review(self, answers):
-        """La confirmación final: licencias y, con un cambio de modelo, ese cambio."""
+        """La confirmación final: licencias y, con un cambio de modelos, ese cambio."""
         args = self.args
 
         if not self.interactive:
@@ -827,46 +937,127 @@ class _Run:
         if answers.mode is None or answers.base is None:
             return False
 
-        selection = self._selection(answers)
+        _, _, change = self.resolve_models(answers)
+        loras = self.lora_plan(answers, change.new, self.models_dir(answers.mode[1]))
+        return change.changes_models or bool(loras and loras.delete)
 
-        if selection is None:
-            return False
-
-        comfy_dir = answers.mode[1]
-        installed = self.installed(comfy_dir)
-        profile = self._profile(answers.base, selection)
-        change = _plan_change(
-            args, self.catalog, self.records, self.models_dir(comfy_dir), answers.base,
-            profile, installed, selection, self.vram,
+    def asks_models(self, capability, base):
+        """Whether the step that marks the models of a capability is asked."""
+        return bool(
+            self.interactive
+            and base is not None
+            and not base.fixed
+            and capability in base.capabilities
+            and asked_models(self.args, capability) is None
         )
-        loras = self.lora_plan(answers, selection, self.models_dir(comfy_dir))
-        return change is not None or bool(loras and loras.delete)
 
-    def _quality_is_sdxl(self, answers, base):
-        """Whether the quality model is (or can still end up being) SDXL 1.0."""
-        asked = getattr(self.args, "quality_model", None)
+    def picked(self, answers, capability):
+        """The names marked in a capability's step for the current profile, or None."""
+        if answers.base is None or answers.picks_for != answers.base.name:
+            return None
 
-        if asked:
-            return asked == "sdxl"
+        return answers.picks.get(capability) or None
 
-        if answers.quality_for == base.name and answers.quality is not None:
-            return answers.quality.name == "sdxl" and not answers.quality.legacy
+    def options_count(self, capability, name):
+        model = self.catalog.catalog[name]
+        return sum(1 for option in model.options if option.workflow(capability))
 
-        return True
+    def request(self, answers):
+        """What the arguments and the answers ask for, as a selection.Request."""
+        base = answers.base
+        installed = self.installed(answers.mode[1]) if answers.mode else None
+        found = requested_models(self.args, self.catalog, base, self.vram, installed)
+        picks, defaults = dict(found.picks), dict(found.defaults)
+
+        for capability in base.capabilities:
+            names = self.picked(answers, capability)
+
+            if capability in picks or not names:
+                continue
+
+            chosen = []
+
+            for name in names:
+                precision = answers.precisions.get((capability, name)) or self.default_precision(
+                    capability, name, installed
+                )
+                chosen.append(manifest.Pick(name, precision))
+
+            picks[capability] = tuple(chosen)
+            stated = answers.defaults.get(capability)
+            defaults[capability] = stated if stated in names else chosen[0].model
+
+        return selection.Request(picks, defaults)
+
+    def default_precision(self, capability, name, installed):
+        """The precision a model has: the installed one, else the one recommended for this GPU."""
+        have = installed.pick(capability, name) if installed else None
+
+        if have is not None:
+            return have.precision
+
+        return self.catalog.recommended_precision(
+            self.catalog.catalog[name], capability, self.vram
+        ).precision
+
+    def resolve_models(self, answers):
+        """(target ModelSet, resolved profile, SetChange) for the answers so far."""
+        _, comfy_dir, _ = answers.mode
+        base = answers.base
+        models_dir = self.models_dir(comfy_dir)
+        old = self.installed(comfy_dir)
+        legacy = self.legacy(comfy_dir)
+
+        if base.fixed:
+            asked = [c for c in manifest.CAPABILITIES if asked_models(self.args, c) is not None]
+
+            if asked:
+                raise ProvisionError(
+                    f"The {base.name} profile has fixed models: the model options "
+                    "don't apply to it."
+                )
+
+            target = self.catalog.fixed_set(base)
+            request = selection.Request()
+            profile = self.catalog.build_set(base, target)
+        else:
+            request = self.request(answers)
+            effective = self.effective_base(base)
+            target = selection.target_set(self.catalog, effective, old, request, self.vram)
+            effective = selection.profile_for(self.catalog, effective, target)
+            profile = self.catalog.build_set(effective, target)
+
+        switching = legacy and request.asks("high")
+
+        if legacy and not switching:
+            profile = selection.keep_realvisxl(self.catalog, profile)
+
+        change = selection.plan_set_change(
+            self.catalog, self.records, models_dir, old, target, profile, legacy=switching
+        )
+        return target, profile, change
 
     def asks_loras(self, answers):
-        """The LoRAs step: interactive, SDXL 1.0 and no `--loras` already saying it."""
+        """The LoRAs step: interactive, SDXL 1.0 among the quality models, no `--loras`."""
         if not self.interactive or self.lora_arg is not None or not self.catalog.loras:
             return False
 
         base = answers.base
 
         if base is None:
-            asked = getattr(self.args, "quality_model", None)
             profiles = self.catalog.profiles_for(self.detection.system)
-            return any(p.quality for p in profiles.values()) and (not asked or asked == "sdxl")
+            return any("high" in p.capabilities and not p.fixed for p in profiles.values())
 
-        return base.quality and self._quality_is_sdxl(answers, base)
+        if base.fixed or "high" not in base.capabilities:
+            return False
+
+        asked = asked_models(self.args, "high")
+
+        if asked is not None:
+            return any(text.partition(":")[0] == "sdxl" for text in asked)
+
+        names = self.picked(answers, "high")
+        return True if names is None else "sdxl" in names
 
     def installed_loras(self, models_dir):
         """Catalog LoRAs whose file is there, and by name."""
@@ -876,10 +1067,10 @@ class _Run:
             if item.state != models.MISSING
         }
 
-    def lora_plan(self, answers, selection, models_dir):
+    def lora_plan(self, answers, target, models_dir):
         """What `--loras` or the step ask for, or None if the LoRAs are left alone."""
-        sdxl = selection is not None and selection.name == "sdxl" and not selection.legacy
-        # An answer to the step is dropped if the model was changed afterwards.
+        sdxl = target.pick("high", "sdxl") is not None and not self.legacy(answers.mode[1])
+        # An answer to the step is dropped if SDXL 1.0 was left out afterwards.
         names = self.lora_arg if self.lora_arg is not None else (answers.loras if sdxl else None)
 
         if names is None:
@@ -887,8 +1078,8 @@ class _Run:
 
         if not sdxl:
             raise ProvisionError(
-                "LoRAs only work with the SDXL 1.0 quality model: use --quality-model sdxl "
-                "with a quality or full profile. Nothing was changed."
+                "LoRAs only work with the SDXL 1.0 quality model: add sdxl to "
+                "--quality-models (with a quality or full profile). Nothing was changed."
             )
 
         extra = models.extra_search_paths(config.COMFY_DIR)
@@ -903,23 +1094,6 @@ class _Run:
         )
         return LoraPlan(tuple(names), download, delete)
 
-    def _selection(self, answers):
-        if answers.base is None:
-            return None
-
-        if not answers.base.quality:
-            return Selection()
-
-        return answers.quality
-
-    def _profile(self, base, selection):
-        forced = getattr(self.args, "variant", None)
-
-        if selection.legacy:
-            return self.catalog.legacy_profile(base, self.vram, forced)
-
-        return self.catalog.resolve(base, selection.name, self.vram, forced)
-
     def steps(self, answers):
         found = []
 
@@ -932,8 +1106,21 @@ class _Run:
         if self.asks_profile():
             found.append("profile")
 
-        if self.asks_quality(answers.base) or self._may_ask_quality(answers.base):
-            found.append("quality")
+        base = answers.base
+
+        for capability in manifest.CAPABILITIES:
+            if not self.asks_models(capability, base):
+                continue
+
+            found.append(("models", capability))
+            names = self.picked(answers, capability)
+
+            for name in names or ():
+                if self.options_count(capability, name) > 1:
+                    found.append(("precision", capability, name))
+
+            if names and len(names) > 1:
+                found.append(("default", capability))
 
         if self.asks_loras(answers):
             found.append("loras")
@@ -955,41 +1142,24 @@ class _Run:
         if answers.base is None and not self.asks_profile():
             answers.base = choose_profile(self.args, self.detection, self.catalog, self.interactive)
 
-        base = answers.base
-
-        if (
-            base is not None
-            and answers.mode is not None
-            and not self.asks_quality(base)
-            and answers.quality_for != base.name
-        ):
-            answers.quality = choose_quality_model(
-                self.args, self.catalog, base, self.vram,
-                self.installed(answers.mode[1]), self.interactive,
-            )
-            answers.quality_for = base.name
+        if answers.base is not None and answers.mode is not None and not answers.base.fixed:
+            # Names, precisions and capabilities that don't exist fail before any question.
+            self.request(answers)
 
     def plan(self, answers):
         mode, comfy_dir, default_port = answers.mode
-        selection = self._selection(answers)
-        base = answers.base
         models_dir = self.models_dir(comfy_dir)
-        installed = self.installed(comfy_dir)
-        profile = self._profile(base, selection)
-        change = _plan_change(
-            self.args, self.catalog, self.records, models_dir, base, profile, installed,
-            selection, self.vram,
-        )
+        target, profile, change = self.resolve_models(answers)
         torch = self.catalog.pytorch.get(self.detection.platform.index)
         folder = self.folder if mode == MANAGED and (self.folder_arg or not self.records.mode) else None
-        loras = self.lora_plan(answers, selection, models_dir)
+        loras = self.lora_plan(answers, target, models_dir)
         pending = models.pending_bytes(profile.models, models_dir)
         pending += loras.download_bytes if loras else 0
         return Plan(
-            mode, comfy_dir, self.args.port or default_port, models_dir, selection, profile,
+            mode, comfy_dir, self.args.port or default_port, models_dir, target, profile,
             change, pending, torch, folder, loras,
+            self.legacy(comfy_dir) and not change.legacy,
         )
-
 
 def _ask_step(run, answers, name, back_label):
     """Pregunta un paso. Devuelve `menu.BACK` o None; la respuesta queda en `answers`."""
@@ -1002,7 +1172,6 @@ def _ask_step(run, answers, name, back_label):
 
         if result is not menu.BACK:
             answers.mode = run.place(result)
-            answers.quality_for = None
 
         return result
 
@@ -1013,7 +1182,6 @@ def _ask_step(run, answers, name, back_label):
             run.folder = result
             kind, _, port = answers.mode
             answers.mode = (kind, (result or locations.default_install_dir()) / "comfyui", port)
-            answers.quality_for = None
 
         return result
 
@@ -1028,17 +1196,55 @@ def _ask_step(run, answers, name, back_label):
 
         return result
 
-    if name == "quality":
-        comfy_dir = answers.mode[1]
-        default = answers.quality.name if answers.quality and not answers.quality.legacy else None
-        result = choose_quality_model(
-            args, run.catalog, answers.base, run.vram, run.installed(comfy_dir), True,
-            default=default, back_label=back_label,
+    kind = name[0] if isinstance(name, tuple) else name
+    base = answers.base
+
+    if kind == "models":
+        capability = name[1]
+        installed = run.installed(answers.mode[1])
+        have = [pick.model for pick in installed.of(capability)] if installed else []
+        result = choose_models(
+            run.catalog, capability, run.vram, have, run.picked(answers, capability), back_label
         )
 
         if result is not menu.BACK:
-            answers.quality = result
-            answers.quality_for = answers.base.name
+            answers.picks[capability] = result
+            answers.picks_for = base.name
+
+            for key in [k for k in answers.precisions if k[0] == capability and k[1] not in result]:
+                del answers.precisions[key]
+
+            if answers.defaults.get(capability) not in result:
+                answers.defaults.pop(capability, None)
+
+        return result
+
+    if kind == "precision":
+        _, capability, model = name
+        installed = run.installed(answers.mode[1])
+        default = answers.precisions.get((capability, model)) or (
+            installed.pick(capability, model).precision
+            if installed and installed.pick(capability, model)
+            else None
+        )
+        result = choose_precision(run.catalog, capability, model, run.vram, default, back_label)
+
+        if result is not menu.BACK:
+            answers.precisions[(capability, model)] = result
+
+        return result
+
+    if kind == "default":
+        capability = name[1]
+        names = run.picked(answers, capability)
+        installed = run.installed(answers.mode[1])
+        default = answers.defaults.get(capability) or (
+            installed.default(capability).model if installed and installed.default(capability) else None
+        )
+        result = choose_default(run.catalog, capability, names, default, back_label)
+
+        if result is not menu.BACK:
+            answers.defaults[capability] = result
 
         return result
 
@@ -1073,19 +1279,24 @@ def _review(run, answers, ask):
                 "smaller profile."
             )
 
-    if plan.profile.variant_of:
+    notes += _fit_notes(run, plan)
+
+    if not run.interactive:
+        _say_recommended(run, answers, plan)
+
+    if plan.legacy_kept:
         print(
-            f"\nFor {run.vram} MiB of GPU memory the {plan.profile.variant_of} profile "
-            "uses its gguf variant."
+            f"\nThis installation uses {selection.LEGACY_MODEL}, which is no longer offered, "
+            f"so it is kept. To switch: imagehearth-mcp setup --quality-models sdxl"
         )
 
-    if plan.change is not None:
-        quality.show_change(plan.change, run.catalog)
+    if plan.change.changes_models:
+        selection.show_change(plan.change, run.catalog)
 
         if not ask and not getattr(run.args, "yes", False):
             raise ProvisionError(
-                "Nothing was changed. Non-interactive mode needs --yes to switch the "
-                "quality model."
+                "Nothing was changed. Non-interactive mode needs --yes to replace or "
+                "remove installed models."
             )
 
         quality.require_idle()
@@ -1094,6 +1305,7 @@ def _review(run, answers, ask):
         run.catalog, plan.profile, plan.mode, plan.comfy_dir, plan.models_dir, plan.pending,
         plan.torch, plan.folder, notes, plan.loras,
     )
+    _check_space(run, plan)
 
     if not ask:
         require_acceptance(run.args, run.interactive)
@@ -1105,6 +1317,56 @@ def _review(run, answers, ask):
         return menu.BACK
 
     return plan
+
+
+def _fit_notes(run, plan):
+    """A warning for each chosen model that doesn't fit this GPU without moving weights to RAM."""
+    notes = []
+
+    for capability, pick in plan.models.all():
+        option = run.catalog.option_of(capability, pick)
+
+        if run.vram and run.vram < option.min_vram_mib:
+            title = run.catalog.catalog[pick.model].title
+            notes.append(
+                f"{title} {pick.precision} needs {option.min_vram_mib} MiB of GPU memory "
+                f"to run without moving weights to RAM and this machine has {run.vram} MiB: "
+                "it can be installed, but generation will be slower or may fail."
+            )
+
+    return notes
+
+
+def _say_recommended(run, answers, plan):
+    """Non-interactive: tell which models were chosen for the user, and how to choose others."""
+    request = run.request(answers) if not answers.base.fixed else selection.Request()
+    old = run.installed(answers.mode[1])
+
+    for capability in plan.models.picks:
+        if request.asks(capability) or (old and old.of(capability)) or answers.base.fixed:
+            continue
+
+        pick = plan.models.default(capability)
+        print(
+            f"\n{CAPABILITY_TITLES[capability].split(' (')[0]}: "
+            f"{run.catalog.catalog[pick.model].title} {pick.precision}, recommended for "
+            f"{run.vram or 'unknown'} MiB of GPU memory. Choose others with "
+            f"{CAPABILITY_OPTIONS[capability]} ({', '.join(run.catalog.models_with(capability))})."
+        )
+
+
+def _check_space(run, plan):
+    """The space a run needs against what is free, before anything is confirmed."""
+    needs = {plan.models_dir: plan.pending}
+
+    if plan.mode == MANAGED and not (Path(plan.comfy_dir) / "venv").exists():
+        needs[plan.comfy_dir] = run.catalog.install_bytes(plan.torch)
+
+    issues = preflight.check_disk(needs)
+    errors = [issue.message for issue in issues if issue.level == preflight.ERROR]
+
+    if errors:
+        raise ProvisionError("\n".join(errors) + "\nNothing was changed.")
 
 
 def _collect(run):
@@ -1185,7 +1447,7 @@ def _setup(args):
         plan = _review(run_state, answers, False)
 
     mode, comfy_dir, port = plan.mode, plan.comfy_dir, plan.port
-    models_dir, profile, selection = plan.models_dir, plan.profile, plan.selection
+    models_dir, profile = plan.models_dir, plan.profile
     change, pending, torch = plan.change, plan.pending, plan.torch
 
     run_preflight(detection, profile, torch, mode, comfy_dir, models_dir, port, pending, catalog)
@@ -1224,11 +1486,8 @@ def _setup(args):
             [catalog.loras[name] for name in plan.loras.names], models_dir, records
         )
 
-    if profile.quality and not selection.legacy:
-        # Only now that the model is verified: until then the previous one is the record.
-        records.quality_model = profile.quality_model
-        records.precision = profile.precision
-        records.edit_precision = profile.edit_precision
+    # Only now that the models are verified: until then the previous ones are the record.
+    selection.record(records, profile, legacy=plan.legacy_kept)
 
     records.save()
 
@@ -1236,10 +1495,11 @@ def _setup(args):
         for failure in quality.delete_items(plan.loras.delete, records):
             print(f"WARNING: could not delete {failure}")
 
-    if change is not None:
-        for failure in quality.delete_old(change, records):
+    if change.delete:
+        for failure in quality.delete_items(change.delete, records):
             print(f"WARNING: could not delete {failure}")
 
+    if change.changes_models or change.delete:
         quality.restart_comfyui()
 
     if args.skip_smoke_test:

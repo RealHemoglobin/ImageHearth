@@ -34,7 +34,7 @@ class Model:
     bytes: int
     sha256: str
     license: str
-    workflows: tuple[str, ...]
+    workflows: tuple[str, ...] = ()
     # Models this one needs besides itself (text encoders, VAE, LoRA).
     requires: tuple[str, ...] = ()
     # Kept in the manifest only so an old installation keeps generating.
@@ -107,6 +107,144 @@ class QualityModel:
         return min(option.min_vram_mib for option in self.options)
 
 
+CAPABILITIES = ("fast", "high", "edit")
+TIERS = (8, 16, 24, 32)
+
+
+def normalize_precision(text):
+    """`Q4_K_M`, `q4-k-m` and `q4km` name the same precision."""
+    return re.sub(r"[^a-z0-9]", "", str(text).lower())
+
+
+def tier_of(vram_mib):
+    """The measured level (8, 16, 24 or 32+ GB) of a GPU memory. Unknown (0) is 16."""
+    if not vram_mib:
+        return 16
+
+    if vram_mib < 14000:
+        return 8
+
+    if vram_mib < 22000:
+        return 16
+
+    if vram_mib < 30000:
+        return 24
+
+    return 32
+
+
+@dataclass(frozen=True)
+class Measure:
+    """What was measured for an option at a level, on the RTX 4090 (phase 14)."""
+
+    seconds: float | None = None
+    vram_mib: int | None = None
+    # Weights the GPU couldn't hold at that level and ComfyUI moved to RAM.
+    offload_mib: int = 0
+
+
+@dataclass(frozen=True)
+class CatalogOption:
+    """One precision of a catalog model: its weights, the workflow per capability and data."""
+
+    precision: str
+    min_vram_mib: int
+    models: tuple[Model, ...]
+    # capability -> workflow name
+    workflows: dict = field(default_factory=dict)
+    nodes: tuple[NodePin, ...] = ()
+    # Role (unet, clip, vae...) -> weight name; fills the %UNET%, %CLIP%, %VAE% markers.
+    loaders: dict = field(default_factory=dict)
+    # capability -> {level in GB -> value}
+    seconds: dict = field(default_factory=dict)
+    vram_mib: dict = field(default_factory=dict)
+    offload_mib: dict = field(default_factory=dict)
+
+    def workflow(self, capability):
+        return self.workflows.get(capability)
+
+    def measure(self, capability, tier):
+        """The data at `tier`, or at the nearest lower one measured; None if never measured."""
+        seconds = self.seconds.get(capability, {})
+        usable = [level for level in sorted(seconds) if level <= tier]
+
+        if not usable:
+            return None
+
+        level = usable[-1]
+        return Measure(
+            seconds.get(level),
+            self.vram_mib.get(capability, {}).get(level),
+            self.offload_mib.get(capability, {}).get(level, 0),
+        )
+
+
+@dataclass(frozen=True)
+class CatalogModel:
+    """An image model of the catalog, with the capabilities it has and its precisions."""
+
+    name: str
+    title: str
+    license: str
+    capabilities: tuple[str, ...]
+    # Best quality first.
+    options: tuple[CatalogOption, ...]
+    # Most reference images an editing model takes; None is the engine's general limit.
+    max_references: int | None = None
+
+    def option(self, precision):
+        wanted = normalize_precision(precision)
+        return next(
+            (item for item in self.options if normalize_precision(item.precision) == wanted),
+            None,
+        )
+
+    @property
+    def min_vram_mib(self):
+        return min(option.min_vram_mib for option in self.options)
+
+
+@dataclass(frozen=True)
+class Pick:
+    """A model with the precision chosen for it."""
+
+    model: str
+    precision: str
+
+    def __str__(self):
+        return f"{self.model}:{self.precision}"
+
+
+@dataclass
+class ModelSet:
+    """What an installation has: per capability, its models and which one is the default."""
+
+    picks: dict = field(default_factory=dict)
+    defaults: dict = field(default_factory=dict)
+
+    def of(self, capability):
+        return tuple(self.picks.get(capability, ()))
+
+    def default(self, capability):
+        """The default model of a capability: the stated one, else the first."""
+        picks = self.of(capability)
+        stated = self.defaults.get(capability)
+
+        if stated and any(pick.model == stated for pick in picks):
+            return next(pick for pick in picks if pick.model == stated)
+
+        return picks[0] if picks else None
+
+    def pick(self, capability, model):
+        return next((item for item in self.of(capability) if item.model == model), None)
+
+    def all(self):
+        return [(cap, pick) for cap in CAPABILITIES for pick in self.of(cap)]
+
+    def __bool__(self):
+        return any(self.picks.values())
+
+
 @dataclass(frozen=True)
 class Profile:
     name: str
@@ -124,6 +262,12 @@ class Profile:
     quality_model: str | None = None
     precision: str | None = None
     edit_precision: str | None = None
+    # Capabilities the profile includes ("fast", "high", "edit"), chosen by model sets.
+    capabilities: tuple[str, ...] = ()
+    # Profiles whose models are fixed (macOS): capability -> ("name:precision", ...).
+    fixed: tuple = ()
+    # What a profile resolved by `build_set` ended up with.
+    model_set: object = None
 
     @property
     def base(self):
@@ -163,6 +307,9 @@ class Manifest:
     quality_models: dict[str, QualityModel] = field(default_factory=dict)
     edit_options: tuple[Option, ...] = ()
     loras: dict[str, Lora] = field(default_factory=dict)
+    catalog: dict[str, CatalogModel] = field(default_factory=dict)
+    # capability -> {level in GB -> "model:precision"}
+    recommended_models: dict = field(default_factory=dict)
 
     def lora_licenses(self, loras):
         """The licenses of those LoRAs, without repeats."""
@@ -262,6 +409,241 @@ class Manifest:
             "fits": self.fits(name, vram_mib),
             "warning": self.warning(name, vram_mib),
         }
+
+    # ---- Catalog by capability (phase 15) -------------------------------------------
+
+    def catalog_model(self, name, capability=None):
+        try:
+            model = self.catalog[name]
+        except KeyError:
+            raise ProvisionError(
+                f"Unknown model {name!r}. Choose one of: "
+                f"{', '.join(self.models_with(capability)) if capability else ', '.join(self.catalog)}."
+            ) from None
+
+        if capability and capability not in model.capabilities:
+            raise ProvisionError(
+                f"{model.title} ({name}) doesn't have the {capability} capability. "
+                f"Choose one of: {', '.join(self.models_with(capability))}."
+            )
+
+        return model
+
+    def models_with(self, capability):
+        """Names of the catalog models that have `capability`, in catalog order."""
+        return [name for name, model in self.catalog.items() if capability in model.capabilities]
+
+    def parse_pick(self, capability, text, vram_mib=0):
+        """`name` or `name:precision` as a Pick; the precision defaults to the recommended."""
+        name, _, precision = str(text).strip().partition(":")
+        model = self.catalog_model(name.strip(), capability)
+
+        if not precision.strip():
+            return Pick(name.strip(), self.recommended_precision(model, capability, vram_mib).precision)
+
+        option = model.option(precision.strip())
+
+        if option is None or option.workflow(capability) is None:
+            raise ProvisionError(
+                f"{model.title} has no {precision.strip()} precision. Choose one of: "
+                f"{', '.join(item.precision for item in model.options)}."
+            )
+
+        return Pick(name.strip(), option.precision)
+
+    def parse_picks(self, capability, texts, vram_mib=0):
+        """A list of `name[:precision]`: Picks without repeats; the first is the default."""
+        picks = []
+
+        for text in texts:
+            pick = self.parse_pick(capability, text, vram_mib)
+
+            if any(item.model == pick.model for item in picks):
+                raise ProvisionError(
+                    f"{pick.model} is listed twice. Only one precision of a model is installed."
+                )
+
+            picks.append(pick)
+
+        if not picks:
+            raise ProvisionError(f"Choose at least one {capability} model.")
+
+        return picks
+
+    def recommended_precision(self, model, capability, vram_mib=0):
+        """The option with the best quality that fits this GPU without going to RAM.
+
+        If every option needs RAM at this level, the one that moves the least. Options
+        without measurements are judged by their minimum VRAM.
+        """
+        options = [item for item in model.options if item.workflow(capability)]
+        tier = tier_of(vram_mib)
+
+        def spill(option):
+            measure = option.measure(capability, tier)
+
+            if measure is not None:
+                return measure.offload_mib
+
+            return 0 if not vram_mib or vram_mib >= option.min_vram_mib else 1
+
+        clean = [item for item in options if spill(item) == 0]
+
+        if clean:
+            return clean[0]
+
+        return min(options, key=spill)
+
+    def recommended_pick(self, capability, vram_mib=0):
+        """The model and precision this GPU level is recommended for `capability`."""
+        table = self.recommended_models.get(capability, {})
+        levels = sorted(table)
+        tier = tier_of(vram_mib)
+        chosen = next((table[level] for level in reversed(levels) if level <= tier), None)
+
+        if chosen is None:
+            names = self.models_with(capability)
+            chosen = names[0] if names else None
+
+        if chosen is None:
+            return None
+
+        return self.parse_pick(capability, chosen, vram_mib)
+
+    def recommended_set(self, profile, vram_mib=0):
+        """The set of models recommended for a GPU: one per capability of the profile."""
+        if profile.fixed:
+            return self.fixed_set(profile)
+
+        picks = {}
+
+        for capability in profile.capabilities:
+            pick = self.recommended_pick(capability, vram_mib)
+
+            if pick is not None:
+                picks[capability] = (pick,)
+
+        return ModelSet(picks, {cap: items[0].model for cap, items in picks.items()})
+
+    def fixed_set(self, profile):
+        picks = {
+            capability: tuple(self.parse_pick(capability, text) for text in texts)
+            for capability, texts in profile.fixed
+        }
+        return ModelSet(picks, {cap: items[0].model for cap, items in picks.items()})
+
+    def uses_catalog(self, profile):
+        return bool(profile.capabilities)
+
+    def option_of(self, capability, pick):
+        """The CatalogOption of a pick, or a ProvisionError."""
+        model = self.catalog_model(pick.model, capability)
+        option = model.option(pick.precision)
+
+        if option is None or option.workflow(capability) is None:
+            raise ProvisionError(
+                f"{model.title} has no {pick.precision} precision. Choose one of: "
+                f"{', '.join(item.precision for item in model.options)}."
+            )
+
+        return option
+
+    def build_set(self, profile, model_set):
+        """The profile resolved with exactly these models, one precision each."""
+        if not profile.capabilities:
+            raise ProvisionError(f"The {profile.name} profile has no models to choose.")
+
+        for capability in CAPABILITIES:
+            picks = model_set.of(capability)
+
+            if capability in profile.capabilities and not picks:
+                raise ProvisionError(
+                    f"The {profile.name} profile needs at least one {capability} model."
+                )
+
+            if capability not in profile.capabilities and picks:
+                raise ProvisionError(
+                    f"The {profile.name} profile has no {capability} models: remove them or "
+                    "choose a larger profile."
+                )
+
+        chosen = []
+        nodes = []
+
+        for capability, pick in model_set.all():
+            option = self.option_of(capability, pick)
+            chosen.extend(option.models)
+            nodes.extend(node for node in option.nodes if node not in nodes)
+
+        high = model_set.default("high")
+        edit = model_set.default("edit")
+        return dataclasses.replace(
+            profile,
+            min_vram_mib=max(
+                profile.min_vram_mib,
+                *(self.option_of(cap, pick).min_vram_mib for cap, pick in model_set.all()),
+            ),
+            models=self.expand(chosen),
+            nodes=tuple(nodes),
+            variant_of=None,
+            quality_model=high.model if high else None,
+            precision=high.precision if high else None,
+            edit_precision=edit.precision if edit else None,
+            model_set=model_set,
+        )
+
+    def describe_catalog(self, capability, vram_mib=0):
+        """What the user needs to pick models of a capability: one entry per model."""
+        tier = tier_of(vram_mib)
+        recommended = self.recommended_pick(capability, vram_mib)
+        found = []
+
+        for name in self.models_with(capability):
+            model = self.catalog[name]
+            license = self.licenses[model.license]
+            precisions = []
+            best = self.recommended_precision(model, capability, vram_mib)
+
+            for option in model.options:
+                if option.workflow(capability) is None:
+                    continue
+
+                measure = option.measure(capability, tier)
+                precisions.append(
+                    {
+                        "precision": option.precision,
+                        "download_bytes": sum(item.bytes for item in self.expand(option.models)),
+                        "min_vram_mib": option.min_vram_mib,
+                        "seconds": measure.seconds if measure else None,
+                        "vram_mib": measure.vram_mib if measure else None,
+                        "offload_mib": measure.offload_mib if measure else None,
+                        "fits": not vram_mib or vram_mib >= option.min_vram_mib,
+                        "recommended": option is best,
+                    }
+                )
+
+            licenses = {license.name}
+
+            for option in model.options:
+                for item in self.expand(option.models):
+                    licenses.add(self.licenses[item.license].name)
+
+            found.append(
+                {
+                    "name": name,
+                    "title": model.title,
+                    "license": license,
+                    "commercial_use": all(
+                        self.licenses[key].commercial
+                        for key in {model.license, *(i.license for o in model.options for i in self.expand(o.models))}
+                    ),
+                    "recommended": recommended is not None and recommended.model == name,
+                    "precisions": precisions,
+                    "max_references": model.max_references,
+                }
+            )
+
+        return found
 
     @staticmethod
     def _pick(options, vram_mib, forced, what):
@@ -484,6 +866,78 @@ def _parse_loras(entries, licenses, models):
     return loras
 
 
+def _parse_catalog(entries, models, nodes, licenses):
+    """The catalog by capability: models with capabilities, precisions and measured data."""
+    catalog = {}
+
+    for name, entry in entries.items():
+        capabilities = tuple(entry["capabilities"])
+
+        if not capabilities or any(item not in CAPABILITIES for item in capabilities):
+            raise ValueError(f"{name}: capabilities must be some of {', '.join(CAPABILITIES)}")
+
+        if len(set(capabilities)) != len(capabilities):
+            raise ValueError(f"{name}: a capability is repeated")
+
+        if entry["license"] not in licenses:
+            raise ValueError(f"{name}: unknown license {entry['license']}")
+
+        options = []
+
+        for raw in entry.get("options", ()):
+            weights = tuple(models[item] for item in raw["models"])
+            workflows = dict(raw["workflow"])
+
+            if set(workflows) != set(capabilities):
+                raise ValueError(
+                    f"{name} {raw['precision']}: needs a workflow for exactly "
+                    f"{', '.join(capabilities)}"
+                )
+
+            for item in weights:
+                if item.license not in licenses:
+                    raise ValueError(f"{item.name}: unknown license {item.license}")
+
+            loaders = dict(raw.get("loaders", {}))
+
+            for weight in loaders.values():
+                if weight not in models:
+                    raise ValueError(f"{name} {raw['precision']}: unknown loader weight {weight}")
+
+            options.append(
+                CatalogOption(
+                    raw["precision"],
+                    raw["min_vram_mib"],
+                    weights,
+                    workflows,
+                    tuple(nodes[item] for item in raw.get("nodes", ())),
+                    loaders,
+                    {cap: {int(k): v for k, v in table.items()} for cap, table in raw.get("seconds", {}).items()},
+                    {cap: {int(k): v for k, v in table.items()} for cap, table in raw.get("vram_mib", {}).items()},
+                    {cap: {int(k): v for k, v in table.items()} for cap, table in raw.get("offload_mib", {}).items()},
+                )
+            )
+
+        if not options:
+            raise ValueError(f"{name}: no options")
+
+        precisions = [normalize_precision(item.precision) for item in options]
+
+        if len(set(precisions)) != len(precisions):
+            raise ValueError(f"{name}: a precision is repeated")
+
+        catalog[name] = CatalogModel(
+            name,
+            entry["title"],
+            entry["license"],
+            capabilities,
+            tuple(options),
+            entry.get("max_references"),
+        )
+
+    return catalog
+
+
 def parse(values):
     """Convierte y valida el contenido del manifiesto."""
     try:
@@ -505,7 +959,7 @@ def parse(values):
                 entry["bytes"],
                 entry["sha256"],
                 entry["license"],
-                tuple(entry["workflows"]),
+                tuple(entry.get("workflows", ())),
                 tuple(entry.get("requires", ())),
                 entry.get("legacy", False),
             )
@@ -564,6 +1018,10 @@ def parse(values):
                 entry.get("variant_of"),
                 entry.get("quality", False),
                 entry.get("edit", False),
+                capabilities=tuple(entry.get("capabilities", ())),
+                fixed=tuple(
+                    (cap, tuple(texts)) for cap, texts in entry.get("fixed", {}).items()
+                ),
             )
             for name, entry in values["profiles"].items()
         }
@@ -611,6 +1069,37 @@ def parse(values):
             if profile.variant_of is not None and profile.variant_of not in profiles:
                 raise ValueError(f"{profile.name}: unknown base profile {profile.variant_of}")
 
+        catalog = _parse_catalog(values.get("catalog", {}), models, nodes, licenses)
+        recommended = {
+            capability: {int(level): text for level, text in table.items()}
+            for capability, table in values.get("recommended", {}).items()
+        }
+
+        for capability, table in recommended.items():
+            if capability not in CAPABILITIES:
+                raise ValueError(f"recommended: unknown capability {capability}")
+
+            for text in table.values():
+                name, _, precision = text.partition(":")
+
+                if name not in catalog or capability not in catalog[name].capabilities:
+                    raise ValueError(f"recommended.{capability}: {name} doesn't have it")
+
+                if precision and catalog[name].option(precision) is None:
+                    raise ValueError(f"recommended.{capability}: {text} has no such precision")
+
+        for profile in profiles.values():
+            for capability in profile.capabilities:
+                if capability not in CAPABILITIES:
+                    raise ValueError(f"{profile.name}: unknown capability {capability}")
+
+            for capability, texts in profile.fixed:
+                for text in texts:
+                    name, _, precision = text.partition(":")
+
+                    if name not in catalog or catalog[name].option(precision) is None:
+                        raise ValueError(f"{profile.name}: unknown fixed model {text}")
+
         comfy = values["comfyui"]
         comfyui = ComfyPin(
             comfy["version"],
@@ -640,8 +1129,32 @@ def parse(values):
         raise ProvisionError(f"Invalid models.toml: {error!r}") from error
 
     return Manifest(
-        comfyui, pytorch, licenses, models, profiles, nodes, quality_models, edit_options, loras
+        comfyui,
+        pytorch,
+        licenses,
+        models,
+        profiles,
+        nodes,
+        quality_models,
+        edit_options,
+        loras,
+        catalog,
+        recommended,
     )
+
+
+def _check_workflow_files(loaded):
+    """Every workflow the catalog names must ship with the package."""
+    folder = resources.files("imagehearth_mcp") / "data" / "workflows"
+
+    for model in loaded.catalog.values():
+        for option in model.options:
+            for workflow in option.workflows.values():
+                if not (folder / f"{workflow}.json").is_file():
+                    raise ProvisionError(
+                        f"Invalid models.toml: {model.name} {option.precision} names the "
+                        f"workflow {workflow}, which is not in the package."
+                    )
 
 
 def load():
@@ -649,7 +1162,10 @@ def load():
         source = resources.files("imagehearth_mcp") / "data" / "models.toml"
 
         with source.open("rb") as file:
-            return parse(tomllib.load(file))
+            loaded = parse(tomllib.load(file))
+
+        _check_workflow_files(loaded)
+        return loaded
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise ProvisionError(
             f"Can't read models.toml: {error}. Reinstall the package."

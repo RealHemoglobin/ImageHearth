@@ -385,6 +385,10 @@ def swap_models(real, replacements):
             for name, model in real.quality_models.items()
         },
         edit_options=options(real.edit_options),
+        catalog={
+            name: dataclasses.replace(model, options=options(model.options))
+            for name, model in real.catalog.items()
+        },
     )
 
 

@@ -33,6 +33,13 @@ class InstallManifest:
         self.quality_model = values.get("quality_model")
         self.precision = values.get("precision")
         self.edit_precision = values.get("edit_precision")
+        # Phase 15: the models installed per capability ("fast", "high", "edit"), each
+        # {"model", "precision"}, and the default model of each capability. Missing in
+        # records from before: `selection.installed_set` deduces them from the profile.
+        self.models = values.get("models") or {}
+        self.defaults = values.get("defaults") or {}
+        # RealVisXL is still the SDXL of the installation (from before SDXL 1.0).
+        self.legacy_quality = bool(values.get("legacy_quality", False))
         self._normalize_legacy_profile()
         self.entries = values.get("entries", [])
         self.settings = values.get("settings", [])
@@ -91,6 +98,9 @@ class InstallManifest:
                     "quality_model": self.quality_model,
                     "precision": self.precision,
                     "edit_precision": self.edit_precision,
+                    "models": self.models,
+                    "defaults": self.defaults,
+                    "legacy_quality": self.legacy_quality,
                     "entries": self.entries,
                     "settings": self.settings,
                     "connections": self.connections,

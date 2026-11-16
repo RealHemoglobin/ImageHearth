@@ -122,6 +122,16 @@ name = "CreativeML OpenRAIL-M"
 url = "https://huggingface.co/spaces/CompVis/stable-diffusion-license"
 summary = "Permits commercial use of the model and its outputs, with use restrictions that must be passed on (no illegal, harmful or deceptive uses)."
 
+[licenses.mit]
+name = "MIT"
+url = "https://opensource.org/license/mit"
+summary = "Permissive license."
+
+[licenses.llama-3-1]
+name = "Llama 3.1 Community License"
+url = "https://www.llama.com/llama3_1/license/"
+summary = "HiDream uses Llama 3.1 8B as a text encoder. Commercial use is allowed with conditions (a separate license above 700 million monthly users) and you must show \"Built with Llama\" when you redistribute it."
+
 [[models]]
 name = "sdxl_turbo"
 repo = "stabilityai/sdxl-turbo"
@@ -437,10 +447,11 @@ sha256 = "1ab7e69b8c5118918bab5a193c2c85497f7138eec081da51d7ef7b54f0efe006"
 license = "creativeml-openrail-m"
 
 [profiles.fast]
-description = "Quick generation with SDXL Turbo"
+description = "Quick generation"
 platforms = ["linux", "windows"]
 min_vram_mib = 8000
 models = ["sdxl_turbo"]
+capabilities = ["fast"]
 
 # `quality` and `full` don't name a quality model: the user picks one of [quality_models.*]
 # (or setup recommends it for the GPU) and `full` adds the editing model of [edit].
@@ -450,14 +461,16 @@ platforms = ["linux", "windows"]
 min_vram_mib = 8000
 models = ["sdxl_turbo"]
 quality = true
+capabilities = ["fast", "high"]
 
 [profiles.full]
-description = "quality + image editing with FLUX Kontext"
+description = "quality + image editing"
 platforms = ["linux", "windows"]
-min_vram_mib = 12000
+min_vram_mib = 8000
 models = ["sdxl_turbo"]
 quality = true
 edit = true
+capabilities = ["fast", "high", "edit"]
 
 # Models of the quality profile. Only one is installed at a time. Each has options by
 # precision, from most to least VRAM; `setup` picks the one that fits. The minimums are
@@ -521,6 +534,8 @@ description = "Quick generation with SDXL Turbo (untested)"
 platforms = ["darwin"]
 min_vram_mib = 16000
 models = ["sdxl_turbo"]
+capabilities = ["fast"]
+fixed = { fast = ["sdxl-turbo:fp16"] }
 
 [profiles.mac-quality]
 description = "mac-fast + high-quality generation with FLUX Dev GGUF (untested)"
@@ -528,6 +543,8 @@ platforms = ["darwin"]
 min_vram_mib = 32000
 models = ["sdxl_turbo", "flux_dev_gguf", "t5xxl_gguf", "clip_l", "flux_vae"]
 nodes = ["comfyui-gguf"]
+capabilities = ["fast", "high"]
+fixed = { fast = ["sdxl-turbo:fp16"], high = ["flux-dev:gguf"] }
 
 [profiles.mac-full]
 description = "mac-quality + image editing with FLUX Kontext GGUF (untested)"
@@ -535,3 +552,501 @@ platforms = ["darwin"]
 min_vram_mib = 32000
 models = ["sdxl_turbo", "flux_dev_gguf", "t5xxl_gguf", "clip_l", "flux_vae", "flux_kontext_gguf"]
 nodes = ["comfyui-gguf"]
+capabilities = ["fast", "high", "edit"]
+fixed = { fast = ["sdxl-turbo:fp16"], high = ["flux-dev:gguf"], edit = ["kontext:gguf"] }
+
+# ---- Phase 15: new generation and editing models. Revision, size and SHA-256 are the
+# ones read from the repositories when the models were measured (phase 14).
+
+[[models]]
+name = "z_image_turbo_bf16"
+repo = "Comfy-Org/Z-Image-Turbo"
+revision = "6fc90a3b1b653e935a0d175e260736de25b84df5"
+filename = "split_files/diffusion_models/z_image_turbo_bf16.safetensors"
+dest = "diffusion_models/z_image_turbo_bf16.safetensors"
+bytes = 12309866400
+sha256 = "2407613050b809ffdff18a4ac99af83ea6b95443ecebdf80e064a79c825574a6"
+license = "apache-2"
+requires = ["qwen3_4b", "flux_vae"]
+
+[[models]]
+name = "z_image_turbo_int8"
+repo = "Comfy-Org/Z-Image-Turbo"
+revision = "6fc90a3b1b653e935a0d175e260736de25b84df5"
+filename = "split_files/diffusion_models/z_image_turbo_int8_convrot.safetensors"
+dest = "diffusion_models/z_image_turbo_int8_convrot.safetensors"
+bytes = 6201001296
+sha256 = "be517ebd47c912a5626a588e1aeea43e6be4a43c0cdcd2b48a2a780d9f358635"
+license = "apache-2"
+requires = ["qwen3_4b_fp8", "flux_vae"]
+
+[[models]]
+name = "qwen3_4b"
+repo = "Comfy-Org/Z-Image-Turbo"
+revision = "6fc90a3b1b653e935a0d175e260736de25b84df5"
+filename = "split_files/text_encoders/qwen_3_4b.safetensors"
+dest = "text_encoders/qwen_3_4b.safetensors"
+bytes = 8044982048
+sha256 = "6c671498573ac2f7a5501502ccce8d2b08ea6ca2f661c458e708f36b36edfc5a"
+license = "apache-2"
+
+
+[[models]]
+name = "qwen3_4b_fp8"
+repo = "Comfy-Org/Z-Image-Turbo"
+revision = "6fc90a3b1b653e935a0d175e260736de25b84df5"
+filename = "split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors"
+dest = "text_encoders/qwen_3_4b_fp8_mixed.safetensors"
+bytes = 5631994051
+sha256 = "72450b19758172c5a7273cf7de729d1c17e7f434a104a00167624cba94f68f15"
+license = "apache-2"
+
+
+[[models]]
+name = "klein_4b"
+repo = "Comfy-Org/Flux-2-Klein-4B"
+revision = "5b3abca5c0dc1ecd4eaf3340868d09063fc1c965"
+filename = "split_files/diffusion_models/flux-2-klein-4b.safetensors"
+dest = "diffusion_models/flux-2-klein-4b.safetensors"
+bytes = 7751105712
+sha256 = "ec3d4e733a771f61c052fb4856c48b336c55eaf2c65487c2a1faeb9bbda7a343"
+license = "apache-2"
+requires = ["qwen3_4b", "flux2_vae"]
+
+[[models]]
+name = "flux2_vae"
+repo = "Comfy-Org/Flux-2-Klein-4B"
+revision = "5b3abca5c0dc1ecd4eaf3340868d09063fc1c965"
+filename = "split_files/vae/flux2-vae.safetensors"
+dest = "vae/flux2-vae.safetensors"
+bytes = 336211292
+sha256 = "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3"
+license = "apache-2"
+
+
+[[models]]
+name = "chroma_hd_bf16"
+repo = "lodestones/Chroma1-HD"
+revision = "0e0c60ece1e82b17cb7f77342d765ba5024c40c0"
+filename = "Chroma1-HD.safetensors"
+dest = "diffusion_models/Chroma1-HD.safetensors"
+bytes = 17800038288
+sha256 = "d446d9695d08276f61e53653e025289dd96f7a489c27982a1fa54ecabc06642a"
+license = "apache-2"
+requires = ["t5xxl", "flux_vae"]
+
+[[models]]
+name = "chroma_hd_fp8"
+repo = "silveroxides/Chroma1-HD-fp8-scaled"
+revision = "fbe39b414a315a02558ec25a3a55b14db1f6599f"
+filename = "Chroma1-HD-fp8mixed.safetensors"
+dest = "diffusion_models/Chroma1-HD-fp8mixed.safetensors"
+bytes = 9193379316
+sha256 = "a2928ca6075f308f4d5e2182e2b96120fa8ad270ec6ea9b1b5c724c85c49a575"
+license = "apache-2"
+requires = ["t5xxl", "flux_vae"]
+
+[[models]]
+name = "qwen_image_bf16"
+repo = "Comfy-Org/Qwen-Image"
+revision = "1f12b17be14c89b026c51a91d67c32f84bb047bc"
+filename = "split_files/diffusion_models/qwen_image_bf16.safetensors"
+dest = "diffusion_models/qwen_image_bf16.safetensors"
+bytes = 40861031488
+sha256 = "d08fb5d68026c0d87325f9a7b3ad6454061113a2bc73cc883114dae172937ae7"
+license = "apache-2"
+requires = ["qwen25vl_fp8", "qwen_image_vae"]
+
+[[models]]
+name = "qwen_image_fp8"
+repo = "Comfy-Org/Qwen-Image"
+revision = "1f12b17be14c89b026c51a91d67c32f84bb047bc"
+filename = "split_files/diffusion_models/qwen_image_fp8_e4m3fn.safetensors"
+dest = "diffusion_models/qwen_image_fp8_e4m3fn.safetensors"
+bytes = 20430635136
+sha256 = "98763a127701eb6fb59096f7742cb3aa7d64ed510b9f4e882d8351f8176e3ce3"
+license = "apache-2"
+requires = ["qwen25vl_fp8", "qwen_image_vae"]
+
+[[models]]
+name = "qwen_image_q4_k_m"
+repo = "city96/Qwen-Image-gguf"
+revision = "e77babc55af111419e1714a7a0a848b9cac25db7"
+filename = "qwen-image-Q4_K_M.gguf"
+dest = "diffusion_models/qwen-image-Q4_K_M.gguf"
+bytes = 13065746976
+sha256 = "c6f49103603b9a4927502549fb615c910386cfc675b1466325930ba10d2a11f4"
+license = "apache-2"
+requires = ["qwen25vl_fp8", "qwen_image_vae"]
+
+[[models]]
+name = "qwen_image_q2_k"
+repo = "city96/Qwen-Image-gguf"
+revision = "e77babc55af111419e1714a7a0a848b9cac25db7"
+filename = "qwen-image-Q2_K.gguf"
+dest = "diffusion_models/qwen-image-Q2_K.gguf"
+bytes = 7062518304
+sha256 = "515a05be34aed0f4dd1a1cf0f078821a30bf190fc0f1affb9db3e509064d32b4"
+license = "apache-2"
+requires = ["qwen25vl_fp8", "qwen_image_vae"]
+
+[[models]]
+name = "qwen25vl_fp8"
+repo = "Comfy-Org/Qwen-Image"
+revision = "1f12b17be14c89b026c51a91d67c32f84bb047bc"
+filename = "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
+dest = "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
+bytes = 9384670680
+sha256 = "cb5636d852a0ea6a9075ab1bef496c0db7aef13c02350571e388aea959c5c0b4"
+license = "apache-2"
+
+
+[[models]]
+name = "qwen_image_vae"
+repo = "Comfy-Org/Qwen-Image"
+revision = "1f12b17be14c89b026c51a91d67c32f84bb047bc"
+filename = "split_files/vae/qwen_image_vae.safetensors"
+dest = "vae/qwen_image_vae.safetensors"
+bytes = 253806246
+sha256 = "a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f"
+license = "apache-2"
+
+
+[[models]]
+name = "hidream_full_fp8"
+repo = "Comfy-Org/HiDream"
+revision = "942970a008493fc9bf05b4827374009e69f6a993"
+filename = "split_files/diffusion_models/hidream_i1_full_fp8.safetensors"
+dest = "diffusion_models/hidream_i1_full_fp8.safetensors"
+bytes = 17105946040
+sha256 = "807e458dd2ea31e69e40db27afadde4a14ffd0c4c0a23b8c9a0833102e055337"
+license = "mit"
+requires = ["hidream_clip_l", "hidream_clip_g", "t5xxl", "hidream_llama", "flux_vae"]
+
+[[models]]
+name = "hidream_full_q4_k_m"
+repo = "city96/HiDream-I1-Full-gguf"
+revision = "12e1d50fee542ede30c0b640bc1b0594231e8e15"
+filename = "hidream-i1-full-Q4_K_M.gguf"
+dest = "diffusion_models/hidream-i1-full-Q4_K_M.gguf"
+bytes = 11481430592
+sha256 = "10dd9ef2821d013340f3af1e8ed5211b0f0c356556712bb7c939c26a33de057e"
+license = "mit"
+requires = ["hidream_clip_l", "hidream_clip_g", "t5xxl", "hidream_llama", "flux_vae"]
+
+[[models]]
+name = "hidream_clip_l"
+repo = "Comfy-Org/HiDream"
+revision = "942970a008493fc9bf05b4827374009e69f6a993"
+filename = "split_files/text_encoders/clip_l_hidream.safetensors"
+dest = "text_encoders/clip_l_hidream.safetensors"
+bytes = 247586528
+sha256 = "706fdb88e22e18177b207837c02f4b86a652abca0302821f2bfa24ac6aea4f71"
+license = "mit"
+
+
+[[models]]
+name = "hidream_clip_g"
+repo = "Comfy-Org/HiDream"
+revision = "942970a008493fc9bf05b4827374009e69f6a993"
+filename = "split_files/text_encoders/clip_g_hidream.safetensors"
+dest = "text_encoders/clip_g_hidream.safetensors"
+bytes = 1389743104
+sha256 = "3771e70e36450e5199f30bad61a53faae85a2e02606974bcda0a6a573c0519d5"
+license = "mit"
+
+
+[[models]]
+name = "hidream_llama"
+repo = "Comfy-Org/HiDream"
+revision = "942970a008493fc9bf05b4827374009e69f6a993"
+filename = "split_files/text_encoders/llama_3.1_8b_instruct_fp8_scaled.safetensors"
+dest = "text_encoders/llama_3.1_8b_instruct_fp8_scaled.safetensors"
+bytes = 9081258056
+sha256 = "9f86897bbeb933ef4fd06297740edb8dd962c94efcd92b373a11460c33765ea6"
+license = "llama-3-1"
+
+
+[[models]]
+name = "qwen_edit_2511_fp8"
+repo = "Comfy-Org/Qwen-Image-Edit"
+revision = "f68ace85e60b4a02a323e394253731947657b7d2"
+filename = "split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors"
+dest = "diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors"
+bytes = 20533762817
+sha256 = "c9fdc158e46d3b61ef75f21ae866ca2fe808bf4a53643120d1c1e87c19280a4e"
+license = "apache-2"
+requires = ["qwen25vl_fp8", "qwen_image_vae"]
+
+[[models]]
+name = "qwen_edit_2511_q4_k_m"
+repo = "unsloth/Qwen-Image-Edit-2511-GGUF"
+revision = "52838251db242ddd8e8d0118de36c71006d7c397"
+filename = "qwen-image-edit-2511-Q4_K_M.gguf"
+dest = "diffusion_models/qwen-image-edit-2511-Q4_K_M.gguf"
+bytes = 12842830432
+sha256 = "07951f61941a81e236cbd4a9b6f250d49626b3ba518f260135bf2e01a87cf1c8"
+license = "apache-2"
+requires = ["qwen25vl_fp8", "qwen_image_vae"]
+
+# ---- Catalog by capability (phase 15). One entry per model: the capabilities it has and
+# its precisions, best quality first. `workflow` names the template per capability;
+# `loaders` fills the %UNET%, %CLIP% and %VAE% markers of those templates (the older
+# SDXL and FLUX workflows name their files directly). `seconds`, `vram_mib` and
+# `offload_mib` are measured per level (8, 16, 24 and 32+ GB) with the model loaded:
+# specs/2026-11-15-analisis-modelos/analysis.md. A level without a figure uses the
+# nearest lower one. `min_vram_mib` is the level from which it runs without moving
+# weights to RAM.
+
+[catalog.sdxl-turbo]
+title = "SDXL Turbo"
+license = "sai-community"
+capabilities = ["fast"]
+
+[[catalog.sdxl-turbo.options]]
+precision = "fp16"
+min_vram_mib = 8000
+workflow = { fast = "sdxl_turbo" }
+models = ["sdxl_turbo"]
+
+[catalog.sdxl]
+title = "SDXL 1.0"
+license = "openrail-pp"
+capabilities = ["high"]
+
+[[catalog.sdxl.options]]
+precision = "fp16"
+min_vram_mib = 8000
+workflow = { high = "sdxl_base" }
+models = ["sdxl_base"]
+
+[catalog.flux-dev]
+title = "FLUX.1 Dev"
+license = "flux-dev-non-commercial"
+capabilities = ["high"]
+
+[[catalog.flux-dev.options]]
+precision = "fp8"
+min_vram_mib = 20000
+workflow = { high = "flux_dev" }
+models = ["flux_dev"]
+
+[[catalog.flux-dev.options]]
+precision = "gguf"
+min_vram_mib = 12000
+workflow = { high = "flux_dev_gguf" }
+models = ["flux_dev_gguf"]
+nodes = ["comfyui-gguf"]
+
+[catalog.flux-schnell]
+title = "FLUX.1 Schnell"
+license = "apache-2"
+capabilities = ["high"]
+
+[[catalog.flux-schnell.options]]
+precision = "fp8"
+min_vram_mib = 12000
+workflow = { high = "flux_schnell" }
+models = ["flux_schnell"]
+
+[catalog.kontext]
+title = "FLUX.1 Kontext Dev"
+license = "flux-dev-non-commercial"
+capabilities = ["edit"]
+
+[[catalog.kontext.options]]
+precision = "fp8"
+min_vram_mib = 20000
+workflow = { edit = "flux_kontext_dev_basic" }
+models = ["flux_kontext"]
+
+[[catalog.kontext.options]]
+precision = "gguf"
+min_vram_mib = 12000
+workflow = { edit = "flux_kontext_dev_gguf" }
+models = ["flux_kontext_gguf"]
+nodes = ["comfyui-gguf"]
+
+[catalog.z-image-turbo]
+title = "Z-Image-Turbo"
+license = "apache-2"
+capabilities = ["fast"]
+
+[[catalog.z-image-turbo.options]]
+precision = "bf16"
+min_vram_mib = 16000
+workflow = { fast = "z_image_turbo" }
+models = ["z_image_turbo_bf16"]
+loaders = { unet = "z_image_turbo_bf16", clip = "qwen3_4b", vae = "flux_vae" }
+seconds.fast = { 8 = 4.1, 16 = 3.6, 24 = 3.6, 32 = 3.6 }
+vram_mib.fast = { 8 = 5296, 16 = 13872, 24 = 18416, 32 = 18461 }
+offload_mib.fast = { 8 = 3760, 16 = 0, 24 = 0, 32 = 0 }
+
+[[catalog.z-image-turbo.options]]
+precision = "int8"
+min_vram_mib = 8000
+workflow = { fast = "z_image_turbo" }
+models = ["z_image_turbo_int8"]
+loaders = { unet = "z_image_turbo_int8", clip = "qwen3_4b_fp8", vae = "flux_vae" }
+seconds.fast = { 8 = 2.0, 16 = 2.0, 24 = 2.0, 32 = 2.0 }
+vram_mib.fast = { 8 = 5300, 16 = 11624, 24 = 11728, 32 = 11632 }
+offload_mib.fast = { 8 = 0, 16 = 0, 24 = 0, 32 = 0 }
+
+[catalog.klein-4b]
+title = "FLUX.2 Klein 4B"
+license = "apache-2"
+capabilities = ["fast", "edit"]
+max_references = 1
+
+[[catalog.klein-4b.options]]
+precision = "bf16"
+min_vram_mib = 8000
+workflow = { fast = "klein_4b", edit = "klein_4b_edit" }
+models = ["klein_4b"]
+loaders = { unet = "klein_4b", clip = "qwen3_4b", vae = "flux2_vae" }
+seconds.fast = { 8 = 1.5, 16 = 1.3, 24 = 1.3, 32 = 1.3 }
+vram_mib.fast = { 8 = 5417, 16 = 13245, 24 = 13341, 32 = 13341 }
+offload_mib.fast = { 8 = 0, 16 = 0, 24 = 0, 32 = 0 }
+seconds.edit = { 8 = 2.5, 16 = 2.5, 24 = 2.5, 32 = 2.5 }
+vram_mib.edit = { 8 = 5525, 16 = 13749, 24 = 13914, 32 = 13941 }
+offload_mib.edit = { 8 = 0, 16 = 0, 24 = 0, 32 = 0 }
+
+[catalog.chroma-hd]
+title = "Chroma1-HD"
+license = "apache-2"
+capabilities = ["high"]
+
+[[catalog.chroma-hd.options]]
+precision = "bf16"
+min_vram_mib = 16000
+workflow = { high = "chroma_hd" }
+models = ["chroma_hd_bf16"]
+loaders = { unet = "chroma_hd_bf16", clip = "t5xxl", vae = "flux_vae" }
+seconds.high = { 8 = 37.5, 16 = 27.4, 24 = 25.9, 32 = 25.9 }
+vram_mib.high = { 8 = 5231, 16 = 13562, 24 = 18522, 32 = 18522 }
+offload_mib.high = { 8 = 9057, 16 = 0, 24 = 0, 32 = 0 }
+
+[[catalog.chroma-hd.options]]
+precision = "fp8"
+min_vram_mib = 8000
+workflow = { high = "chroma_hd" }
+models = ["chroma_hd_fp8"]
+loaders = { unet = "chroma_hd_fp8", clip = "t5xxl", vae = "flux_vae" }
+seconds.high = { 8 = 19.3, 16 = 17.7, 24 = 17.7, 32 = 17.7 }
+vram_mib.high = { 8 = 5395, 16 = 13875, 24 = 13872, 32 = 13871 }
+offload_mib.high = { 8 = 0, 16 = 0, 24 = 0, 32 = 0 }
+
+[catalog.qwen-image]
+title = "Qwen-Image"
+license = "apache-2"
+capabilities = ["high"]
+
+[[catalog.qwen-image.options]]
+precision = "bf16"
+min_vram_mib = 32000
+workflow = { high = "qwen_image" }
+models = ["qwen_image_bf16"]
+loaders = { unet = "qwen_image_bf16", clip = "qwen25vl_fp8", vae = "qwen_image_vae" }
+seconds.high = { 8 = 53.6, 16 = 40.7, 24 = 33.2, 32 = 33.6 }
+vram_mib.high = { 8 = 5773, 16 = 13995, 24 = 19228, 32 = 19269 }
+offload_mib.high = { 8 = 30790, 16 = 22588, 24 = 17355, 32 = 17334 }
+
+[[catalog.qwen-image.options]]
+precision = "fp8"
+min_vram_mib = 24000
+workflow = { high = "qwen_image" }
+models = ["qwen_image_fp8"]
+loaders = { unet = "qwen_image_fp8", clip = "qwen25vl_fp8", vae = "qwen_image_vae" }
+seconds.high = { 8 = 30.8, 16 = 26.2, 24 = 24.3, 32 = 24.3 }
+vram_mib.high = { 8 = 5415, 16 = 13966, 24 = 18482, 32 = 18563 }
+offload_mib.high = { 8 = 11301, 16 = 2766, 24 = 0, 32 = 0 }
+
+[[catalog.qwen-image.options]]
+precision = "q4_k_m"
+min_vram_mib = 8000
+workflow = { high = "qwen_image_gguf" }
+models = ["qwen_image_q4_k_m"]
+loaders = { unet = "qwen_image_q4_k_m", clip = "qwen25vl_fp8", vae = "qwen_image_vae" }
+nodes = ["comfyui-gguf"]
+seconds.high = { 8 = 60.3, 16 = 39.9, 24 = 38.3, 32 = 37.3 }
+vram_mib.high = { 8 = 4862, 16 = 10626, 24 = 16838, 32 = 16566 }
+offload_mib.high = { 8 = 0, 16 = 0, 24 = 0, 32 = 0 }
+
+[[catalog.qwen-image.options]]
+precision = "q2_k"
+min_vram_mib = 8000
+workflow = { high = "qwen_image_gguf" }
+models = ["qwen_image_q2_k"]
+loaders = { unet = "qwen_image_q2_k", clip = "qwen25vl_fp8", vae = "qwen_image_vae" }
+nodes = ["comfyui-gguf"]
+seconds.high = { 8 = 44.3, 16 = 35.7, 24 = 35.8, 32 = 35.8 }
+vram_mib.high = { 8 = 4922, 16 = 10211, 24 = 12676, 32 = 13096 }
+offload_mib.high = { 8 = 0, 16 = 0, 24 = 0, 32 = 0 }
+
+[catalog.hidream-full]
+title = "HiDream-I1 Full"
+license = "mit"
+capabilities = ["high"]
+
+[[catalog.hidream-full.options]]
+precision = "fp8"
+min_vram_mib = 16000
+workflow = { high = "hidream_full" }
+models = ["hidream_full_fp8"]
+loaders = { unet = "hidream_full_fp8", clip1 = "hidream_clip_l", clip2 = "hidream_clip_g", clip3 = "t5xxl", clip4 = "hidream_llama", vae = "flux_vae" }
+seconds.high = { 8 = 73.1, 16 = 68.4, 24 = 67.7, 32 = 64.4 }
+vram_mib.high = { 8 = 5614, 16 = 13964, 24 = 17895, 32 = 18815 }
+offload_mib.high = { 8 = 8095, 16 = 0, 24 = 0, 32 = 0 }
+
+[[catalog.hidream-full.options]]
+precision = "q4_k_m"
+min_vram_mib = 16000
+workflow = { high = "hidream_full_gguf" }
+models = ["hidream_full_q4_k_m"]
+loaders = { unet = "hidream_full_q4_k_m", clip1 = "hidream_clip_l", clip2 = "hidream_clip_g", clip3 = "t5xxl", clip4 = "hidream_llama", vae = "flux_vae" }
+nodes = ["comfyui-gguf"]
+seconds.high = { 8 = 95.7, 16 = 76.7, 24 = 77.8, 32 = 78.5 }
+vram_mib.high = { 8 = 5532, 16 = 11706, 24 = 18347, 32 = 17882 }
+offload_mib.high = { 8 = 5992, 16 = 0, 24 = 0, 32 = 0 }
+
+[catalog.qwen-image-edit]
+title = "Qwen-Image-Edit-2511"
+license = "apache-2"
+capabilities = ["edit"]
+max_references = 1
+
+[[catalog.qwen-image-edit.options]]
+precision = "fp8"
+min_vram_mib = 24000
+workflow = { edit = "qwen_edit_2511" }
+models = ["qwen_edit_2511_fp8"]
+loaders = { unet = "qwen_edit_2511_fp8", clip = "qwen25vl_fp8", vae = "qwen_image_vae" }
+seconds.edit = { 8 = 120.8, 16 = 112.5, 24 = 112.9 }
+vram_mib.edit = { 8 = 5937, 16 = 13905, 24 = 18199 }
+offload_mib.edit = { 8 = 10858, 16 = 2640, 24 = 0 }
+
+[[catalog.qwen-image-edit.options]]
+precision = "q4_k_m"
+min_vram_mib = 8000
+workflow = { edit = "qwen_edit_2511_gguf" }
+models = ["qwen_edit_2511_q4_k_m"]
+loaders = { unet = "qwen_edit_2511_q4_k_m", clip = "qwen25vl_fp8", vae = "qwen_image_vae" }
+nodes = ["comfyui-gguf"]
+seconds.edit = { 8 = 173.0, 16 = 140.0, 24 = 137.2 }
+vram_mib.edit = { 8 = 6189, 16 = 10627, 24 = 16123 }
+offload_mib.edit = { 8 = 0, 16 = 0, 24 = 0 }
+
+# The model and precision recommended for each level of GPU memory (GB), from phase 14
+# (analysis.md, section 8) and phase 9. A level without an entry uses the nearest lower.
+[recommended.fast]
+8 = "klein-4b:bf16"
+16 = "z-image-turbo:bf16"
+
+[recommended.high]
+8 = "chroma-hd:fp8"
+16 = "qwen-image:q4_k_m"
+24 = "qwen-image:fp8"
+
+[recommended.edit]
+8 = "klein-4b:bf16"
+24 = "qwen-image-edit:fp8"

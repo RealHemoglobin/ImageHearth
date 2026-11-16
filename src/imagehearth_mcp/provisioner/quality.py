@@ -1,11 +1,10 @@
 """Modelo de `quality`: qué hay instalado, qué se propone y cómo se cambia de uno a otro."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from imagehearth_mcp.engine import config
 from imagehearth_mcp.platform import locks
 from imagehearth_mcp.provisioner import ProvisionError, models
-from imagehearth_mcp.provisioner.manifest import format_size
 
 LEGACY = "RealVisXL"
 
@@ -52,10 +51,22 @@ def current(catalog, records, models_dir):
 
 def resolve_installed(catalog, records, models_dir, vram_mib=0):
     """El perfil registrado con sus modelos reales, o None si no hay instalación."""
+    from imagehearth_mcp.provisioner import selection
+
     base = catalog.profiles.get(records.profile or "")
 
     if base is None:
         return None
+
+    model_set = selection.installed_set(catalog, records, models_dir)
+
+    if model_set and all(model_set.of(cap) for cap in base.capabilities):
+        profile = catalog.build_set(selection.profile_for(catalog, base, model_set), model_set)
+
+        if selection.is_legacy(catalog, records, models_dir):
+            profile = selection.keep_realvisxl(catalog, profile)
+
+        return profile
 
     return resolve_for(
         catalog,
@@ -87,74 +98,6 @@ def _try(resolve, forced, forced_edit):
         return resolve(None, None)
 
 
-@dataclass
-class Change:
-    """Pasar de un modelo de `quality` a otro: qué se baja y qué se borra después."""
-
-    old: Current
-    new: str
-    download: list = field(default_factory=list)
-    delete: list = field(default_factory=list)
-    kept_attached: bool = False
-
-    @property
-    def download_bytes(self):
-        return sum(item.model.bytes for item in self.download)
-
-    @property
-    def freed_bytes(self):
-        return sum(item.path.stat().st_size for item in self.delete if item.path.exists())
-
-
-def plan_change(catalog, records, models_dir, old_profile, new_profile, keep_profile, old):
-    """Lo que implica sustituir `old_profile` por `new_profile`.
-
-    Solo se borra lo que instaló ImageHearth y que no usa ningún componente del
-    perfil `keep_profile` (el mayor entre lo registrado y lo elegido). Los
-    archivos preexistentes y los de un ComfyUI adjunto no son propios y nunca se tocan.
-    """
-    extra = models.extra_search_paths(config.COMFY_DIR)
-    keep = {model.name for model in keep_profile.models} | {m.name for m in new_profile.models}
-    leaving = [model for model in old_profile.models if model.name not in keep]
-    change = Change(old, new_profile.quality_model)
-    change.download = [
-        item for item in models.inspect(new_profile.models, models_dir, extra) if item.state != models.PRESENT
-    ]
-    # LoRAs are for SDXL 1.0 only: they leave with it.
-    if not old.legacy and old.name == "sdxl" and new_profile.quality_model != "sdxl":
-        leaving = [*leaving, *catalog.loras.values()]
-
-    # A ComfyUI that isn't ours keeps every file it has, ours or not.
-    change.kept_attached = records.mode == "attached"
-    change.delete = (
-        []
-        if change.kept_attached
-        else [
-            item
-            for item in models.inspect(leaving, models_dir)
-            if item.state != models.MISSING and records.is_owned(item.path)
-        ]
-    )
-    return change
-
-
-def show_change(change, catalog):
-    old = LEGACY if change.old.legacy else catalog.quality_model(change.old.name).title
-    new = catalog.quality_model(change.new).title
-    print(f"\nQuality model: {old} -> {new}")
-    print(f"  To download: {format_size(change.download_bytes)}")
-
-    for item in change.delete:
-        kind = " (LoRA)" if hasattr(item.model, "trigger_words") else ""
-        print(f"  To delete afterwards: {item.path.name}{kind}")
-
-    if change.kept_attached:
-        print("  The old model stays in the ComfyUI you attached; delete it by hand if you want the space.")
-    else:
-        print(f"  Space freed: {format_size(change.freed_bytes)}")
-    print("  The current model keeps working until the new one is downloaded and verified.")
-
-
 def require_idle():
     """Un cambio de modelo no puede cruzarse con una generación."""
     from imagehearth_mcp.engine import state
@@ -164,11 +107,6 @@ def require_idle():
             "An image is being generated, or a session needs `recover_engine`. Nothing "
             "was changed: wait for it to finish and run the command again."
         )
-
-
-def delete_old(change, records):
-    """Borra los archivos que dejó el modelo anterior. Se llama con el nuevo ya verificado."""
-    return delete_items(change.delete, records)
 
 
 def delete_items(items, records):
@@ -199,37 +137,3 @@ def restart_comfyui():
     print("Restarting ComfyUI so it sees the new model...")
     comfyui_manager.restart()
     return True
-
-
-def choices(catalog, vram_mib, installed=None):
-    """Una línea por modelo con lo que hace falta para elegir."""
-    found = []
-
-    for name in catalog.quality_models:
-        info = catalog.describe_quality(name, vram_mib)
-        info["installed"] = installed is not None and installed.name == name and not installed.legacy
-        found.append(info)
-
-    return found
-
-
-def format_choice(info):
-    flags = []
-
-    if info["recommended"]:
-        flags.append("recommended")
-
-    if info["installed"]:
-        flags.append("installed")
-
-    commercial = "commercial use" if info["commercial_use"] else "non-commercial"
-    line = (
-        f"{info['name']:12} {format_size(info['download_bytes']):>8}  "
-        f"{info['min_vram_mib'] / 1000:.0f} GB VRAM  {info['license'].name}, {commercial}"
-    )
-    line += f"  [{', '.join(flags)}]" if flags else ""
-
-    if info["warning"]:
-        line += f"\n{'':14}WARNING: {info['warning']}"
-
-    return line

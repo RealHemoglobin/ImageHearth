@@ -20,6 +20,7 @@ from imagehearth_mcp.provisioner import (
     manifest,
     models,
     quality,
+    selection,
 )
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
 
@@ -69,7 +70,17 @@ def _downloaded_bytes(job, catalog, models_dir):
         return None
 
     try:
-        profile = catalog.resolve(profile, job.get("quality_model") or None, job.get("vram_mib") or 0)
+        if job.get("models"):
+            picks = {
+                cap: tuple(catalog.parse_pick(cap, text) for text in texts)
+                for cap, texts in job["models"].items()
+            }
+            wanted = manifest.ModelSet(picks, job.get("defaults") or {})
+            profile = catalog.build_set(selection.profile_for(catalog, profile, wanted), wanted)
+        else:
+            profile = catalog.resolve(
+                profile, job.get("quality_model") or None, job.get("vram_mib") or 0
+            )
     except ProvisionError:
         return None
 
@@ -103,6 +114,7 @@ def _job_status(catalog, models_dir):
         "state": job.get("state"),
         "profile": job.get("profile"),
         "quality_model": job.get("quality_model") or None,
+        "models": job.get("models") or None,
         "error": job.get("error"),
         "model_bytes": _downloaded_bytes(job, catalog, models_dir),
         "log": str(config.SETUP_JOB_LOG),
@@ -151,12 +163,24 @@ def status():
     profiles = []
 
     installed = quality.current(catalog, records, models_dir)
+    model_set = selection.installed_set(catalog, records, models_dir)
 
     for name, base in catalog.profiles_for(detection.system).items():
-        # With the installed quality model, or the recommended one if none is.
+        # With the installed models, or the ones recommended for this GPU if none are.
         try:
-            profile = quality.resolve_for(
-                catalog, base, installed, vram, records.precision, records.edit_precision
+            have = (
+                manifest.ModelSet(
+                    {c: p for c, p in model_set.picks.items() if c in base.capabilities},
+                    model_set.defaults,
+                )
+                if model_set
+                else None
+            )
+            profile = catalog.build_set(
+                base,
+                have
+                if have and all(have.of(c) for c in base.capabilities)
+                else catalog.recommended_set(base, vram),
             )
         except ProvisionError:
             profile = base
@@ -174,6 +198,7 @@ def status():
                 "suits_this_gpu": vram >= catalog.min_vram_mib(base),
                 "experimental": _is_experimental(name, detection.system),
                 "has_quality_model": base.quality,
+                "capabilities": list(base.capabilities),
                 "licenses": [
                     {"name": entry.name, "url": entry.url, "summary": entry.summary}
                     for entry in catalog.licenses_for(profile)
@@ -181,7 +206,13 @@ def status():
             }
         )
 
-    quality_models = [_quality_entry(info, models_dir, extra, catalog) for info in quality.choices(catalog, vram, installed)]
+    catalog_models = {
+        cap: [
+            _model_entry(info, cap, model_set, models_dir, extra, catalog, vram)
+            for info in catalog.describe_catalog(cap, vram)
+        ]
+        for cap in manifest.CAPABILITIES
+    }
 
     comfy_found = detect.is_comfy_dir(config.COMFY_DIR)
     job = _job_status(catalog, models_dir)
@@ -203,7 +234,9 @@ def status():
         "disk_free_gb": round(detection.disk_free_bytes / 1e9, 1),
         "install_folder": install_folders,
         "profiles": profiles,
-        "quality_models": quality_models,
+        "models": catalog_models,
+        "quality_models": catalog_models["high"],
+        "installed_models": _installed_listing(model_set),
         "loras": {
             "only_with": "sdxl",
             "available": _lora_entries(catalog, models_dir, extra, records),
@@ -265,39 +298,79 @@ def _next_step(job, profiles, comfy_found):
 
     if not any(p["installed"] for p in profiles) or not comfy_found:
         return (
-            "Ask the user which profile to install and, for quality or full, which "
-            "quality model (quality_models has size, license, commercial use, whether it "
-            "fits this GPU and which one is recommended), stating sizes, licenses and "
-            "warnings. Also ask whether they want ComfyUI and the models in another "
+            "Ask the user which profile to install and, for each capability the profile "
+            "has (fast, high = quality, edit), which models: models has, per capability, "
+            "each one's precisions with download size, measured seconds per image on this "
+            "GPU level, license, commercial use, whether it fits this GPU and which one is "
+            "recommended. They can pick several per capability and the first is the "
+            "default. State sizes, licenses and warnings (HiDream also needs the Llama "
+            "3.1 license). Also ask whether they want ComfyUI and the models in another "
             "folder or disk (install_folder has the usual one and the disks found, with "
             "free space): the models take tens of GB. If they choose sdxl, ask whether "
             "they want style LoRAs and which (loras has size and license of each). Then "
-            "call setup_start, with install_dir and loras if they chose them. Image editing in full uses FLUX Kontext, "
-            "which is non-commercial whatever the quality model is."
+            "call setup_start with fast_models, quality_models and edit_models as "
+            "name or name:precision, and install_dir and loras if they chose them. "
+            "Some editing models, like FLUX Kontext, are non-commercial."
         )
 
     return "Installed. Use create_image."
 
 
-def _quality_entry(info, models_dir, extra, catalog):
-    option = next(
-        item for item in catalog.quality_model(info["name"]).options if item.precision == info["precision"]
-    )
-    states = models.inspect(catalog.expand(option.models), models_dir, extra)
-    pending = sum(s.model.bytes for s in states if s.state != models.PRESENT)
+def _installed_listing(model_set):
+    return {
+        cap: [
+            {"model": pick.model, "precision": pick.precision, "default": pick == model_set.default(cap)}
+            for pick in model_set.of(cap)
+        ]
+        for cap in manifest.CAPABILITIES
+        if model_set and model_set.of(cap)
+    }
+
+
+def _model_entry(info, capability, model_set, models_dir, extra, catalog, vram=0):
+    """One catalog model for an agent to show: size, measured speed, license and fit."""
     license = info["license"]
+    have = model_set.pick(capability, info["name"]) if model_set else None
+    precisions = []
+
+    for item in info["precisions"]:
+        option = catalog.catalog[info["name"]].option(item["precision"])
+        states = models.inspect(catalog.expand(option.models), models_dir, extra)
+        pending = sum(s.model.bytes for s in states if s.state != models.PRESENT)
+        precisions.append(
+            {
+                "precision": item["precision"],
+                "download_gb": round(item["download_bytes"] / 1e9, 1),
+                "pending_gb": round(pending / 1e9, 1),
+                "seconds_per_image": item["seconds"],
+                "gpu_memory_gb": None if item["vram_mib"] is None else round(item["vram_mib"] / 1024, 1),
+                "moves_to_ram_gb": round((item["offload_mib"] or 0) / 1024, 1),
+                "min_vram_mib": item["min_vram_mib"],
+                "fits_this_gpu": item["fits"],
+                "recommended": item["recommended"],
+            }
+        )
+
+    best = next((p for p in precisions if p["recommended"]), precisions[0])
     return {
         "name": info["name"],
         "title": info["title"],
-        "download_gb": round(info["download_bytes"] / 1e9, 1),
-        "pending_gb": round(pending / 1e9, 1),
-        "min_vram_mib": info["min_vram_mib"],
+        "download_gb": best["download_gb"],
+        "pending_gb": best["pending_gb"],
+        "min_vram_mib": min(p["min_vram_mib"] for p in precisions),
         "license": {"name": license.name, "url": license.url, "summary": license.summary},
         "commercial_use": info["commercial_use"],
         "recommended": info["recommended"],
-        "fits_this_gpu": info["fits"],
-        "warning": info["warning"],
-        "installed": info["installed"],
+        "fits_this_gpu": any(p["fits_this_gpu"] for p in precisions),
+        "warning": None
+        if any(p["fits_this_gpu"] for p in precisions)
+        else f"{info['title']} needs at least {min(p['min_vram_mib'] for p in precisions)} MiB "
+        f"of GPU memory and this machine has {vram} MiB. It can be installed, but generation "
+        "may be slow or fail.",
+        "installed": have is not None,
+        "installed_precision": have.precision if have else None,
+        "default": bool(have and model_set.default(capability) == have),
+        "precisions": precisions,
     }
 
 
@@ -332,41 +405,76 @@ def _lora_names(loras, catalog):
     return list(dict.fromkeys(loras))
 
 
-def _effective_quality_model(catalog, base, quality_model, records, vram):
-    """The quality model the installation will have after this setup, or None."""
-    if not base.quality:
-        return None
-
-    if quality_model:
-        return quality_model
-
-    installed = quality.current(catalog, records, models.resolve_dir(records, config.COMFY_DIR))
-
-    if installed is not None:
-        return None if installed.legacy else installed.name
-
-    return catalog.recommend(vram)
-
-
-def _validate_loras(loras, catalog, base, quality_model, records, vram):
+def _validate_loras(loras, catalog, target):
     names = _lora_names(loras, catalog)
 
     if names is None:
         return None
 
-    effective = _effective_quality_model(catalog, base, quality_model, records, vram)
-
-    if effective != "sdxl":
+    if target is None or target.pick("high", "sdxl") is None:
         raise ValueError(
-            "LoRAs only work with the sdxl quality model, and this installation would use "
-            f"{effective or 'a profile without one'}. Nothing was started: ask the user to "
-            "choose sdxl, or leave loras empty."
+            "LoRAs only work with the sdxl quality model, and this installation would not "
+            "have it. Nothing was started: ask the user to choose sdxl in quality_models, "
+            "or leave loras empty."
         )
 
     return names
 
 
-def _validate(profile, accept_licenses, existing_comfyui, quality_model="", install_dir=""):
+def _model_lists(fast_models, quality_models, edit_models, quality_model):
+    """The lists as {capability: [name[:precision]]}; only the ones asked for."""
+    lists = {"fast": fast_models, "high": quality_models, "edit": edit_models}
+
+    if quality_model and not quality_models:
+        lists["high"] = [quality_model]
+
+    found = {}
+
+    for capability, texts in lists.items():
+        if texts is None:
+            continue
+
+        if isinstance(texts, str) or not all(isinstance(text, str) for text in texts):
+            name = {"fast": "fast_models", "high": "quality_models", "edit": "edit_models"}[capability]
+            raise ValueError(
+                f"{name} must be a list of model names from setup_status, as name or "
+                "name:precision."
+            )
+
+        if texts:
+            found[capability] = [text.strip() for text in texts if text.strip()]
+
+    return found
+
+
+def _target(catalog, base, lists, records, vram):
+    """(old set, target set, resolved profile) after this request, or ValueError."""
+    from types import SimpleNamespace
+
+    from imagehearth_mcp.provisioner import setup as setup_command
+
+    models_dir = models.resolve_dir(records, config.COMFY_DIR)
+    old = selection.installed_set(catalog, records, models_dir)
+    args = SimpleNamespace(
+        fast_models=lists.get("fast"),
+        quality_models=lists.get("high"),
+        edit_models=lists.get("edit"),
+        quality_model=None,
+        variant=None,
+    )
+
+    try:
+        request = setup_command.requested_models(args, catalog, base, vram, old)
+        effective = catalog.profiles[setup_command._higher_profile(records.profile, base.name)]
+        target = selection.target_set(catalog, effective, old, request, vram)
+        profile = catalog.build_set(selection.profile_for(catalog, effective, target), target)
+    except ProvisionError as error:
+        raise ValueError(f"Nothing was started: {error}") from error
+
+    return old, request, target, profile
+
+
+def _validate(profile, accept_licenses, existing_comfyui, install_dir=""):
     if accept_licenses is not True:
         raise ValueError(
             "Nothing was started: the user has not accepted the licenses. Show them "
@@ -387,17 +495,6 @@ def _validate(profile, accept_licenses, existing_comfyui, quality_model="", inst
             f"The {profile} profile is experimental and can't be installed from an "
             "agent. The user can run `imagehearth-mcp setup --experimental` themselves."
         )
-
-    catalog = manifest.load()
-
-    if quality_model and quality_model not in catalog.quality_models:
-        raise ValueError(
-            f"Unknown quality model {quality_model!r}. Choose one of: "
-            f"{', '.join(catalog.quality_models)}."
-        )
-
-    if quality_model and not available[profile].quality:
-        raise ValueError(f"The {profile} profile has no quality model.")
 
     if existing_comfyui and not detect.is_comfy_dir(Path(existing_comfyui).expanduser()):
         raise ValueError(f"{existing_comfyui} does not look like a ComfyUI folder.")
@@ -432,10 +529,9 @@ def _validate_install_dir(install_dir, existing_comfyui):
         )
 
 
-def _folder_issues(install_dir, catalog, base, used, vram, detection):
+def _folder_issues(install_dir, catalog, profile, detection):
     """(errores, avisos) de instalar en `install_dir` lo que pide `setup_start`."""
     folder = locations.resolve(install_dir)
-    profile = catalog.resolve(base, used or None, vram)
     comfy_dir = folder / "comfyui"
     sizes = [
         item.model.bytes
@@ -450,16 +546,21 @@ def _folder_issues(install_dir, catalog, base, used, vram, detection):
     return locations.split(locations.check(folder, sizes, install_bytes))
 
 
-def _spawn(profile, existing_comfyui, quality_model="", install_dir="", loras=""):
+def _spawn(
+    profile, existing_comfyui, quality_models="", install_dir="", loras="", fast_models="",
+    edit_models="",
+):
     command = [
         sys.executable,
         "-m",
         "imagehearth_mcp.provisioner.agent_setup",
         profile,
         str(Path(existing_comfyui).expanduser().resolve()) if existing_comfyui else "",
-        quality_model,
+        quality_models,
         install_dir,
         loras,
+        fast_models,
+        edit_models,
     ]
 
     config.SETUP_JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -475,33 +576,66 @@ def _spawn(profile, existing_comfyui, quality_model="", install_dir="", loras=""
 
 
 def start(
-    profile, accept_licenses, existing_comfyui="", quality_model="", install_dir="", loras=None
+    profile,
+    accept_licenses,
+    existing_comfyui="",
+    quality_model="",
+    install_dir="",
+    loras=None,
+    fast_models=None,
+    quality_models=None,
+    edit_models=None,
 ):
-    _validate(profile, accept_licenses, existing_comfyui, quality_model, install_dir)
+    _validate(profile, accept_licenses, existing_comfyui, install_dir)
     catalog = manifest.load()
     detection = detect.detect(disk_path=config.DATA_DIR, extra_paths=[config.COMFY_DIR])
     gpu = detection.primary_gpu
     vram = gpu.vram_mib if gpu else 0
     base = catalog.profiles[profile]
-    lora_names = _validate_loras(loras, catalog, base, quality_model, _load_records(), vram)
-    used = ""
-    warning = None
-    replaces = None
+    records = _load_records()
+    lists = _model_lists(fast_models, quality_models, edit_models, quality_model)
 
-    if base.quality:
-        used = quality_model or catalog.recommend(vram)
-        warning = catalog.warning(used, vram)
-        installed = quality.current(
-            catalog, _load_records(), models.resolve_dir(_load_records(), config.COMFY_DIR)
-        )
+    for capability in lists:
+        if capability not in base.capabilities:
+            raise ValueError(
+                f"The {profile} profile has no {capability} models: leave that list empty "
+                "or choose a profile that has them."
+            )
 
-        if installed is not None and quality_model and (installed.legacy or installed.name != used):
-            replaces = installed.name
-
+    old, request, target, resolved = _target(catalog, base, lists, records, vram)
+    lora_names = _validate_loras(loras, catalog, target)
     warnings = []
+    replaces = []
+
+    for capability, pick in target.all():
+        option = catalog.option_of(capability, pick)
+
+        if vram and vram < option.min_vram_mib:
+            warnings.append(
+                f"{catalog.catalog[pick.model].title} {pick.precision} needs at least "
+                f"{option.min_vram_mib} MiB of GPU memory to run without moving weights "
+                f"to RAM and this machine has {vram} MiB. It can be installed, but "
+                "generation will be slower or may fail."
+            )
+
+    if old is not None:
+        change = selection.plan_set_change(
+            catalog, records, models.resolve_dir(records, config.COMFY_DIR), old, target, resolved,
+            legacy=selection.is_legacy(catalog, records, models.resolve_dir(records, config.COMFY_DIR))
+            and request.asks("high"),
+        )
+        replaces = [
+            f"{catalog.catalog[pick.model].title} {pick.precision} is removed"
+            for _, pick in change.removed
+        ] + [
+            f"{catalog.catalog[name].title} changes from {before} to {after}"
+            for _, name, before, after in change.switched
+        ]
+
+    folder_warnings = []
 
     if install_dir:
-        errors, warnings = _folder_issues(install_dir, catalog, base, used, vram, detection)
+        errors, folder_warnings = _folder_issues(install_dir, catalog, resolved, detection)
 
         if errors:
             raise ValueError(
@@ -516,23 +650,35 @@ def start(
     except TimeoutError:
         raise RuntimeError("Another setup_start is being launched.") from None
 
+    default_high = target.default("high")
+
     try:
         if locks.is_locked(config.SETUP_LOCK) or _job_alive(_read_job()):
             raise RuntimeError(
                 "An installation is already running. Follow it with setup_status."
             )
 
-        joined = ",".join(lora_names or ())
-        if joined:
-            process = _spawn(profile, existing_comfyui, quality_model, install_dir, joined)
-        elif install_dir:
-            process = _spawn(profile, existing_comfyui, quality_model, install_dir)
-        else:
-            process = _spawn(profile, existing_comfyui, quality_model)
+        arguments = [
+            profile,
+            existing_comfyui,
+            ",".join(lists.get("high", ())),
+            install_dir,
+            ",".join(lora_names or ()),
+            ",".join(lists.get("fast", ())),
+            ",".join(lists.get("edit", ())),
+        ]
+
+        # Trailing empty values are left out: the process reads them back as empty.
+        while len(arguments) > 3 and not arguments[-1]:
+            arguments.pop()
+
+        process = _spawn(*arguments)
         _write_job(
             state=RUNNING,
             profile=profile,
-            quality_model=used,
+            quality_model=default_high.model if default_high else "",
+            models={cap: [str(pick) for pick in target.of(cap)] for cap in manifest.CAPABILITIES if target.of(cap)},
+            defaults={cap: target.default(cap).model for cap in manifest.CAPABILITIES if target.of(cap)},
             vram_mib=vram,
             error=None,
             pid=process.pid,
@@ -545,13 +691,21 @@ def start(
     result = {
         "state": RUNNING,
         "profile": profile,
-        "quality_model": used or None,
+        "quality_model": default_high.model if default_high else None,
+        "models": {
+            cap: [str(pick) for pick in target.of(cap)]
+            for cap in manifest.CAPABILITIES
+            if target.of(cap)
+        },
+        "defaults": {
+            cap: target.default(cap).model for cap in manifest.CAPABILITIES if target.of(cap)
+        },
         "pid": process.pid,
         "next_step": "Follow it with setup_status. It continues if you disconnect.",
     }
 
-    if warning:
-        result["warning"] = warning
+    if warnings:
+        result["warning"] = " ".join(warnings)
 
     if install_dir:
         result["install_dir"] = install_dir
@@ -559,26 +713,39 @@ def start(
     if lora_names:
         result["loras"] = lora_names
 
-    if warnings:
-        result["folder_warnings"] = warnings
+    if folder_warnings:
+        result["folder_warnings"] = folder_warnings
 
     if replaces:
         result["replaces"] = (
-            f"The installed quality model ({replaces}) is replaced: the new one is "
-            "downloaded and verified first, then the old one is deleted."
+            "; ".join(replaces) + ". The new models are downloaded and verified first, "
+            "then the old ones are deleted."
         )
 
     return result
 
 
-def _args(profile, existing_comfyui, quality_model="", install_dir="", loras=""):
+def _args(
+    profile, existing_comfyui, quality_models="", install_dir="", loras="", fast_models="",
+    edit_models="",
+):
     from imagehearth_mcp.cli import _build_parser
 
     argv = ["setup", "--profile", profile, "--accept-licenses", "--non-interactive"]
+    given = False
 
-    if quality_model:
-        # The user chose it (and, if it replaces another, confirmed that) through the agent.
-        argv += ["--quality-model", quality_model, "--yes"]
+    for flag, value in (
+        ("--fast-models", fast_models),
+        ("--quality-models", quality_models),
+        ("--edit-models", edit_models),
+    ):
+        if value:
+            argv += [flag, value]
+            given = True
+
+    if given:
+        # The user chose them (and, if they replace others, confirmed that) through the agent.
+        argv.append("--yes")
 
     if install_dir:
         argv += ["--install-dir", install_dir]
@@ -598,10 +765,14 @@ def main(argv):
     from imagehearth_mcp.engine.errors import ConfigError
     from imagehearth_mcp.provisioner.setup import run
 
-    profile, existing, quality_model, install_dir, loras = ([*argv, "", "", "", ""])[:5]
+    profile, existing, quality_models, install_dir, loras, fast_models, edit_models = (
+        [*argv, "", "", "", "", "", ""]
+    )[:7]
 
     try:
-        code = run(_args(profile, existing, quality_model, install_dir, loras))
+        code = run(
+            _args(profile, existing, quality_models, install_dir, loras, fast_models, edit_models)
+        )
     except (ProvisionError, ConfigError) as error:
         print(f"Error: {error}", flush=True)
         _write_job(state=FAILED, error=str(error))

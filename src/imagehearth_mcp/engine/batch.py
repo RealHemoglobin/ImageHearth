@@ -29,6 +29,7 @@ ITEM_FIELDS = (
     "mode",
     "style",
     "loras",
+    "model",
 )
 
 
@@ -84,6 +85,7 @@ def validate(
     mode="auto",
     style="auto",
     loras=None,
+    model="",
 ):
     """Check the whole batch and prepare every item, or raise with all the problems.
 
@@ -112,6 +114,7 @@ def validate(
         "mode": mode,
         "style": style,
         "loras": loras,
+        "model": model or None,
     }
     errors = []
     requests_ = {}
@@ -179,10 +182,9 @@ def _prepare(request):
             image_paths=request.references,
             width=request.width,
             height=request.height,
+            model=request.model,
+            negative_prompt=request.negative_prompt,
         )
-
-        if request.negative_prompt:
-            prepared.warnings.insert(0, "FLUX Kontext ignores negative_prompt.")
 
         return prepared
 
@@ -194,6 +196,7 @@ def _prepare(request):
         request.height,
         request.style,
         request.loras,
+        request.model,
     )
 
 

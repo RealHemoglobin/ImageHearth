@@ -189,6 +189,7 @@ def interactive(**kwargs):
         **{
             "profile": None,
             "quality_model": None,
+            "fast_models": "sdxl-turbo",
             "accept_licenses": False,
             "non_interactive": False,
             **kwargs,
@@ -196,20 +197,29 @@ def interactive(**kwargs):
     )
 
 
+DOWN = "\x1b[B"
+# The quality models step: SDXL 1.0 is the first option and the recommended Qwen-Image the
+# fifth. Mark one, unmark the other, Enter.
+SDXL = " " + DOWN * 4 + " " + "\r"
+# FLUX Dev is the second one; its precision menu then takes Enter (the recommended fp8).
+FLUX_DEV = DOWN + " " + DOWN * 3 + " " + "\r" + "\r"
+
+
 def test_the_step_appears_with_sdxl_and_nothing_is_marked_on_a_new_install(
     machine, monkeypatch, capsys
 ):
     # folder, profile quality, model sdxl, Enter (none marked), accept.
-    press(monkeypatch, "123\r1")
+    press(monkeypatch, "12" + SDXL + "\r1")
     assert setup_command.run(interactive()) == 0
     output = capsys.readouterr().out
     assert "Step 4 of 5" in output and "Style LoRAs for SDXL 1.0" in output
-    assert "[x]" not in output and "[ ] " in output
+    section = output.split("Style LoRAs for SDXL 1.0")[1].split("Selected:")[0]
+    assert "[x]" not in section and "[ ] " in section
     assert present(machine) == set()
 
 
 def test_the_step_shows_category_size_and_license(machine, monkeypatch, capsys):
-    press(monkeypatch, "123\r1")
+    press(monkeypatch, "12" + SDXL + "\r1")
     setup_command.run(interactive())
     output = capsys.readouterr().out
     lora = manifest.load().loras[CATALOG[0]]
@@ -219,14 +229,14 @@ def test_the_step_shows_category_size_and_license(machine, monkeypatch, capsys):
 
 def test_numbers_choose_the_loras(machine, monkeypatch):
     chosen = CATALOG[:3:2]
-    press(monkeypatch, f"123{pick(chosen)}\r1")
+    press(monkeypatch, f"12{SDXL}{pick(chosen)}\r1")
     assert setup_command.run(interactive()) == 0
     assert present(machine) == set(chosen)
 
 
 def test_zero_goes_back_to_the_model(machine, monkeypatch, capsys):
     # ... at the LoRAs step, 0 goes back to the model (default sdxl), then on again.
-    press(monkeypatch, "1230\r\r\r1")
+    press(monkeypatch, "12" + SDXL + "0" + "\r\r\r")
     assert setup_command.run(interactive()) == 0
     output = capsys.readouterr().out
     assert output.count("Step 3 of 5") == 2 and output.count("Step 4 of 5") == 2
@@ -234,10 +244,10 @@ def test_zero_goes_back_to_the_model(machine, monkeypatch, capsys):
 
 def test_choosing_flux_removes_the_step(machine, monkeypatch, capsys):
     # folder, profile quality, model flux-dev, accept.
-    press(monkeypatch, "121" "1")
+    press(monkeypatch, "12" + FLUX_DEV + "1")
     assert setup_command.run(interactive()) == 0
     output = capsys.readouterr().out
-    assert "Style LoRAs" not in output and "Step 4 of 4" in output
+    assert "Style LoRAs" not in output and "Step 5 of 5" in output
 
 
 def test_the_model_argument_keeps_the_step_in_the_count(machine, monkeypatch, capsys):
@@ -247,14 +257,14 @@ def test_the_model_argument_keeps_the_step_in_the_count(machine, monkeypatch, ca
 
 
 def test_the_loras_argument_hides_the_step(machine, monkeypatch, capsys):
-    press(monkeypatch, "1231")
+    press(monkeypatch, "12" + SDXL + "1")
     assert setup_command.run(interactive(loras="none")) == 0
     assert "Style LoRAs" not in capsys.readouterr().out
 
 
 def test_an_answer_is_dropped_when_the_model_is_changed_afterwards(machine, monkeypatch):
     # sdxl with a LoRA, back (review, then the LoRAs step) to the model, flux-dev, accept.
-    press(monkeypatch, f"123{pick(CATALOG[:1])}\r" "0" "0" "1" "1")
+    press(monkeypatch, f"12{SDXL}{pick(CATALOG[:1])}\r" "0" "0" " " + DOWN + " " + "\r" + "\r" + "1")
     assert setup_command.run(interactive()) == 0
     assert present(machine) == set()
 
@@ -265,7 +275,7 @@ def test_existing_loras_come_marked_and_enter_keeps_them(machine, monkeypatch, c
     machine.downloads.clear()
     capsys.readouterr()
     # profile and model are asked again; the LoRAs step shows the installed ones marked.
-    press(monkeypatch, "23" "\r" "1")
+    press(monkeypatch, "2" "\r" "\r" "1")
     assert setup_command.run(interactive(accept_licenses=True)) == 0
     output = capsys.readouterr().out
     assert f"Selected: {', '.join(kept)}" in output
@@ -274,13 +284,13 @@ def test_existing_loras_come_marked_and_enter_keeps_them(machine, monkeypatch, c
 
 def test_choosing_none_in_the_step_removes_the_installed_ones(machine, monkeypatch):
     setup_command.run(sdxl(loras=CATALOG[0]))
-    press(monkeypatch, "23" " " "\r" "1")
+    press(monkeypatch, "2" "\r" " " "\r" "1")
     assert setup_command.run(interactive()) == 0
     assert present(machine) == set()
 
 
 def test_nothing_is_written_before_the_confirmation(machine, monkeypatch):
-    press(monkeypatch, f"123{pick(CATALOG[:1])}\r" "\x03")
+    press(monkeypatch, f"12{SDXL}{pick(CATALOG[:1])}\r" "\x03")
 
     with pytest.raises(KeyboardInterrupt):
         setup_command.run(interactive())
@@ -289,7 +299,7 @@ def test_nothing_is_written_before_the_confirmation(machine, monkeypatch):
 
 
 def test_exiting_from_the_review_writes_nothing(machine, monkeypatch):
-    press(monkeypatch, f"123{pick(CATALOG[:1])}\r" "0" "0" "0" "0" "0")
+    press(monkeypatch, f"12{SDXL}{pick(CATALOG[:1])}\r" "0" "0" "0" "0" "0")
     assert setup_command.run(interactive()) == 0
     assert machine.downloads == [] and not config.INSTALL_MANIFEST.exists()
 
@@ -297,7 +307,7 @@ def test_exiting_from_the_review_writes_nothing(machine, monkeypatch):
 def test_deleting_loras_in_the_step_asks_for_the_final_confirmation(machine, monkeypatch, capsys):
     setup_command.run(sdxl(loras=CATALOG[0]))
     capsys.readouterr()
-    press(monkeypatch, "23" " " "\r" "1")
+    press(monkeypatch, "2" "\r" " " "\r" "1")
     assert setup_command.run(interactive(accept_licenses=True)) == 0
     assert "To delete:" in capsys.readouterr().out
 
@@ -556,7 +566,7 @@ def test_start_with_a_malformed_list(spawned):
 
 def test_the_installer_process_receives_the_loras():
     parsed = agent_setup._args("quality", "", "sdxl", "", "anime,detail")
-    assert parsed.loras == "anime,detail" and parsed.quality_model == "sdxl"
+    assert parsed.loras == "anime,detail" and parsed.quality_models == "sdxl"
     assert agent_setup._args("quality", "", "sdxl").loras is None
 
 

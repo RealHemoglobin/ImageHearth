@@ -125,6 +125,17 @@ def test_minimum_profile_of_each_workflow(tiny):
         "sdxl_quality": "quality",
         "flux_kontext_dev_basic": "full",
         "flux_kontext_dev_gguf": "full",
+        # Phase 15: each one belongs to the first profile that has its capability.
+        "z_image_turbo": "fast",
+        "klein_4b": "fast",
+        "klein_4b_edit": "full",
+        "chroma_hd": "quality",
+        "qwen_image": "quality",
+        "qwen_image_gguf": "quality",
+        "hidream_full": "quality",
+        "hidream_full_gguf": "quality",
+        "qwen_edit_2511": "full",
+        "qwen_edit_2511_gguf": "full",
     }
 
 
@@ -161,9 +172,10 @@ def test_model_in_extra_paths_is_installed(tiny, tmp_path):
         "  is_default: true\n  diffusion_models: diffusion_models\n"
     )
     assert engine_catalog.entries()["flux_kontext_dev_basic"].installed
-    check = doctor.check_models(
-        config, InstallManifest(config.INSTALL_MANIFEST), tiny, False, "linux"
-    )
+    records = InstallManifest(config.INSTALL_MANIFEST)
+    records.profile, records.quality_model = "full", "flux-dev"
+    records.precision = records.edit_precision = "fp8"
+    check = doctor.check_models(config, records, tiny, False, "linux")
     assert check.details["profiles"]["full"]
 
 
@@ -339,7 +351,18 @@ class OnlyFast(EngineTestCase):
 
     def test_list_keeps_its_shape(self):
         self.assertEqual(
-            list_workflows(), [{"name": "sdxl_turbo", "file": "sdxl_turbo.json"}]
+            list_workflows(),
+            [
+                {
+                    "model": "sdxl-turbo",
+                    "capability": "fast",
+                    "precision": "fp16",
+                    "default": True,
+                    "workflow": "sdxl_turbo",
+                    "license": "Stability AI Community License",
+                    "commercial_use": True,
+                }
+            ],
         )
 
     def test_more_models_show_up_without_restart(self):

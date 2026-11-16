@@ -20,9 +20,10 @@ irm https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.ps
 
 ## Qué le puedes pedir a tu agente
 
-- *"Genera un póster de una ciudad futurista de noche"*: borrador rápido con SDXL Turbo.
-- *"Haz una imagen de alta calidad de 1536x1024 de un castillo medieval"*: el modelo de calidad que instalaste (FLUX Dev, FLUX Schnell o SDXL 1.0).
-- *"Cambia el fondo de `foto.png` por una montaña nevada"*: FLUX Kontext.
+- *"Genera un póster de una ciudad futurista de noche"*: borrador rápido con el modelo rápido que instalaste (SDXL Turbo, Z-Image-Turbo o FLUX.2 Klein 4B).
+- *"Haz una imagen de alta calidad de 1536x1024 de un castillo medieval"*: el modelo de calidad que instalaste (Qwen-Image, Chroma1-HD, HiDream, FLUX o SDXL 1.0).
+- *"Cambia el fondo de `foto.png` por una montaña nevada"*: el modelo de edición que instalaste (FLUX.2 Klein 4B, Qwen-Image-Edit o FLUX Kontext).
+- *"Hazlo con Chroma"* / *"usa el modelo Klein"*: con varios modelos instalados, el agente puede elegir uno por su nombre.
 - *"Combina estas tres fotos en una sola escena"*: hasta seis imágenes de referencia.
 
 ### Varias imágenes a la vez
@@ -135,46 +136,92 @@ Nunca piden `sudo` ni permisos de administrador, ni aceptan una licencia por ti.
 
 Setup detecta tu hardware y cualquier ComfyUI existente, propone un perfil y muestra el espacio y las licencias **antes de descargar nada**. Después instala ComfyUI y los modelos y genera una imagen de prueba. Si se interrumpe, vuelve a ejecutarlo y continúa donde se quedó.
 
-| Perfil | Qué incluye | Modelos |
-|---|---|---|
-| `fast` | Generación rápida con SDXL Turbo | 6,9 GB |
-| `quality` | `fast` + un modelo de alta calidad **a tu elección** (abajo) | 13,9 a 24,6 GB |
-| `full` | `quality` + edición con FLUX Kontext | 31,6 a 36,5 GB |
+| Perfil | Qué incluye |
+|---|---|
+| `fast` | Generación rápida: uno o más modelos **rápidos** |
+| `quality` | `fast` + uno o más modelos de generación de **alta calidad** |
+| `full` | `quality` + uno o más modelos de **edición** |
 
-#### Elegir el modelo de calidad
+La descarga depende de los modelos que elijas: desde unos 7 GB (solo SDXL Turbo) hasta bastante más de 100 GB con varios grandes. Setup muestra el total, lo que ya está y el espacio libre antes de pedirte que aceptes nada.
+
+#### Elegir los modelos
 
 **Cómo se responde.** Cada pregunta muestra opciones numeradas: pulsa un número para elegirla (sin Enter), o Enter para la recomendada. Las de sí o no se responden con una tecla (`y`, `s` o `n`). **0 vuelve** a la pregunta anterior conservando tus respuestas; en la primera, sale sin cambiar nada. Cada pregunta indica `Step N of M` y no se escribe ni se descarga nada hasta que aceptes el resumen final. Ctrl+C sale en cualquier momento sin dejar nada a medias. Sin terminal (tubería, algunos IDE) o con `--non-interactive`, setup lee un número y Enter por línea, o necesita las opciones en la línea de comandos.
 
-Con `quality` o `full`, setup pregunta qué modelo instalar para la generación de alta calidad. Solo hay uno instalado a la vez. Muestra de cada uno el tamaño de descarga, la memoria de GPU mínima, la licencia y si permite uso comercial, marca el recomendado para tu GPU y avisa de los que no caben. En modo no interactivo, pasa `--quality-model`; sin él, setup usa el recomendado y lo indica.
+Cada capacidad del perfil (**rápida**, **calidad** y, con `full`, **edición**) tiene su propia selección múltiple (flechas, Espacio para marcar, Enter para aceptar) con **uno o más** modelos. En una instalación nueva solo sale marcado el recomendado para tu GPU; en una existente, los instalados. Cada línea muestra el tamaño de descarga y el tiempo por imagen medido para el nivel de tu GPU, la licencia y si permite uso comercial. Después, por cada modelo con más de una **precisión**, un menú muestra el tamaño, el tiempo, la memoria de GPU y cuánto pasaría a la RAM del sistema en tu nivel (la recomendada es la mejor que cabe sin pasar pesos a la RAM). Si marcaste varios modelos en una capacidad, eliges cuál es el **predeterminado**: el que usa `create_image` cuando no se le indica modelo. Antes de confirmar, setup muestra el plan con el espacio que necesita frente al libre y, si se sustituyen modelos, qué se borrará y por qué; sin espacio suficiente se niega a continuar.
 
-| Modelo | `--quality-model` | Licencia | Uso comercial | Descarga | Memoria de GPU | Recomendado desde |
-|---|---|---|---|---|---|---|
-| FLUX.1 Dev | `flux-dev` | [FLUX [dev] Non-Commercial](https://bfl.ai/legal/non-commercial-license-terms) | **No** | 17,6 GB (fp8) o 12,2 GB (GGUF Q5) | 20 GB (12 GB con GGUF) | 20 GB |
-| FLUX.1 Schnell | `flux-schnell` | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) | Sí | 17,6 GB | 12 GB (simulado limitando la tarjeta de 24 GB) | 12 GB |
-| SDXL 1.0 | `sdxl` | [CreativeML Open RAIL++-M](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/LICENSE.md) | Sí, con restricciones de uso | 7,0 GB | 8 GB | cualquiera |
+Los tiempos son segundos por imagen de 1024x1024 con el modelo ya cargado, medidos en una RTX 4090 limitada a 8, 16 y 24 GB (y la tarjeta entera para 32+ GB, que solo difiere donde los pesos dejan de pasar a la RAM). Un `*` indica que parte del modelo pasó a la RAM del sistema en ese nivel. Detalles y método: [el análisis](https://github.com/RealHemoglobin/ImageHearth/blob/main/specs/2026-11-15-analisis-modelos/analysis.md). Un guion largo significa no medido.
 
-- FLUX Dev da más detalle; FLUX Schnell genera la imagen en 4 pasos; SDXL 1.0 es el más ligero y admite prompt negativo. Aunque un modelo no quepa en tu GPU puedes instalarlo: setup avisa con el mínimo y la memoria que ha detectado, y la última palabra es tuya.
-- Las licencias que setup te pide aceptar son solo las de lo que descarga. Con `flux-schnell` o `sdxl` en `quality` no se descarga ningún archivo de FLUX [dev]. **La edición con FLUX Kontext en `full` es no comercial sea cual sea el modelo de calidad.**
-- FLUX Dev usa fp8 con 20 GB o más y GGUF Q5 con 12 a 20 GB (ComfyUI pasa a la RAM del sistema lo que no cabe, y eso es más lento). Fuerza una con `--variant fp8|gguf`. Estas opciones pequeñas se han simulado a propósito y aún no se han medido en una tarjeta real de 12 a 20 GB.
-- La edición necesita 12 GB: `full` no está disponible por debajo.
+| Modelo | `name` | Precisión | Descarga | 8 GB | 16 GB | 24 GB | 32+ GB | Licencia | Uso comercial |
+|---|---|---|---|---|---|---|---|---|---|
+| **Rápidos** | | | | | | | | | |
+| SDXL Turbo | `sdxl-turbo` | fp16 | 6,9 GB | — | — | — | — | [Stability AI Community](https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md) | Con registro; licencia por encima de 1 M USD al año |
+| Z-Image-Turbo | `z-image-turbo` | int8 | 12,2 GB | 2,0 s | 2,0 s | 2,0 s | 2,0 s | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) | Sí |
+| Z-Image-Turbo | `z-image-turbo` | bf16 | 20,7 GB | 4,1 s* | 3,6 s | 3,6 s | 3,6 s | Apache-2.0 | Sí |
+| FLUX.2 Klein 4B | `klein-4b` | bf16 | 16,1 GB | 1,5 s | 1,3 s | 1,3 s | 1,3 s | Apache-2.0 | Sí |
+| **Calidad** | | | | | | | | | |
+| SDXL 1.0 | `sdxl` | fp16 | 7,0 GB | — | — | — | — | [CreativeML Open RAIL++-M](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/LICENSE.md) | Sí, con restricciones de uso |
+| FLUX.1 Dev | `flux-dev` | fp8 / GGUF Q5 | 17,6 / 12,3 GB | — | — | — | — | [FLUX [dev] Non-Commercial](https://bfl.ai/legal/non-commercial-license-terms) | **No** |
+| FLUX.1 Schnell | `flux-schnell` | fp8 | 17,6 GB | — | — | — | — | Apache-2.0 | Sí |
+| Chroma1-HD | `chroma-hd` | fp8 | 14,7 GB | 19,3 s | 17,7 s | 17,7 s | 17,7 s | Apache-2.0 | Sí |
+| Chroma1-HD | `chroma-hd` | bf16 | 23,3 GB | 37,5 s* | 27,4 s | 25,9 s | 25,9 s | Apache-2.0 | Sí |
+| Qwen-Image | `qwen-image` | Q2_K | 16,7 GB | 44,3 s | 35,7 s | 35,8 s | 35,8 s | Apache-2.0 | Sí |
+| Qwen-Image | `qwen-image` | Q4_K_M | 22,7 GB | 60,3 s | 39,9 s | 38,3 s | 37,3 s | Apache-2.0 | Sí |
+| Qwen-Image | `qwen-image` | fp8 | 30,1 GB | 30,8 s* | 26,2 s* | 24,3 s | 24,3 s | Apache-2.0 | Sí |
+| Qwen-Image | `qwen-image` | bf16 | 50,5 GB | 53,6 s* | 40,7 s* | 33,2 s* | 33,6 s* | Apache-2.0 | Sí |
+| HiDream-I1 Full | `hidream-full` | Q4_K_M | 27,7 GB | 95,7 s* | 76,7 s | 77,8 s | 78,5 s | [MIT](https://opensource.org/license/mit) + [Llama 3.1](https://www.llama.com/llama3_1/license/) | Sí (condiciones de Llama) |
+| HiDream-I1 Full | `hidream-full` | fp8 | 33,3 GB | 73,1 s* | 68,4 s | 67,7 s | 64,4 s | MIT + Llama 3.1 | Sí (condiciones de Llama) |
+| **Edición** | | | | | | | | | |
+| FLUX.1 Kontext Dev | `kontext` | fp8 / GGUF Q5 | 17,6 / 12,4 GB | — | — | — | — | FLUX [dev] Non-Commercial | **No** |
+| FLUX.2 Klein 4B | `klein-4b` | bf16 | 16,1 GB | 2,5 s | 2,5 s | 2,5 s | 2,5 s | Apache-2.0 | Sí |
+| Qwen-Image-Edit-2511 | `qwen-image-edit` | Q4_K_M | 22,5 GB | 173 s | 140 s | 137 s | 137 s | Apache-2.0 | Sí |
+| Qwen-Image-Edit-2511 | `qwen-image-edit` | fp8 | 30,2 GB | 120,8 s* | 112,5 s* | 112,9 s | 112,9 s | Apache-2.0 | Sí |
 
-**Cambiar de modelo más adelante.** Ejecuta `imagehearth-mcp setup --quality-model flux-schnell` (o elige otro cuando pregunte). Setup muestra lo que va a descargar y a borrar y te pide confirmar (`--yes` en modo no interactivo). El modelo nuevo se descarga y se verifica **antes** de borrar nada, así que si se interrumpe sigues generando con el anterior; vuelve a ejecutar el comando para terminar. Solo se borran los archivos que instaló ImageHearth y que nada más necesita: tus modelos, los de un ComfyUI adjunto y lo compartido (como los codificadores de texto que usa Kontext) se conservan. Se rechaza mientras se genera una imagen. Desde un agente, `setup_start` con otro `quality_model` hace lo mismo.
+Los tamaños de descarga incluyen el codificador de texto y el VAE, que varios modelos comparten (se descargan una sola vez). Las precisiones sin medir no se ofrecen: HiDream fp16 y Qwen-Image-Edit bf16.
 
-**Instalaciones anteriores.** Una instalación hecha antes de esta elección sigue generando: se reconoce como `flux-dev` (fp8 o GGUF) o, si tiene RealVisXL, como un SDXL antiguo. RealVisXL ya no se ofrece; `imagehearth-mcp doctor` te dice cómo pasar a SDXL 1.0 (`setup --quality-model sdxl`), que lo descarga y borra RealVisXL si lo instaló ImageHearth.
+**Recomendado para cada nivel de memoria de GPU** (marcado y preseleccionado, pero puedes elegir cualquier otro):
 
-Cada imagen generada guarda el modelo de calidad y el workflow en el texto del PNG (`ImageHearth-Quality-Model`, `ImageHearth-Workflow`), junto a lo que escribe ComfyUI. `list_workflows`, `get_engine_status` y `doctor` muestran el modelo activo y su licencia.
+| Memoria de GPU | Rápido | Calidad | Edición |
+|---|---|---|---|
+| 8 GB | FLUX.2 Klein 4B | Chroma1-HD fp8 | FLUX.2 Klein 4B |
+| 16 GB | Z-Image-Turbo bf16 | Qwen-Image Q4_K_M | FLUX.2 Klein 4B |
+| 24 GB | Z-Image-Turbo bf16 | Qwen-Image fp8 | Qwen-Image-Edit fp8 |
+| 32 GB o más | Z-Image-Turbo bf16 | Qwen-Image fp8 | Qwen-Image-Edit fp8 |
 
-Comparativa en la RTX 4090 con los mismos tres prompts y la misma semilla (columnas: FLUX Dev, FLUX Schnell, SDXL 1.0), [imágenes completas](https://github.com/RealHemoglobin/ImageHearth/tree/main/specs/2026-11-06-eleccion-modelo-quality/comparison):
+Todas las recomendaciones tienen una licencia que permite el uso comercial, y existe una instalación completa con generación y edición bajo esas licencias en cada nivel.
 
-![FLUX Dev, FLUX Schnell y SDXL 1.0 con los mismos prompts y semilla](https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/specs/2026-11-06-eleccion-modelo-quality/comparison/grid.jpg)
+Notas:
 
-FLUX Dev y Schnell dibujan el cartel que dice OPEN; SDXL 1.0 no representa el texto. También se probó el refiner de SDXL (base con la LoRA de detalle, con y sin refiner, misma semilla): las imágenes fueron prácticamente idénticas, así que no se instala.
+- Aunque un modelo no quepa en tu GPU puedes instalarlo: setup avisa con el mínimo y la memoria que ha detectado, y la última palabra es tuya. La edición y las precisiones GGUF necesitan ComfyUI-GGUF, que setup instala (fijado) cuando un modelo lo necesita.
+- Las licencias que setup te pide aceptar son solo las de lo que descarga. El codificador de texto de HiDream es Llama 3.1 8B: se lista su licencia (con el aviso «Built with Llama») y en modo no interactivo hace falta `--accept-licenses`. Si un repositorio pasa a pedir aprobación o un token, setup lo dice y puedes definir `HF_TOKEN`. **FLUX Dev y Kontext son no comerciales.**
+- FLUX.1 Dev y Kontext usan fp8 con 20 GB o más y GGUF Q5 con 12 a 20 GB. FLUX.2 Klein 4B y Qwen-Image-Edit editan una imagen de referencia cada vez; FLUX Kontext admite hasta seis.
+- Qwen-Image-Edit tarda de dos a tres minutos por imagen en cualquier nivel y cambia más de lo pedido (reilumina la escena); FLUX.2 Klein 4B es el único que edita en segundos. Klein escribió «OPPEN» en el prompt del cartel de la comparativa.
+- La comparativa de calidad, las rejillas de imágenes y las mediciones están en [el análisis](https://github.com/RealHemoglobin/ImageHearth/blob/main/specs/2026-11-15-analisis-modelos/analysis.md).
+
+**En la línea de comandos** (también en modo no interactivo), cada capacidad recibe una lista separada por comas de `nombre[:precisión]`; el primero es el predeterminado. Sin precisión, setup usa la que ya está instalada o la recomendada para tu GPU:
+
+```bash
+imagehearth-mcp setup --profile full \
+  --fast-models klein-4b,sdxl-turbo \
+  --quality-models qwen-image:q4_k_m,chroma-hd:fp8 \
+  --edit-models klein-4b
+```
+
+Un nombre o una precisión equivocados fallan antes de descargar nada y listan los válidos. Sin ninguna de estas opciones, una instalación nueva recibe el modelo recomendado de cada capacidad (y lo indica); una existente conserva lo que tiene. `--quality-model NOMBRE` sigue funcionando como `--quality-models NOMBRE`.
+
+**Cambiar los modelos más adelante.** En una instalación existente una lista **fija el conjunto** de esa capacidad: setup descarga lo que falta, lo verifica y solo entonces borra lo que dejaste fuera o sustituiste (también al cambiar de precisión). Muestra lo que va a descargar y a borrar, y por qué, y te pide confirmar (`--yes` en modo no interactivo). Añadir modelos no necesita confirmación. Las capacidades que no pases se dejan como están. Solo se borran los archivos que instaló ImageHearth y que ningún modelo restante necesita: tus modelos, los de un ComfyUI adjunto y lo compartido se conservan. Se rechaza mientras se genera una imagen. Desde un agente, `setup_start` recibe `fast_models`, `quality_models` y `edit_models` y hace lo mismo.
+
+**Instalaciones anteriores.** Una instalación hecha antes de esta elección sigue generando, sin descargar ni borrar nada: SDXL Turbo es su modelo rápido, su modelo de calidad (FLUX Dev, FLUX Schnell o SDXL 1.0; o un SDXL antiguo con RealVisXL) el de calidad y Kontext, si lo tiene, el de edición, cada uno como predeterminado. RealVisXL ya no se ofrece; `imagehearth-mcp doctor` te dice cómo pasar a SDXL 1.0 (`setup --quality-models sdxl`).
+
+**Pedir un modelo.** `create_image(prompt="un zorro", model="klein-4b")` usa un modelo instalado; `quality: "high"` o `image_paths` indican qué capacidad debe tener, y sin `model` se usa el predeterminado de esa capacidad. `list_workflows` lista cada modelo instalado con su capacidad, precisión, si es el predeterminado, licencia, uso comercial y segundos medidos. Un `model` desconocido, no instalado, de otra capacidad o combinado con `workflow` falla antes de tocar la GPU y dice qué hay instalado y el comando que instala el resto. En una lista de prompts, `model` puede indicarse por elemento o para todos. Las LoRAs solo funcionan con `sdxl`.
+
+Cada imagen generada guarda el modelo (`ImageHearth-Model`, como `nombre:precisión`), el modelo de calidad y el workflow en el texto del PNG (`ImageHearth-Quality-Model`, `ImageHearth-Workflow`), junto a lo que escribe ComfyUI. `list_workflows` y `doctor` muestran los modelos instalados y sus licencias, y `get_engine_status` el modelo de calidad predeterminado.
 
 #### LoRAs de estilo (solo SDXL 1.0)
 
-Con `sdxl` como modelo de calidad, setup también ofrece pequeñas **LoRAs de estilo**: pixel art, papel recortado, línea, lápiz, cera, 3D, plastilina y alguna más. Son opcionales y no se instala ninguna si no la eliges. Solo funcionan con SDXL 1.0 (`quality: "high"`): no con FLUX, `fast` ni la edición. `setup` interactivo añade un paso tras el modelo con una selección múltiple que muestra categoría, tamaño y licencia de cada una (números separados por comas, Enter para dejar las marcadas, `none` para ninguna, 0 vuelve). En no interactivo: `--loras nombre1,nombre2`, `--loras all` o `--loras none`. En una instalación existente `--loras` **fija el conjunto**: descarga las que faltan y borra las que no están en la lista (solo archivos que descargó ImageHearth; los tuyos en `models/loras` no se tocan nunca). Sin `--loras` las LoRAs se quedan como están. Pasar de SDXL 1.0 a FLUX también las borra, y la confirmación lo dice. Desde un agente, `setup_status` las lista en `loras` y `setup_start` acepta `loras` (`["all"]` o una lista).
+Con `sdxl` entre los modelos de calidad, setup también ofrece pequeñas **LoRAs de estilo**: pixel art, papel recortado, línea, lápiz, cera, 3D, plastilina y alguna más. Son opcionales y no se instala ninguna si no la eliges. Solo funcionan con SDXL 1.0 (`quality: "high"`, `model: "sdxl"` o como predeterminado): no con los demás modelos, `fast` ni la edición. `setup` interactivo añade un paso tras el modelo con una selección múltiple que muestra categoría, tamaño y licencia de cada una (números separados por comas, Enter para dejar las marcadas, `none` para ninguna, 0 vuelve). En no interactivo: `--loras nombre1,nombre2`, `--loras all` o `--loras none`. En una instalación existente `--loras` **fija el conjunto**: descarga las que faltan y borra las que no están en la lista (solo archivos que descargó ImageHearth; los tuyos en `models/loras` no se tocan nunca). Sin `--loras` las LoRAs se quedan como están. Quitar SDXL 1.0 también las borra, y la confirmación lo dice. Desde un agente, `setup_status` las lista en `loras` y `setup_start` acepta `loras` (`["all"]` o una lista).
 
-El agente ve las instaladas en `list_workflows` (el elemento con `active: true` tiene una lista `loras`) y las usa con `create_image(prompt="un faro al amanecer", quality="high", loras=["pixel-art"])`, o con un peso de 0 a 2: `loras=[{"name": "crayon", "weight": 0.6}]`. Como máximo 3 por imagen, cada una una vez; un nombre solo usa su peso recomendado; en una lista de prompts, `loras` se puede dar por elemento o para todos. Las palabras de activación de la LoRA se añaden al prompt por ti, y `style: "auto"` no añade pistas fotográficas cuando una LoRA pide otro medio. Una petición que no admite LoRAs (FLUX, `fast`, edición, un nombre no instalado) falla antes de tocar la GPU y dice por qué. Cada PNG las guarda en `ImageHearth-LoRAs`.
+El agente ve las instaladas en `list_workflows` (el elemento `sdxl` tiene una lista `loras`) y las usa con `create_image(prompt="un faro al amanecer", quality="high", loras=["pixel-art"])`, o con un peso de 0 a 2: `loras=[{"name": "crayon", "weight": 0.6}]`. Como máximo 3 por imagen, cada una una vez; un nombre solo usa su peso recomendado; en una lista de prompts, `loras` se puede dar por elemento o para todos. Las palabras de activación de la LoRA se añaden al prompt por ti, y `style: "auto"` no añade pistas fotográficas cuando una LoRA pide otro medio. Una petición que no admite LoRAs (otro modelo, `fast`, edición, un nombre no instalado) falla antes de tocar la GPU y dice por qué. Cada PNG las guarda en `ImageHearth-LoRAs`.
 
 Cada una se eligió tras medirla en la RTX 4090 contra el mismo texto sin la LoRA (mismo prompt y semilla), y solo se ofrecen las de licencia que permite uso comercial. Quedan fuera las que no mejoraban el prompt solo: **no hay LoRA de acuarela ni de «detalle»** (SDXL ya dibuja una buena acuarela desde el texto y las candidatas eran peores). Los motivos y todas las candidatas probadas están en [la selección](https://github.com/RealHemoglobin/ImageHearth/blob/main/specs/2026-11-15-loras-sdxl/seleccion-loras.md). Mismo prompt y semilla en cada fila (`a red fox sitting in a snowy forest at dawn`); la LoRA con su peso recomendado. Las licencias son las de cada autor, con restricciones de uso que hay que trasladar: mira [THIRD_PARTY_NOTICES.md](https://github.com/RealHemoglobin/ImageHearth/blob/main/THIRD_PARTY_NOTICES.md).
 
@@ -196,9 +243,9 @@ Puedes empezar con `fast` y ejecutar `setup --profile full` más adelante: lo qu
 | Opción | Uso |
 |---|---|
 | `--profile fast\|quality\|full` | Elige el perfil sin preguntar. En macOS: `mac-fast\|mac-quality\|mac-full` |
-| `--quality-model flux-dev\|flux-schnell\|sdxl` | Modelo de calidad de `quality` o `full`. Sin él, una instalación nueva usa el recomendado y una existente conserva el suyo |
+| `--fast-models`, `--quality-models`, `--edit-models` | Modelos de cada capacidad, como `nombre[:precisión],...`; el primero es el predeterminado. Sin ellas, una instalación nueva usa los recomendados y una existente conserva los suyos. `--quality-model NOMBRE` es la forma antigua |
 | `--loras NOMBRES` | LoRAs de estilo para SDXL 1.0: nombres separados por comas, `all` o `none`. En una instalación existente fija el conjunto (descarga las que faltan y borra las demás). Sin ella no cambia nada |
-| `--variant fp8\|gguf` | Fuerza la precisión en vez de la que cabe en la memoria de tu GPU |
+| `--variant fp8\|gguf` | Precisión de los modelos que no indican una con `nombre:precisión`, donde la tengan, en vez de la recomendada |
 | `--yes` | Confirma el cambio de modelo de calidad sin preguntar |
 | `--experimental` | Obligatorio en macOS, que está sin probar |
 | `--accept-licenses` | Acepta las licencias sin preguntar. Obligatoria con `--non-interactive` |
@@ -311,6 +358,9 @@ Los modelos no forman parte de este proyecto y tienen sus propias condiciones. *
 | FLUX.1 Dev | [FLUX.1 [dev] Non-Commercial](https://bfl.ai/legal/non-commercial-license-terms) | Uso no comercial del modelo |
 | FLUX.1 Kontext Dev | [FLUX.1 [dev] Non-Commercial](https://bfl.ai/legal/non-commercial-license-terms) | Uso no comercial del modelo |
 | SDXL Turbo | [Stability AI Community](https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md) | El uso comercial exige registro y tiene un límite de ingresos |
+| Z-Image-Turbo, FLUX.2 Klein 4B, Chroma1-HD, Qwen-Image, Qwen-Image-Edit, FLUX.1 Schnell | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) | Permisiva: uso comercial permitido |
+| HiDream-I1 Full | [MIT](https://opensource.org/license/mit) | Permisiva. Su codificador de texto es Llama 3.1 (fila siguiente) |
+| Llama 3.1 8B (codificador de texto de HiDream) | [Llama 3.1 Community](https://www.llama.com/llama3_1/license/) | Uso comercial con condiciones; muestra «Built with Llama» si lo redistribuyes |
 
 ## Desarrollo
 

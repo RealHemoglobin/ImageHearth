@@ -503,7 +503,7 @@ def test_sdxl_workflows_fit_the_template_conventions():
 
     base = json.loads((engine_config.WORKFLOWS_DIR / "sdxl_base.json").read_text(encoding="utf-8"))
     assert base["1"]["inputs"]["ckpt_name"] == "sd_xl_base_1.0.safetensors"
-    assert engine_catalog.VARIANTS["high"] == (
+    assert engine_catalog.VARIANTS["high"][:5] == (
         "flux_dev",
         "flux_dev_gguf",
         "flux_schnell",
@@ -545,7 +545,8 @@ def test_profiles_are_proposed_by_vram():
     assert propose(24564) == "full"
     assert propose(16384) == "full"
     assert propose(12288) == "full"
-    assert propose(8192) == "quality"
+    # FLUX.2 Klein 4B edits in 8 GB, so `full` fits there too (phase 15).
+    assert propose(8192) == "full"
     assert propose(6144) == "fast"
 
 

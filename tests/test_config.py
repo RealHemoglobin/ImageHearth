@@ -153,6 +153,17 @@ class PackageData(unittest.TestCase):
                 "sdxl_quality.json",
                 "sdxl_base.json",
                 "flux_schnell.json",
+                # Phase 15.
+                "z_image_turbo.json",
+                "klein_4b.json",
+                "klein_4b_edit.json",
+                "chroma_hd.json",
+                "qwen_image.json",
+                "qwen_image_gguf.json",
+                "hidream_full.json",
+                "hidream_full_gguf.json",
+                "qwen_edit_2511.json",
+                "qwen_edit_2511_gguf.json",
             },
         )
 

@@ -91,6 +91,9 @@ explicit-preview-rules = true
 "tests/test_move.py" = ["F811"]
 "tests/test_loras.py" = ["F811"]
 "tests/test_lora_install.py" = ["F811"]
+"tests/test_model_install.py" = ["F811"]
+"tests/test_model_sets.py" = ["F811"]
+"tests/test_model_choice.py" = ["F811"]
 # Restaurar Ollama es limpieza final: cualquier fallo se convierte en aviso
 # para no perder la imagen ya generada.
 "src/imagehearth_mcp/engine/orchestrator.py" = ["BLE001"]

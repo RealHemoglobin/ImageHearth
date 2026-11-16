@@ -250,7 +250,13 @@ MAX_PIXELS = _int_env("IMAGEHEARTH_MAX_PIXELS", 8_388_608)
 MAX_REFERENCES = 6
 
 # Plantillas que no se pueden usar como workflow de generación.
-INTERNAL_WORKFLOWS = {"flux_kontext_dev_basic", "flux_kontext_dev_gguf"}
+INTERNAL_WORKFLOWS = {
+    "flux_kontext_dev_basic",
+    "flux_kontext_dev_gguf",
+    "klein_4b_edit",
+    "qwen_edit_2511",
+    "qwen_edit_2511_gguf",
+}
 
 COMFY_LOG_MAX_BYTES = 10 * 1024 * 1024
 LOG_RETENTION_DAYS = 14

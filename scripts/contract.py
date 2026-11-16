@@ -65,15 +65,25 @@ def workflow_nodes():
 
 
 def unknown_inputs(available):
-    """Inputs of the LoRA workflow that the node in ComfyUI doesn't declare."""
+    """Inputs of every workflow (and of the LoRA one) that ComfyUI's node doesn't declare.
+
+    Returns (workflow, "Node id: input") pairs. Connections and literals are checked alike:
+    a renamed input is the way a ComfyUI update breaks a template.
+    """
     wrong = []
 
-    for key, node in lora_workflow().items():
-        declared = available[node["class_type"]]["input"]
-        names = {*declared.get("required", {}), *declared.get("optional", {})}
-        wrong += [
-            f"{node['class_type']} {key}: {name}" for name in node["inputs"] if name not in names
-        ]
+    for name, workflow in workflows().items():
+        for key, node in workflow.items():
+            if not isinstance(node, dict) or "class_type" not in node:
+                continue
+
+            declared = available[node["class_type"]]["input"]
+            names = {*declared.get("required", {}), *declared.get("optional", {})}
+            wrong += [
+                (name, f"{node['class_type']} {key}: {item}")
+                for item in node.get("inputs", {})
+                if item not in names
+            ]
 
     return wrong
 
@@ -177,13 +187,13 @@ def check_contract(base_dir):
         wrong = unknown_inputs(available)
 
         if wrong:
-            for item in wrong:
-                print(f"UNKNOWN INPUT {item} ({LORA_WORKFLOW})")
+            for name, item in wrong:
+                print(f"UNKNOWN INPUT {item} ({name})")
 
             sys.exit(1)
 
         print(f"OK: {len(workflow_nodes())} node types used by the workflows exist.")
-        print(f"OK: the inputs of {LORA_WORKFLOW} exist.")
+        print(f"OK: the inputs of the {len(workflows())} workflows exist.")
     finally:
         if not processes.terminate(process.pid, 30):
             processes.kill(process.pid)

@@ -355,7 +355,19 @@ def test_every_workflow_has_its_models(catalog):
             for value in node.get("inputs", {}).values()
             if isinstance(value, str) and value.endswith((".safetensors", ".gguf"))
         ]
-        assert names, path
+
+        if not names:
+            # The newer workflows keep %UNET%, %CLIP% and %VAE% markers: the catalog
+            # option that names the workflow says which files fill them.
+            used = {
+                workflow_name
+                for model in catalog.catalog.values()
+                for option in model.options
+                for workflow_name in option.workflows.values()
+            }
+            assert path.stem in used, path
+            assert "%UNET%" in json.dumps(workflow), path
+            continue
 
         for name in names:
             assert path.stem in declared[name], (path, name)
@@ -371,6 +383,16 @@ def test_profiles_are_cumulative(catalog):
     unused = {
         "flux_dev_gguf", "flux_kontext_gguf", "t5xxl_gguf", "realvisxl", "sdxl_offset_lora",
         "flux_schnell", "sdxl_base",
+    }
+    # Phase 15 models are chosen through model sets, not through these profiles.
+    classic = {"sdxl-turbo", "sdxl", "flux-dev", "flux-schnell", "kontext"}
+    unused |= {
+        weight.name
+        for entry in catalog.catalog.values()
+        if entry.name not in classic
+        for option in entry.options
+        for weight in catalog.expand(option.models)
+        if weight.name not in {"t5xxl", "flux_vae"}
     }
     assert {m.name for m in full.models} == set(catalog.models) - unused
 
@@ -974,7 +996,25 @@ def setup_args(**kwargs):
         skip_smoke_test=True,
         experimental=False,
     )
-    return argparse.Namespace(**{**defaults, **kwargs})
+    values = {**defaults, **kwargs}
+
+    # Before phase 15 a non-interactive run installed SDXL Turbo, FLUX Dev and Kontext; those
+    # are what most of these tests are about. Tests of the models chosen for the GPU pass
+    # `legacy_models=False`.
+    if (
+        values.pop("legacy_models", True)
+        and values["non_interactive"]
+        and values["profile"] in ("fast", "quality", "full")
+    ):
+        values.setdefault("fast_models", "sdxl-turbo")
+
+        if values["profile"] in ("quality", "full") and "quality_model" not in values:
+            values.setdefault("quality_models", "flux-dev")
+
+        if values["profile"] == "full":
+            values.setdefault("edit_models", "kontext")
+
+    return argparse.Namespace(**values)
 
 
 @pytest.fixture
@@ -1207,7 +1247,7 @@ def test_propose_profile(catalog):
         return setup_command.propose_profile(detection, catalog)
 
     assert proposal(24000) == "full"
-    assert proposal(8000) == "quality"  # the SDXL variant
+    assert proposal(8000) == "full"  # FLUX.2 Klein 4B generates and edits in 8 GB
     assert proposal(7000) == "fast"
     assert proposal(2000) == "fast"
     assert proposal(24000, disk=10 * GB) == "fast"

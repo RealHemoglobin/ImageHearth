@@ -406,13 +406,13 @@ def test_png_without_loras_has_no_lora_text(tmp_path):
 
 
 def items():
-    return {item["name"]: item for item in list_workflows()}
+    return {item["model"]: item for item in list_workflows()}
 
 
 def test_list_workflows_shows_the_installed_loras(sdxl):
     put(sdxl, "anime-pop")
-    active = items()["sdxl_base"]
-    assert active["active"]
+    active = items()["sdxl"]
+    assert active["default"]
     assert active["loras"] == [
         {
             "name": "anime-pop",
@@ -425,7 +425,7 @@ def test_list_workflows_shows_the_installed_loras(sdxl):
 
 
 def test_list_workflows_with_no_loras_has_an_empty_list(sdxl):
-    assert items()["sdxl_base"]["loras"] == []
+    assert items()["sdxl"]["loras"] == []
 
 
 def test_list_workflows_with_flux_has_no_loras_field(tiny, monkeypatch):
@@ -436,7 +436,7 @@ def test_list_workflows_with_flux_has_no_loras_field(tiny, monkeypatch):
 
 
 def test_only_the_sdxl_item_has_loras(sdxl):
-    assert "loras" not in items()["sdxl_turbo"]
+    assert "loras" not in items()["sdxl-turbo"]
 
 
 def test_engine_catalog_still_installed(sdxl):

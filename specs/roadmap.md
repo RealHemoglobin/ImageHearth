@@ -584,41 +584,46 @@ Cambio pequeño del instalador, independiente del análisis. Hoy las listas de s
 
 ## Fase 15: Nuevos modelos de generación
 
-**Objetivo:** añadir los modelos elegidos en la [fase 14](#fase-14-análisis-de-modelos-de-generación) como opciones instalables, manteniendo la interfaz de ImageHearth: `create_image`, `create_images`, `quality`, `mode` y las herramientas de instalación no cambian para el agente.
+**Objetivo:** añadir los modelos elegidos en la [fase 14](#fase-14-análisis-de-modelos-de-generación) como opciones instalables. **Cambio de alcance (decisión del 2026-11-16):** cada capacidad (`fast`, calidad y edición) admite **varios modelos instalados a la vez**, con una precisión cada uno y uno predeterminado; el usuario los elige con selección múltiple y el agente puede escoger cuál usar con un parámetro nuevo y opcional `model` en `create_image` (y en cada elemento de una lista). Sin `model` todo funciona como antes con el predeterminado de cada capacidad; las instalaciones existentes se migran sin descargar ni borrar nada.
 
 **Modelos (decisión del 2026-11-16):** Z-Image-Turbo (int8, bf16), FLUX.2 Klein 4B (generación y edición), Chroma1-HD (fp8, bf16), Qwen-Image (Q2_K, Q4_K_M, fp8, bf16), HiDream-I1 Full (Q4_K_M, fp8; su codificador Llama exige confirmar y mostrar la licencia de Meta) y Qwen-Image-Edit-2511 (Q4_K_M, fp8). Solo se ofrecen las precisiones medidas; HiDream fp16 y Qwen-Edit bf16 se ofrecerían solo si se miden antes. La elección es del usuario: `setup` muestra por cada opción el tamaño, los tiempos y la VRAM medidos en `analysis.md`, y recomienda según el hardware sin impedir elegir otra.
 
-**Principio:** cada modelo nuevo es una entrada del manifiesto y uno o más workflows. El motor no tiene lógica propia por modelo más allá de `build_workflow`.
+**Principio:** cada modelo nuevo es una entrada del catálogo de `models.toml` y uno o más workflows con marcadores (`%UNET%`, `%CLIP%`, `%VAE%`, `%PROMPT%`...). El motor no tiene lógica propia por modelo más allá de `build_workflow`.
+
+Especificación: [specs/2026-11-16-nuevos-modelos](2026-11-16-nuevos-modelos/requirements.md).
 
 ### Catálogo y workflows
 
-- [ ] Generalizar la elección de la fase 9: el modelo de `quality` admite los nuevos modelos de generación, y la edición admite elegir entre Kontext y los modelos de edición seleccionados.
-- [ ] Añadir cada modelo a `models.toml` con revisión, SHA-256, tamaño, licencia, uso comercial, VRAM mínima medida y precisiones disponibles.
-- [ ] Un workflow por modelo y precisión, con los parámetros recomendados, integrado en el catálogo dinámico, `VARIANTS` y la escalera de hardware de la fase 7.
-- [ ] Si un modelo necesita nodos personalizados, instalarlos con versión fijada como `ComfyUI-GGUF`, y añadirlos a la prueba de contrato.
-- [ ] Registrar en la prueba de contrato los nodos que usa cada workflow nuevo.
+- [x] Catálogo por capacidad en `models.toml` (`[catalog.*]`): cada modelo con capacidades, licencia y opciones por precisión con `min_vram_mib`, workflow por capacidad y tiempos, VRAM y descarga a RAM medidos por nivel; recomendación por nivel (`[recommended.*]`). Los modelos de la fase 9 (SDXL, FLUX Dev y Schnell, Kontext) migrados al mismo formato.
+- [x] Añadir cada modelo a `models.toml` con revisión, SHA-256, tamaño, licencia y precisiones disponibles (a partir de las mediciones de la fase 14); componentes compartidos una sola vez.
+- [x] Un workflow por modelo y cargador (`*_gguf`) en `data/workflows/`, integrado en el catálogo dinámico y en `VARIANTS` (derivado del catálogo).
+- [x] Nodos: todos nativos de ComfyUI 0.43.0 salvo `ComfyUI-GGUF` (ya fijado). La prueba de contrato recorre todos los workflows y ahora comprueba también sus entradas.
+- [x] Elección en la generación: `model` en `create_image` y en cada elemento de una lista, con predeterminado por capacidad, errores antes de tocar la GPU y metadato PNG `ImageHearth-Model`.
 
 ### Instalación
 
-- [ ] `setup` ofrece los modelos nuevos con el menú de la fase 11, mostrando tamaño, VRAM mínima, licencia y uso comercial, y recomienda según el hardware como en la fase 9.
-- [ ] `--quality-model` y la opción equivalente para la edición aceptan los nombres nuevos; `setup_status` y `setup_start` los listan.
-- [ ] Cambiar de modelo reutiliza el mecanismo de la fase 9: descargar antes de borrar y conservar los componentes compartidos.
+- [x] `setup` ofrece por capacidad una selección múltiple (flechas, espacio, Enter), después la precisión de cada modelo con varias y el predeterminado, con tamaño, tiempo medido, licencia, uso comercial y recomendado; resumen del plan y del espacio antes de confirmar.
+- [x] `--fast-models`, `--quality-models` y `--edit-models` (`nombre[:precisión]`; `--quality-model` como alias); `setup_status` y `setup_start` los listan y los aceptan.
+- [x] Cambiar el conjunto reutiliza el mecanismo de la fase 9: descargar antes de borrar y conservar los componentes compartidos mientras algún modelo los use. `doctor`, `uninstall` y `update` entienden varios modelos por capacidad.
+- [x] Licencia de Llama 3.1 en el consentimiento al elegir HiDream.
 
 ### Documentación
 
-- [ ] Ampliar en el README la tabla de modelos y la comparativa con los nuevos, y la tabla de requisitos por nivel de VRAM.
-- [ ] Actualizar `THIRD_PARTY_NOTICES.md` con las licencias nuevas.
+- [x] README (inglés y español): tabla de modelos por capacidad con licencia, uso comercial, tamaño y tiempos, y recomendación por nivel de VRAM.
+- [x] `llms-install.md`, skill `imagehearth`, instrucciones del servidor y `docs/troubleshooting.md`.
+- [x] `THIRD_PARTY_NOTICES.md` con las licencias nuevas.
 
 ### Pruebas
 
-- [ ] Pruebas simuladas: catálogo, elección, cambio de modelo y workflows de cada modelo nuevo.
-- [ ] Prueba real etiquetada: generar (y editar, si aplica) con cada modelo nuevo y cambiar entre ellos con `setup`.
+- [x] Pruebas simuladas: catálogo, conjuntos y migración, elección con `model`, lotes, workflows de cada modelo y precisión, instalación y cambio de conjunto, `setup_status` y `setup_start`.
+- [x] Prueba de contrato contra ComfyUI 0.43.0 (nodos y entradas de los 19 workflows).
+- [ ] Pruebas reales rápidas del asistente en la RTX 4090 (Klein 4B, Z-Image-Turbo int8, Chroma1-HD fp8) y de los modelos grandes por el usuario.
 
 **Listo cuando:**
 
-- Cada modelo elegido en la fase 14 se instala con `setup`, genera con `create_image` y `create_images` sin cambios en el agente y se puede cambiar por otro.
+- Cada modelo elegido en la fase 14 se instala con `setup`, genera con `create_image` y `create_images` y se puede cambiar por otro. *(Simulado; falta la prueba real.)*
 - Hay al menos una opción recomendada y medida para cada nivel: 8, 16, 24 y 32 GB o más.
-- Existe una instalación completa (generación y edición) con licencia comercial, si la fase 14 encontró un modelo de edición que lo permita.
+- Existe una instalación completa (generación y edición) con licencia comercial: FLUX.2 Klein 4B en 8 y 16 GB; Z-Image-Turbo, Qwen-Image y Qwen-Image-Edit en 24 GB o más.
 
 ## Fase 16: v1.0
 

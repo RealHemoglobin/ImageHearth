@@ -28,7 +28,9 @@ def roomy(monkeypatch):
 
 
 def interactive(**kwargs):
-    return setup_args(**{"accept_licenses": False, "non_interactive": False, **kwargs})
+    return setup_args(
+        **{"accept_licenses": False, "non_interactive": False, "fast_models": "sdxl-turbo", **kwargs}
+    )
 
 
 def records():

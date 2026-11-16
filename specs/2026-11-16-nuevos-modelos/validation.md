@@ -31,23 +31,30 @@ Prueba de contrato: esta fase añade workflows y tipos de nodo.
 
 Los tests deben cubrir:
 
-- [ ] Catálogo por capacidad válido y rechazos: nombre repetido, capacidad desconocida, precisión repetida, workflow o peso inexistente, licencia ausente.
-- [ ] `Manifest.resolve` con varios modelos por capacidad; componentes compartidos deduplicados (Klein en `fast` y edición, Qwen3-4B, T5/VAE con Chroma).
-- [ ] Migración de manifiestos de instalación de las fases 9–13 sin descargas ni borrados, con predeterminados correctos.
-- [ ] Workflow de cada modelo y precisión nuevos: nodos, conexiones y marcadores rellenos (prompt, negativo, tamaño, semilla e imágenes en edición).
-- [ ] `create_image` sin `model` idéntico a hoy; con `model` válido; no instalado (con comando de instalación); de otra capacidad; con `workflow`. Ninguno arranca ComfyUI ni toca memoria.
-- [ ] Lotes con `model` común y por elemento; un elemento inválido rechaza la lista antes de generar.
-- [ ] LoRAs con `sdxl` y rechazadas con otro modelo; quitar `sdxl` borra las LoRAs.
-- [ ] Metadatos PNG `ImageHearth-Model`.
-- [ ] `list_workflows` con uno y varios modelos por capacidad, predeterminado y `loras`.
-- [ ] `setup` interactivo: selección múltiple por capacidad (nueva sin más marca que la recomendada, existente con las instaladas), precisión con datos medidos, predeterminado, 0 vuelve atrás, `Step N of M` correcto, nada escrito antes de confirmar.
-- [ ] `--fast-models`, `--quality-models`, `--edit-models` con `nombre[:precisión]`, primero predeterminado, alias `--quality-model`, nombres y precisiones desconocidos.
-- [ ] Conjunto fijo: añade lo que falta, borra lo que sobra, cambia precisión descargando antes de borrar, no toca capacidades no pasadas ni componentes en uso.
-- [ ] Resumen de espacio y rechazo cuando no cabe.
-- [ ] Licencia de Llama 3.1 en el consentimiento al elegir HiDream; no interactivo sin `--accept-licenses` falla.
-- [ ] `uninstall`, `update --move-to` y `doctor` (también `--json`) con varios modelos y compartidos; archivos ajenos intactos.
-- [ ] `setup_status` y `setup_start` con las listas nuevas, `quality_model` compatible, listas vacías sin cambios.
-- [ ] Tests existentes sin cambios de comportamiento; si cambian las secuencias de teclas de `setup` por los pasos nuevos, se ajustan y se anotan aquí. Ningún test toca el `HOME` real ni descarga nada.
+- [x] Catálogo por capacidad válido y rechazos: nombre repetido, capacidad desconocida, precisión repetida, workflow o peso inexistente, licencia ausente.
+- [x] `Manifest.resolve` con varios modelos por capacidad; componentes compartidos deduplicados (Klein en `fast` y edición, Qwen3-4B, T5/VAE con Chroma).
+- [x] Migración de manifiestos de instalación de las fases 9–13 sin descargas ni borrados, con predeterminados correctos.
+- [x] Workflow de cada modelo y precisión nuevos: nodos, conexiones y marcadores rellenos (prompt, negativo, tamaño, semilla e imágenes en edición).
+- [x] `create_image` sin `model` idéntico a hoy; con `model` válido; no instalado (con comando de instalación); de otra capacidad; con `workflow`. Ninguno arranca ComfyUI ni toca memoria.
+- [x] Lotes con `model` común y por elemento; un elemento inválido rechaza la lista antes de generar.
+- [x] LoRAs con `sdxl` y rechazadas con otro modelo; quitar `sdxl` borra las LoRAs.
+- [x] Metadatos PNG `ImageHearth-Model`.
+- [x] `list_workflows` con uno y varios modelos por capacidad, predeterminado y `loras`.
+- [x] `setup` interactivo: selección múltiple por capacidad (nueva sin más marca que la recomendada, existente con las instaladas), precisión con datos medidos, predeterminado, 0 vuelve atrás, `Step N of M` correcto, nada escrito antes de confirmar.
+- [x] `--fast-models`, `--quality-models`, `--edit-models` con `nombre[:precisión]`, primero predeterminado, alias `--quality-model`, nombres y precisiones desconocidos.
+- [x] Conjunto fijo: añade lo que falta, borra lo que sobra, cambia precisión descargando antes de borrar, no toca capacidades no pasadas ni componentes en uso.
+- [x] Resumen de espacio y rechazo cuando no cabe.
+- [x] Licencia de Llama 3.1 en el consentimiento al elegir HiDream; no interactivo sin `--accept-licenses` falla.
+- [x] `uninstall`, `update --move-to` y `doctor` (también `--json`) con varios modelos y compartidos; archivos ajenos intactos.
+- [x] `setup_status` y `setup_start` con las listas nuevas, `quality_model` compatible, listas vacías sin cambios.
+- [x] Tests existentes sin cambios de comportamiento; si cambian las secuencias de teclas de `setup` por los pasos nuevos, se ajustan y se anotan aquí. Ningún test toca el `HOME` real ni descarga nada. Ajustes hechos (los 881 tests anteriores pasan con ellos y se añaden los de `tests/test_model_sets.py`, `test_model_choice.py` y `test_model_install.py`):
+  - `setup_args` (tests/test_provisioner.py) fija, en modo no interactivo, `fast_models=sdxl-turbo`, `quality_models=flux-dev` y `edit_models=kontext` si el test no dice otra cosa, que era lo que `setup` instalaba por defecto antes; `legacy_models=False` pide el comportamiento nuevo (el modelo recomendado de cada capacidad).
+  - Secuencias de teclas de `setup` interactivo (test_setup_steps, test_lora_install, test_install_dir, test_quality_model): el paso del modelo de calidad pasó a selección múltiple, a lo que se añaden los pasos de modelos rápidos, precisión, predeterminado y edición; las pruebas de carpeta y LoRAs fijan `fast_models` para no preguntarlo.
+  - `propose_profile`: a 8 GB se propone `full` (FLUX.2 Klein 4B edita en 8 GB); antes `quality`.
+  - `list_workflows` devuelve un item por modelo (`model`, `capability`, ... en vez de `name`, `file`, `active`, `quality_model`).
+  - Mensajes: `--quality-model` pasa a `--quality-models` en las ayudas y avisos; «no quality model» pasa a «has no high models»; el plan de cambio muestra `+`, `~` y `-` por modelo en vez de «FLUX.1 Dev -> FLUX.1 Schnell».
+  - `swap_models` (tests/harness.py) cambia también los pesos del catálogo; `test_config` y `test_provisioner` listan los workflows y pesos nuevos.
+
 
 ## Validaciones manuales
 
@@ -65,17 +72,32 @@ En Linux, por el usuario, con los modelos grandes:
 
 - [ ] **Usuario:** Z-Image-Turbo bf16, Chroma1-HD bf16, Qwen-Image (Q2_K, Q4_K_M, fp8, bf16), HiDream-I1 Full (Q4_K_M y fp8, con la licencia de Llama) y Qwen-Image-Edit-2511 (Q4_K_M y fp8): instalar, generar o editar, cambiar de precisión y quitar.
 
+Con `HOME` temporal para no tocar tu instalación (`export HOME=$(mktemp -d)`), una tanda por modelo grande. `<modelo>` es el nombre del catálogo y `<precisión>` una de las ofrecidas:
+
+```bash
+# Instalar (HiDream muestra la licencia de Llama y necesita --accept-licenses)
+imagehearth-mcp setup --profile quality --fast-models klein-4b --quality-models <modelo>:<precisión> --accept-licenses --non-interactive --managed
+# Generar: PNG con ImageHearth-Model = <modelo>:<precisión>
+imagehearth-mcp doctor
+# Desde el agente: list_workflows y create_image(prompt="...", quality="high", model="<modelo>")
+# Cambiar de precisión (descarga la nueva y borra la anterior) y quitar el modelo
+imagehearth-mcp setup --profile quality --quality-models <modelo>:<otra> --yes --accept-licenses --non-interactive
+imagehearth-mcp setup --profile quality --quality-models sdxl --yes --accept-licenses --non-interactive
+```
+
+Para edición: `--profile full --edit-models qwen-image-edit:<q4_k_m|fp8>` y `create_image(prompt="...", image_paths=["foto.png"], model="qwen-image-edit")`. Modelos y precisiones a probar: `z-image-turbo:bf16`, `chroma-hd:bf16`, `qwen-image:{q2_k,q4_k_m,fp8,bf16}`, `hidream-full:{q4_k_m,fp8}` y `qwen-image-edit:{q4_k_m,fp8}`.
+
 En Windows:
 
 - [ ] **Mantenedor (opcional):** `setup` con varios modelos, generar con `model` y `uninstall`, en PowerShell.
 
 ## Lista para fusionar
 
-- [ ] `scripts/check.sh` en verde en Linux.
-- [ ] `scripts/contract.sh` en verde.
+- [x] `scripts/check.sh` en verde en Linux.
+- [x] `scripts/contract.sh` en verde.
 - [ ] Validaciones manuales del asistente completadas.
 - [ ] **Usuario:** pruebas con los modelos grandes.
-- [ ] `README.md`, `README.es.md`, `llms-install.md`, `THIRD_PARTY_NOTICES.md`, skill e instrucciones del servidor actualizados.
+- [x] `README.md`, `README.es.md`, `llms-install.md`, `THIRD_PARTY_NOTICES.md`, skill e instrucciones del servidor actualizados.
 - [ ] Roadmap con la fase 15 actualizada (varios modelos por capacidad y `model`), tareas marcadas y fase completada.
 - [ ] Cambios revisados por el usuario, que realiza el commit.
 
@@ -83,13 +105,13 @@ En Windows:
 
 | Comprobación | Resultado | Fecha |
 |---|---|---|
-| `scripts/check.sh` | Pendiente | — |
-| `scripts/contract.sh` | Pendiente | — |
-| Instalación de modelos pequeños con componentes compartidos | Pendiente | — |
-| Generación y edición con `model` y predeterminado | Pendiente | — |
-| Conjunto fijo y `doctor` | Pendiente | — |
-| `setup` interactivo en pty | Pendiente | — |
-| Cliente MCP | Pendiente | — |
-| `uninstall` | Pendiente | — |
+| `scripts/check.sh` | **Verde**: `ruff`, 1008 tests y los mismos tests contra el wheel instalado | 2026-11-16 |
+| `scripts/contract.sh` | **Verde** contra ComfyUI 0.43.0 (el de las mediciones, con su `.venv` enlazado como `venv`): los 37 tipos de nodo y las entradas de los 19 workflows existen | 2026-11-16 |
+| Instalación de modelos pequeños con componentes compartidos | Simulado en tests: verde. Real en la RTX 4090: **pendiente** | 2026-11-16 |
+| Generación y edición con `model` y predeterminado | Simulado (servidor ComfyUI falso): verde. Real: **pendiente** | 2026-11-16 |
+| Conjunto fijo y `doctor` | Simulado en tests: verde. Real: **pendiente** | 2026-11-16 |
+| `setup` interactivo en pty | Con teclas inyectadas en tests: verde. En un pty real: **pendiente** | 2026-11-16 |
+| Cliente MCP | Esquema de herramientas y llamadas a `list_workflows`/`create_image` en tests: verde. Contra el servidor real: **pendiente** | 2026-11-16 |
+| `uninstall` | Simulado en tests: verde. Real: **pendiente** | 2026-11-16 |
 | Modelos grandes (usuario) | Pendiente | — |
 | Windows (mantenedor) | Pendiente | — |

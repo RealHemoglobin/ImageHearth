@@ -27,16 +27,32 @@ def png_text_chunk(key, value):
     return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
 
 
-def stamp_png(path, workflow_name, loras=()):
-    """Adds the workflow, quality model and LoRAs as PNG text, keeping what ComfyUI wrote."""
+def model_label(workflow_name, model=None):
+    """`name:precision` of the model a workflow ran with, or None if it isn't a catalog model."""
+    if model is None:
+        try:
+            model = catalog.installed_for_workflow(workflow_name)
+        except Exception:  # noqa: BLE001 - a stamp must never fail an image already made
+            return None
+
+    return model.label if model is not None else None
+
+
+def stamp_png(path, workflow_name, loras=(), model=None):
+    """Adds the workflow, model and LoRAs as PNG text, keeping what ComfyUI wrote."""
     if not workflow_name:
         return
 
     text = {"ImageHearth-Workflow": workflow_name}
-    model = catalog.quality_model_of(workflow_name)
+    label = model_label(workflow_name, model)
 
-    if model:
-        text["ImageHearth-Quality-Model"] = model
+    if label:
+        text["ImageHearth-Model"] = label
+
+    quality_model = catalog.quality_model_of(workflow_name)
+
+    if quality_model:
+        text["ImageHearth-Quality-Model"] = quality_model
 
     if loras:
         text["ImageHearth-LoRAs"] = lora_module.label(loras)
@@ -51,7 +67,9 @@ def stamp_png(path, workflow_name, loras=()):
     Path(path).write_bytes(data[:-12] + chunks + data[-12:])
 
 
-def save_session_image(session, workflow, timeout, destination, workflow_name=None, loras=()):
+def save_session_image(
+    session, workflow, timeout, destination, workflow_name=None, loras=(), model=None
+):
     """Ejecuta el workflow en la sesión y guarda su imagen verificada."""
     prompt_id = session.submit(workflow)
     log.info("Generation started: %s", prompt_id)
@@ -64,7 +82,7 @@ def save_session_image(session, workflow, timeout, destination, workflow_name=No
     session.prompt_finished()
 
     comfyui_client.download_image(image, destination)
-    stamp_png(destination, workflow_name, loras)
+    stamp_png(destination, workflow_name, loras, model)
     log.info("Image saved: %s", destination)
 
     try:
@@ -132,16 +150,85 @@ def negative_prompt_applies(workflow):
             continue
 
         if node.get("class_type") == "CLIPTextEncode":
-            has_negative_node |= node.get("inputs", {}).get("text") == ""
+            has_negative_node |= node.get("inputs", {}).get("text") in ("", "%NEGATIVE%")
 
-        if node.get("class_type") == "KSampler":
+        if node.get("class_type") in ("KSampler", "CFGGuider"):
             uses_cfg |= node.get("inputs", {}).get("cfg", 1) > 1
 
     return has_negative_node and uses_cfg
 
 
-def prepare_workflow(workflow, prompt, negative_prompt, width, height, filename):
+MARKER = re.compile(r"%[A-Z0-9]+%")
+
+
+def has_markers(workflow):
+    """Whether the template uses %NAME% markers (the workflows of the newer models)."""
+    return any(
+        isinstance(value, str) and MARKER.fullmatch(value)
+        for node in workflow.values()
+        if isinstance(node, dict)
+        for value in node.get("inputs", {}).values()
+    )
+
+
+def fill_markers(workflow, values):
+    """Replace every %NAME% marker by its value. An unknown marker is an error."""
+
+    def fill(item):
+        if isinstance(item, dict):
+            return {key: fill(value) for key, value in item.items()}
+
+        if isinstance(item, list):
+            return [fill(value) for value in item]
+
+        if isinstance(item, str) and MARKER.fullmatch(item):
+            key = item.strip("%")
+
+            if key not in values:
+                raise ValueError(f"The workflow has a {item} marker that nothing fills.")
+
+            return values[key]
+
+        return item
+
+    return fill(workflow)
+
+
+def loader_values(model):
+    """The %UNET%, %CLIP%, %VAE%... markers of a model's workflows, from its installed files."""
+    return {role.upper(): name for role, name in (model.loaders if model else {}).items()}
+
+
+def prepare_marker_workflow(workflow, prompt, negative_prompt, width, height, filename, model):
+    """Fill a template with markers: prompt, negative prompt, size, seed, prefix and files."""
+    # An empty text is the negative prompt, as in the older templates.
+    for node in workflow.values():
+        if (
+            isinstance(node, dict)
+            and node.get("class_type") == "CLIPTextEncode"
+            and node.get("inputs", {}).get("text") == ""
+        ):
+            node["inputs"]["text"] = negative_prompt
+
+    values = {
+        "PROMPT": prompt,
+        "NEGATIVE": negative_prompt,
+        "WIDTH": max(16, round(width / 16) * 16),
+        "HEIGHT": max(16, round(height / 16) * 16),
+        "SEED": random.randint(0, 2**64 - 1),
+        "PREFIX": filename,
+        **loader_values(model),
+    }
+    return fill_markers(workflow, values)
+
+
+def prepare_workflow(workflow, prompt, negative_prompt, width, height, filename, model=None):
     """Rellena una plantilla ya cargada y la devuelve."""
+    if has_markers(workflow):
+        return prepare_marker_workflow(
+            workflow, prompt, negative_prompt, width, height, filename, model
+        )
+
     # Sustituir prompts.
     for node in workflow.values():
         if not isinstance(node, dict):
@@ -234,6 +321,8 @@ class PreparedWorkflow:
     image_id: str
     warnings: list[str] = field(default_factory=list)
     loras: tuple = ()
+    # The installed catalog model it generates with, if it is one.
+    model: object = None
 
 
 def prepare_generation(
@@ -244,10 +333,12 @@ def prepare_generation(
     height: int = 1024,
     style: str = "auto",
     loras=(),
+    model=None,
 ):
     """Validate the request and fill its template. Touches neither GPU nor session.
 
-    `loras` are already-resolved `loras.Selected` items.
+    `loras` are already-resolved `loras.Selected` items. `model` is the installed catalog
+    model (from `catalog.resolve_model`); without it the workflow's own model is looked up.
     """
     validate_prompt(prompt)
     validate_dimensions(width, height)
@@ -262,6 +353,14 @@ def prepare_generation(
     image_id = uuid.uuid4().hex[:12]
     workflow = json.loads(workflow_file.read_text(encoding="utf-8"))
     warnings = []
+
+    if model is None or model.workflow != workflow_file.stem:
+        model = catalog.installed_for_workflow(workflow_file.stem)
+
+    if has_markers(workflow) and model is None:
+        raise ValueError(
+            f"{workflow_file.stem} is not installed: its models are missing or incomplete."
+        )
 
     # Antes de rellenarla: se reconoce el nodo negativo por su texto vacío.
     if negative_prompt and not negative_prompt_applies(workflow):
@@ -278,16 +377,17 @@ def prepare_generation(
     prompt = lora_module.with_trigger_words(prompt, loras)
     apply_loras(workflow, loras)
 
-    prepare_workflow(
+    workflow = prepare_workflow(
         workflow,
         prompt,
         negative_prompt,
         width,
         height,
         f"{config.COMFY_SUBFOLDER}/{image_id}",
+        model,
     )
 
-    return PreparedWorkflow(workflow_file.stem, workflow, image_id, warnings, loras)
+    return PreparedWorkflow(workflow_file.stem, workflow, image_id, warnings, loras, model)
 
 
 def run_in_session(session, prepared, timeout=config.WORKFLOW_TIMEOUT):
@@ -299,6 +399,7 @@ def run_in_session(session, prepared, timeout=config.WORKFLOW_TIMEOUT):
         config.OUTPUT_DIR / f"{prepared.image_id}.png",
         prepared.name,
         prepared.loras,
+        prepared.model,
     )
     return ImageResult(destination, list(prepared.warnings))
 
@@ -312,9 +413,10 @@ def run_workflow(
     height: int = 1024,
     style: str = "auto",
     loras=(),
+    model=None,
 ):
     prepared = prepare_generation(
-        workflow_name, prompt, negative_prompt, width, height, style, loras
+        workflow_name, prompt, negative_prompt, width, height, style, loras, model
     )
 
     with generation_session(prepared.name) as session:

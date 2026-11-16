@@ -78,17 +78,28 @@ def test_full_with_sdxl_keeps_the_flux_components_for_kontext(machine):
 
 
 def test_without_a_model_the_recommendation_is_used_and_announced(machine, capsys):
-    setup_command.run(setup_args(profile="quality"))
-    assert "flux_dev" in present(machine)
-    assert "recommended" in capsys.readouterr().out
+    setup_command.run(setup_args(profile="quality", legacy_models=False))
+    # 24 GB: Z-Image-Turbo to draft and Qwen-Image fp8 for quality.
+    assert {"z_image_turbo_bf16", "qwen_image_fp8"} <= present(machine)
+    assert "flux_dev" not in present(machine)
+    output = capsys.readouterr().out
+    assert output.count("recommended for") == 2
+    assert "--quality-models" in output and "--fast-models" in output
 
 
-
-def test_the_recommendation_follows_the_gpu_memory(machine, capsys):
+def test_the_recommendation_follows_the_gpu_memory(machine, capsys, monkeypatch):
+    monkeypatch.setattr(setup_command.comfyui, "install_custom_node", lambda *a, **k: True)
     gpu(machine, 16000)
-    setup_command.run(setup_args(profile="quality"))
-    assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "flux-schnell"
-    assert "flux_schnell" in present(machine)
+    setup_command.run(setup_args(profile="quality", legacy_models=False))
+    # 16 GB: Qwen-Image Q4_K_M, a GGUF.
+    assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "qwen-image"
+    assert "qwen_image_q4_k_m" in present(machine)
+    gpu(machine, 8192)
+    setup_command.run(
+        setup_args(profile="quality", legacy_models=False, quality_models="chroma-hd", yes=True)
+    )
+    assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "chroma-hd"
+    assert "qwen_image_q4_k_m" not in present(machine)
 
 
 def test_a_model_that_does_not_fit_is_installed_with_a_warning(machine, capsys, monkeypatch):
@@ -101,31 +112,41 @@ def test_a_model_that_does_not_fit_is_installed_with_a_warning(machine, capsys, 
 
 
 def test_quality_model_makes_no_sense_for_fast(machine):
-    with pytest.raises(ProvisionError, match="no quality model"):
+    with pytest.raises(ProvisionError, match="no high models"):
         setup_command.run(setup_args(profile="fast", quality_model="sdxl"))
 
     assert machine.downloads == []
 
 
 def test_interactive_choice_shows_size_vram_license_and_recommendation(machine, monkeypatch, capsys):
-    # folder, model sdxl, no LoRAs (Enter), accept.
-    press(monkeypatch, "13\r1")
-    setup_command.run(setup_args(profile="quality", accept_licenses=False, non_interactive=False))
+    # folder; mark SDXL 1.0 and unmark Qwen-Image (the recommended one); no LoRAs (Enter); accept.
+    press(monkeypatch, "1" + " " + "\x1b[B" * 4 + " " + "\r" + "\r" + "1")
+    setup_command.run(
+        setup_args(
+            profile="quality", accept_licenses=False, non_interactive=False, fast_models="sdxl-turbo"
+        )
+    )
     output = capsys.readouterr().out
     assert "Step 2 of 4" in output and "Step 4 of 4" in output
 
-    for name in ("flux-dev", "flux-schnell", "sdxl"):
-        assert name in output
+    for title in ("FLUX.1 Dev", "FLUX.1 Schnell", "SDXL 1.0", "Chroma1-HD", "Qwen-Image", "HiDream-I1 Full"):
+        assert title in output
 
-    assert "recommended" in output and "GB VRAM" in output
+    assert "(recommended)" in output and " s  " in output
     assert "non-commercial" in output and "commercial use" in output
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "sdxl"
 
 
 def test_interactive_choice_ignores_unknown_keys(machine, monkeypatch):
-    press(monkeypatch, "1xq9\r1")
-    setup_command.run(setup_args(profile="quality", accept_licenses=False, non_interactive=False))
-    assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "flux-dev"
+    # folder, unknown keys, the recommended model (Qwen-Image), its recommended precision, accept.
+    press(monkeypatch, "1xq9\r" "\r" "1")
+    setup_command.run(
+        setup_args(
+            profile="quality", accept_licenses=False, non_interactive=False, fast_models="sdxl-turbo"
+        )
+    )
+    records = InstallManifest.load(config.INSTALL_MANIFEST)
+    assert (records.quality_model, records.precision) == ("qwen-image", "fp8")
 
 
 def test_exit_from_the_first_step_changes_nothing(machine, monkeypatch, capsys):
@@ -136,15 +157,19 @@ def test_exit_from_the_first_step_changes_nothing(machine, monkeypatch, capsys):
     assert not config.INSTALL_MANIFEST.exists()
 
 
-def test_cli_accepts_the_three_models():
+def test_cli_accepts_the_model_lists_and_the_old_alias():
     parser = cli._build_parser()
 
     for name in ("flux-dev", "flux-schnell", "sdxl"):
         assert parser.parse_args(["setup", "--quality-model", name]).quality_model == name
 
-    with pytest.raises(SystemExit):
-        parser.parse_args(["setup", "--quality-model", "realvisxl"])
-
+    args = parser.parse_args(
+        ["setup", "--fast-models", "klein-4b,sdxl-turbo", "--quality-models", "qwen-image:q4_k_m",
+         "--edit-models", "klein-4b"]
+    )
+    assert (args.fast_models, args.quality_models, args.edit_models) == (
+        "klein-4b,sdxl-turbo", "qwen-image:q4_k_m", "klein-4b",
+    )
     assert parser.parse_args(["setup", "--yes"]).yes
 
 
@@ -159,14 +184,14 @@ def test_switching_downloads_first_then_deletes_the_old_model(machine, monkeypat
     setup_command.run(setup_args(profile="quality", quality_model="flux-dev"))
     machine.downloads.clear()
     order = []
-    real_delete = quality.delete_old
+    real_delete = quality.delete_items
 
-    def spy(change, records):
+    def spy(items, records):
         # By now the new model is on disk and the record already points to it.
         order.append(("delete", on_disk(machine, "sdxl_base").exists(), records.quality_model))
-        return real_delete(change, records)
+        return real_delete(items, records)
 
-    monkeypatch.setattr(quality, "delete_old", spy)
+    monkeypatch.setattr(quality, "delete_items", spy)
     switch(machine, "sdxl")
     assert "sdxl_base" in machine.downloads
     assert order == [("delete", True, "sdxl")]
@@ -180,8 +205,9 @@ def test_switch_prints_the_plan(machine, capsys):
     capsys.readouterr()
     switch(machine, "flux-schnell")
     output = capsys.readouterr().out
-    assert "FLUX.1 Dev -> FLUX.1 Schnell" in output
+    assert "- FLUX.1 Dev fp8" in output and "+ FLUX.1 Schnell fp8" in output
     assert "To download" in output and "flux_dev_fp8_scaled" in output and "Space freed" in output
+    assert "FLUX.1 Dev fp8 -> FLUX.1 Schnell" not in output
 
 
 def test_switch_needs_confirmation_when_not_interactive(machine):
@@ -200,10 +226,12 @@ def test_interactive_switch_declined_changes_nothing(machine, monkeypatch, capsy
     # No LoRAs (Enter), decline the review (0), back to the LoRAs step (0 and Enter) and exit.
     press(monkeypatch, "\r" "0" "0\r")
     assert setup_command.run(
-        setup_args(profile="quality", quality_model="sdxl", non_interactive=False)
+        setup_args(
+            profile="quality", quality_model="sdxl", non_interactive=False, fast_models="sdxl-turbo"
+        )
     ) == 0
     output = capsys.readouterr().out
-    assert "Step 2 of 2" in output and "FLUX.1 Dev ->" in output
+    assert "Step 2 of 2" in output and "- FLUX.1 Dev fp8" in output
     assert "flux_dev" in present(machine)
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "flux-dev"
 
@@ -211,7 +239,11 @@ def test_interactive_switch_declined_changes_nothing(machine, monkeypatch, capsy
 def test_interactive_switch_confirmed(machine, monkeypatch):
     setup_command.run(setup_args(profile="quality", quality_model="flux-dev"))
     press(monkeypatch, "\r" "1")
-    setup_command.run(setup_args(profile="quality", quality_model="sdxl", non_interactive=False))
+    setup_command.run(
+        setup_args(
+            profile="quality", quality_model="sdxl", non_interactive=False, fast_models="sdxl-turbo"
+        )
+    )
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "sdxl"
     assert "flux_dev" not in present(machine)
 
@@ -219,7 +251,7 @@ def test_interactive_switch_confirmed(machine, monkeypatch):
 def test_running_setup_again_keeps_the_installed_model(machine):
     setup_command.run(setup_args(profile="quality", quality_model="flux-schnell"))
     machine.downloads.clear()
-    setup_command.run(setup_args(profile="quality"))
+    setup_command.run(setup_args(profile="quality", legacy_models=False))
     assert machine.downloads == []
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "flux-schnell"
 
@@ -292,7 +324,7 @@ def test_models_of_an_attached_comfyui_are_never_deleted(machine, capsys):
     assert dev.exists()
     assert (comfy / "models" / manifest.load().models["sdxl_base"].dest).exists()
     assert InstallManifest.load(config.INSTALL_MANIFEST).quality_model == "sdxl"
-    assert "stays" in capsys.readouterr().out
+    assert "stay in the ComfyUI you attached" in capsys.readouterr().out
 
 
 def test_switch_is_refused_while_an_image_is_being_made(machine, monkeypatch):
@@ -373,7 +405,8 @@ def test_old_gguf_record_is_deduced_with_its_precision(machine):
     found = quality.current(manifest.load(), records, machine.data / "comfyui" / "models")
     assert found == quality.Current("flux-dev")
     profile = quality.resolve_installed(manifest.load(), records, machine.data / "comfyui" / "models")
-    assert profile.name == "quality-gguf" and "flux_dev_gguf" in {m.name for m in profile.models}
+    assert profile.name == "quality" and "flux_dev_gguf" in {m.name for m in profile.models}
+    assert profile.precision == "gguf"
 
 
 def test_old_full_gguf_record_keeps_kontext_gguf(machine):
@@ -409,7 +442,7 @@ def test_old_installations_keep_generating(tiny, tmp_path):
 def test_legacy_installation_is_not_changed_without_asking(machine, capsys):
     put(machine, "sdxl_turbo", "realvisxl", "sdxl_offset_lora")
     old_record(machine, "quality-sdxl")
-    setup_command.run(setup_args(profile="quality"))
+    setup_command.run(setup_args(profile="quality", legacy_models=False))
     assert "sdxl_base" not in present(machine) and "realvisxl" in present(machine)
     assert "no longer offered" in capsys.readouterr().out
 
@@ -422,6 +455,7 @@ def test_legacy_installation_moves_to_sdxl_and_deletes_realvisxl_if_owned(machin
     real = on_disk(machine, "realvisxl")
     records.claim_verified("model", real)
     records.quality_model = None
+    records.models, records.defaults = {}, {}
     records.save()
     on_disk(machine, "sdxl_base").unlink()
     assert quality.current(manifest.load(), records, real.parents[1]).legacy
@@ -456,7 +490,7 @@ def test_doctor_flags_a_migratable_installation(machine):
     records = old_record(machine, "quality-sdxl")
     check = doctor.check_quality_model(config, records, manifest.load())
     assert check.status == doctor.WARN
-    assert "--quality-model sdxl" in check.fix and check.details["legacy"]
+    assert "--quality-models sdxl" in check.fix and check.details["legacy"]
 
 
 def test_doctor_models_check_follows_the_installed_model(machine):
@@ -487,10 +521,10 @@ def test_list_workflows_marks_the_active_model(tiny):
     from imagehearth_mcp.server import list_workflows
 
     install(models_dir(), tiny, "quality", "flux-dev")
-    items = {item["name"]: item for item in list_workflows()}
-    assert items["flux_dev"]["active"] and items["flux_dev"]["quality_model"] == "flux-dev"
-    assert items["flux_dev"]["commercial_use"] is False
-    assert "quality_model" not in items["sdxl_turbo"]
+    items = {item["model"]: item for item in list_workflows()}
+    assert items["flux-dev"]["default"] and items["flux-dev"]["capability"] == "high"
+    assert items["flux-dev"]["commercial_use"] is False and items["flux-dev"]["precision"] == "fp8"
+    assert items["sdxl-turbo"]["capability"] == "fast" and items["sdxl-turbo"]["default"]
 
 
 def test_engine_status_includes_the_quality_model(tiny, monkeypatch):
@@ -568,13 +602,16 @@ def test_status_lists_the_quality_models(machine, monkeypatch):
     monkeypatch.setattr(agent_setup.sys, "platform", "linux")
     result = agent_setup.status()
     entries = {item["name"]: item for item in result["quality_models"]}
-    assert set(entries) == {"flux-dev", "flux-schnell", "sdxl"}
-    assert entries["flux-dev"]["recommended"] and not entries["flux-schnell"]["recommended"]
+    assert set(entries) == {
+        "sdxl", "flux-dev", "flux-schnell", "chroma-hd", "qwen-image", "hidream-full",
+    }
+    assert entries["qwen-image"]["recommended"] and not entries["flux-dev"]["recommended"]
     assert entries["flux-dev"]["commercial_use"] is False and entries["sdxl"]["commercial_use"]
     assert entries["sdxl"]["license"]["url"]
     assert all(item["fits_this_gpu"] for item in entries.values())
     assert result["installed_quality_model"] is None
-    assert "quality model" in result["next_step"]
+    assert "models" in result["next_step"]
+    assert {"fast", "high", "edit"} == set(result["models"])
 
 
 def test_status_flags_what_does_not_fit_and_what_is_installed(machine, monkeypatch):
@@ -583,7 +620,7 @@ def test_status_flags_what_does_not_fit_and_what_is_installed(machine, monkeypat
     gpu(machine, 8192)
     result = agent_setup.status()
     entries = {item["name"]: item for item in result["quality_models"]}
-    assert entries["sdxl"]["installed"] and entries["sdxl"]["recommended"]
+    assert entries["sdxl"]["installed"] and entries["chroma-hd"]["recommended"]
     assert not entries["flux-dev"]["fits_this_gpu"] and "8192 MiB" in entries["flux-dev"]["warning"]
     assert result["installed_quality_model"] == {"name": "sdxl", "legacy": False}
 
@@ -620,7 +657,7 @@ def test_start_passes_the_model_and_returns_the_one_used(spawned):
 
 def test_start_without_a_model_uses_the_recommendation(spawned, machine):
     gpu(machine, 16000)
-    assert agent_setup.start("quality", True)["quality_model"] == "flux-schnell"
+    assert agent_setup.start("quality", True)["quality_model"] == "qwen-image"
 
 
 def test_start_returns_the_hardware_warning(spawned, machine):
@@ -631,10 +668,10 @@ def test_start_returns_the_hardware_warning(spawned, machine):
 
 
 def test_start_refuses_an_unknown_model_or_a_profile_without_one(spawned):
-    with pytest.raises(ValueError, match="Unknown quality model"):
+    with pytest.raises(ValueError, match="Unknown model"):
         agent_setup.start("quality", True, "", "realvisxl")
 
-    with pytest.raises(ValueError, match="no quality model"):
+    with pytest.raises(ValueError, match="no high models"):
         agent_setup.start("fast", True, "", "sdxl")
 
     assert not spawned
@@ -643,13 +680,13 @@ def test_start_refuses_an_unknown_model_or_a_profile_without_one(spawned):
 def test_start_on_an_installation_says_it_replaces_the_model(spawned, machine):
     setup_command.run(setup_args(profile="quality", quality_model="flux-dev"))
     result = agent_setup.start("quality", True, "", "sdxl")
-    assert "replaced" in result["replaces"]
+    assert "FLUX.1 Dev" in result["replaces"] and "deleted" in result["replaces"]
 
 
 def test_the_spawned_setup_confirms_the_choice_the_user_made():
     args = agent_setup._args("quality", "", "sdxl")
-    assert args.quality_model == "sdxl" and args.yes and args.accept_licenses
-    assert agent_setup._args("quality", "").quality_model is None
+    assert args.quality_models == "sdxl" and args.yes and args.accept_licenses
+    assert agent_setup._args("quality", "").quality_models is None
 
 
 def test_tool_and_instructions_expose_the_model():
@@ -671,7 +708,7 @@ def test_main_reads_the_model_from_the_command_line(machine, monkeypatch):
     )
     monkeypatch.setattr(config, "SETUP_JOB_FILE", machine.tmp / "job.json")
     assert agent_setup.main(["quality", "", "flux-schnell"]) == 0
-    assert seen[0].quality_model == "flux-schnell" and seen[0].profile == "quality"
+    assert seen[0].quality_models == "flux-schnell" and seen[0].profile == "quality"
     assert Path(config.SETUP_JOB_FILE).exists()
 
 
