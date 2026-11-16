@@ -1,0 +1,69 @@
+{
+  "_comment": "Pesos de cada modelo y precisión. 'comun' son los codificadores y VAE compartidos. Cada fichero: repo, ruta en el repositorio y carpeta de modelos de ComfyUI. Tamaño y SHA-256 se leen del repositorio al descargar y quedan en la medición.",
+  "comun": {
+    "qwen3_4b": {"repo": "Comfy-Org/Z-Image-Turbo", "path": "split_files/text_encoders/qwen_3_4b.safetensors", "folder": "text_encoders"},
+    "qwen3_4b_fp8": {"repo": "Comfy-Org/Z-Image-Turbo", "path": "split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors", "folder": "text_encoders"},
+    "flux1_ae": {"repo": "Comfy-Org/Lumina-Image-2", "path": "split_files/vae/ae.safetensors", "folder": "vae"},
+    "flux2_vae": {"repo": "Comfy-Org/Flux-2-Klein-4B", "path": "split_files/vae/flux2-vae.safetensors", "folder": "vae"},
+    "t5xxl_fp8": {"repo": "comfyanonymous/flux_text_encoders", "path": "t5xxl_fp8_e4m3fn_scaled.safetensors", "folder": "text_encoders"},
+    "qwen25vl_fp8": {"repo": "Comfy-Org/Qwen-Image", "path": "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors", "folder": "text_encoders"},
+    "qwen_vae": {"repo": "Comfy-Org/Qwen-Image", "path": "split_files/vae/qwen_image_vae.safetensors", "folder": "vae"},
+    "hidream_clip_l": {"repo": "Comfy-Org/HiDream", "path": "split_files/text_encoders/clip_l_hidream.safetensors", "folder": "text_encoders"},
+    "hidream_clip_g": {"repo": "Comfy-Org/HiDream", "path": "split_files/text_encoders/clip_g_hidream.safetensors", "folder": "text_encoders"},
+    "hidream_t5": {"repo": "Comfy-Org/HiDream", "path": "split_files/text_encoders/t5xxl_fp8_e4m3fn_scaled.safetensors", "folder": "text_encoders"},
+    "hidream_llama": {"repo": "Comfy-Org/HiDream", "path": "split_files/text_encoders/llama_3.1_8b_instruct_fp8_scaled.safetensors", "folder": "text_encoders"}
+  },
+  "models": {
+    "zimage-turbo": {
+      "task": "generate", "workflow": "zimage-turbo", "license": "Apache-2.0",
+      "precisions": {
+        "bf16": {"weights": {"repo": "Comfy-Org/Z-Image-Turbo", "path": "split_files/diffusion_models/z_image_turbo_bf16.safetensors", "folder": "diffusion_models"}, "clip": "qwen3_4b", "vae": "flux1_ae"},
+        "int8": {"weights": {"repo": "Comfy-Org/Z-Image-Turbo", "path": "split_files/diffusion_models/z_image_turbo_int8_convrot.safetensors", "folder": "diffusion_models"}, "clip": "qwen3_4b_fp8", "vae": "flux1_ae"}
+      }
+    },
+    "klein-4b": {
+      "task": "generate", "workflow": "klein-4b", "license": "Apache-2.0",
+      "precisions": {
+        "bf16": {"weights": {"repo": "Comfy-Org/Flux-2-Klein-4B", "path": "split_files/diffusion_models/flux-2-klein-4b.safetensors", "folder": "diffusion_models"}, "clip": "qwen3_4b", "vae": "flux2_vae"}
+      }
+    },
+    "chroma-hd": {
+      "task": "generate", "workflow": "chroma-hd", "license": "Apache-2.0",
+      "precisions": {
+        "bf16": {"weights": {"repo": "lodestones/Chroma1-HD", "path": "Chroma1-HD.safetensors", "folder": "diffusion_models"}, "clip": "t5xxl_fp8", "vae": "flux1_ae"},
+        "fp8": {"weights": {"repo": "silveroxides/Chroma1-HD-fp8-scaled", "path": "Chroma1-HD-fp8mixed.safetensors", "folder": "diffusion_models"}, "clip": "t5xxl_fp8", "vae": "flux1_ae"}
+      }
+    },
+    "qwen-image": {
+      "task": "generate", "license": "Apache-2.0",
+      "precisions": {
+        "bf16": {"workflow": "qwen-image", "weights": {"repo": "Comfy-Org/Qwen-Image", "path": "split_files/diffusion_models/qwen_image_bf16.safetensors", "folder": "diffusion_models"}, "clip": "qwen25vl_fp8", "vae": "qwen_vae"},
+        "fp8": {"workflow": "qwen-image", "weights": {"repo": "Comfy-Org/Qwen-Image", "path": "split_files/diffusion_models/qwen_image_fp8_e4m3fn.safetensors", "folder": "diffusion_models"}, "clip": "qwen25vl_fp8", "vae": "qwen_vae"},
+        "q4km": {"workflow": "qwen-image-gguf", "weights": {"repo": "city96/Qwen-Image-gguf", "path": "qwen-image-Q4_K_M.gguf", "folder": "diffusion_models"}, "clip": "qwen25vl_fp8", "vae": "qwen_vae"},
+        "q2k": {"workflow": "qwen-image-gguf", "weights": {"repo": "city96/Qwen-Image-gguf", "path": "qwen-image-Q2_K.gguf", "folder": "diffusion_models"}, "clip": "qwen25vl_fp8", "vae": "qwen_vae"}
+      }
+    },
+    "hidream-full": {
+      "task": "generate", "license": "MIT",
+      "precisions": {
+        "fp16": {"workflow": "hidream-full", "weights": {"repo": "Comfy-Org/HiDream", "path": "split_files/diffusion_models/hidream_i1_full_fp16.safetensors", "folder": "diffusion_models"}, "clips": ["hidream_clip_l", "hidream_clip_g", "hidream_t5", "hidream_llama"], "vae": "flux1_ae"},
+        "fp8": {"workflow": "hidream-full", "weights": {"repo": "Comfy-Org/HiDream", "path": "split_files/diffusion_models/hidream_i1_full_fp8.safetensors", "folder": "diffusion_models"}, "clips": ["hidream_clip_l", "hidream_clip_g", "hidream_t5", "hidream_llama"], "vae": "flux1_ae"},
+        "q4km": {"workflow": "hidream-full-gguf", "weights": {"repo": "city96/HiDream-I1-Full-gguf", "path": "hidream-i1-full-Q4_K_M.gguf", "folder": "diffusion_models"}, "clips": ["hidream_clip_l", "hidream_clip_g", "hidream_t5", "hidream_llama"], "vae": "flux1_ae"}
+      }
+    },
+    "klein-4b-edit": {
+      "task": "edit", "workflow": "klein-4b-edit", "license": "Apache-2.0",
+      "precisions": {
+        "bf16": {"weights": {"repo": "Comfy-Org/Flux-2-Klein-4B", "path": "split_files/diffusion_models/flux-2-klein-4b.safetensors", "folder": "diffusion_models"}, "clip": "qwen3_4b", "vae": "flux2_vae"}
+      }
+    },
+    "qwen-edit-2511": {
+      "task": "edit", "license": "Apache-2.0",
+      "precisions": {
+        "bf16": {"workflow": "qwen-edit-2511", "weights": {"repo": "Comfy-Org/Qwen-Image-Edit", "path": "split_files/diffusion_models/qwen_image_edit_2511_bf16.safetensors", "folder": "diffusion_models"}, "clip": "qwen25vl_fp8", "vae": "qwen_vae"},
+        "fp8": {"workflow": "qwen-edit-2511", "weights": {"repo": "Comfy-Org/Qwen-Image-Edit", "path": "split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors", "folder": "diffusion_models"}, "clip": "qwen25vl_fp8", "vae": "qwen_vae"},
+        "q4km": {"workflow": "qwen-edit-2511-gguf", "weights": {"repo": "unsloth/Qwen-Image-Edit-2511-GGUF", "path": "qwen-image-edit-2511-Q4_K_M.gguf", "folder": "diffusion_models"}, "clip": "qwen25vl_fp8", "vae": "qwen_vae"}
+      }
+    }
+  }
+}

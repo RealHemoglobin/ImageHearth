@@ -548,43 +548,45 @@ Hoy cada `create_image` es una sesión completa: descargar el modelo de lenguaje
 
 ### Candidatos
 
-- [ ] Hacer la lista de candidatos actuales con soporte en ComfyUI. Revisar al menos, confirmando que siguen vigentes y su licencia: Stable Diffusion 3.5 (Medium y Large), Qwen-Image y Qwen-Image-Edit, HiDream-I1, Chroma, Lumina-Image 2.0, HunyuanImage, Sana, PixArt-Σ, FLUX.2 y otros que hayan aparecido.
-- [ ] Incluir modelos de edición como alternativa a Kontext, en especial los de licencia comercial, ya que hoy la edición es siempre no comercial.
+- [x] Hacer la lista de candidatos actuales con soporte en ComfyUI. Revisar al menos, confirmando que siguen vigentes y su licencia: Stable Diffusion 3.5 (Medium y Large), Qwen-Image y Qwen-Image-Edit, HiDream-I1, Chroma, Lumina-Image 2.0, HunyuanImage, Sana, PixArt-Σ, FLUX.2 y otros que hayan aparecido.
+- [x] Incluir modelos de edición como alternativa a Kontext, en especial los de licencia comercial, ya que hoy la edición es siempre no comercial.
 
 ### Criterios
 
-- [ ] **Licencia:** uso comercial permitido, condiciones (umbrales de ingresos, atribución) y si exige aprobación para descargar.
-- [ ] **Memoria:** VRAM y RAM con cada precisión disponible (bf16, fp8, GGUF, NF4 u otras), incluidos los codificadores de texto, y si funciona con descarga parcial a RAM.
-- [ ] **Calidad:** los mismos prompts de la comparativa de la fase 9 (personas, texto en la imagen, composición compleja, estilos), con semillas fijas.
-- [ ] **Velocidad:** tiempo por imagen a 1024×1024 en la RTX 4090 y en los niveles simulados con `--reserve-vram`.
-- [ ] **Integración:** soporte nativo en la versión fijada de ComfyUI o nodos personalizados necesarios (preferir nativo), origen estable en Hugging Face, tamaño de descarga y si reutiliza codificadores ya instalados.
-- [ ] **Capacidades:** generación, edición, texto legible en la imagen y resoluciones admitidas.
+- [x] **Licencia:** uso comercial permitido, condiciones (umbrales de ingresos, atribución) y si exige aprobación para descargar.
+- [x] **Memoria:** VRAM y RAM con cada precisión disponible (bf16, fp8, GGUF, NF4 u otras), incluidos los codificadores de texto, y si funciona con descarga parcial a RAM.
+- [x] **Calidad:** los mismos prompts de la comparativa de la fase 9 (personas, texto en la imagen, composición compleja, estilos), con semillas fijas.
+- [x] **Velocidad:** tiempo por imagen a 1024×1024 en la RTX 4090 y en los niveles simulados con `--reserve-vram`.
+- [x] **Integración:** soporte nativo en la versión fijada de ComfyUI o nodos personalizados necesarios (preferir nativo), origen estable en Hugging Face, tamaño de descarga y si reutiliza codificadores ya instalados.
+- [x] **Capacidades:** generación, edición, texto legible en la imagen y resoluciones admitidas.
 
 ### Medición
 
-- [ ] Probar cada candidato preseleccionado en la RTX 4090 y simular 8, 16 y 24 GB con `--reserve-vram`; 32 GB o más con la tarjeta completa.
-- [ ] Medir en Windows al menos el recomendado para 16 GB.
-- [ ] Guardar las imágenes de la comparativa junto al documento.
+- [x] Probar cada candidato preseleccionado en la RTX 4090 y simular 8, 16 y 24 GB con `--reserve-vram`; 32 GB o más con la tarjeta completa. 54 mediciones; sin HiDream fp16, Qwen-Edit bf16 ni Kontext (recorte del 2026-11-16).
+- [ ] Medir en Windows (opcional, pendiente del mantenedor) al menos el recomendado para 16 GB.
+- [x] Guardar las imágenes de la comparativa junto al documento.
 
 ### Decisión
 
-- [ ] Tabla final por nivel (8, 16, 24 y 32+ GB): modelo recomendado para `quality`, para edición y alternativa de licencia comercial.
-- [ ] Indicar cuáles se integran en la fase 15, cuáles se descartan y por qué, y qué perfiles o variantes cambian.
+- [x] Tabla final por nivel (8, 16, 24 y 32+ GB): modelo recomendado para `quality`, para edición y alternativa de licencia comercial.
+- [x] Indicar cuáles se integran en la fase 15, cuáles se descartan y por qué, y qué perfiles o variantes cambian. Decisión del 2026-11-16: se integran **todos** los de la lista corta; el usuario elige y `setup` le muestra mediciones, tamaño y tiempos (ver `analysis.md`, sección 9).
 
 ### Selector múltiple con flechas
 
 Cambio pequeño del instalador, independiente del análisis. Hoy las listas de selección múltiple de `setup` (las LoRAs de la [fase 13](#fase-13-loras-para-sdxl-10)) piden escribir números separados por comas.
 
-- [ ] Con terminal interactiva, `choose_many` muestra las opciones con `[x]`/`[ ]`: ↑ y ↓ mueven el cursor, espacio marca o desmarca, Enter instala las marcadas desde cualquier fila (también desde la fila final `Install selected (N)`) y 0 o la fila `Back` vuelven atrás.
-- [ ] `read_key` lee las flechas en Linux, macOS y Windows; en Windows se activan las secuencias VT de la consola para repintar la lista en el sitio.
-- [ ] Sin terminal se mantienen los números separados por comas; los menús de una opción, `--non-interactive` y `--loras` no cambian.
-- [ ] Pruebas simuladas con teclas inyectadas y prueba manual en Linux; Windows, opcional.
+- [x] Con terminal interactiva, `choose_many` muestra las opciones con `[x]`/`[ ]`: ↑ y ↓ mueven el cursor, espacio marca o desmarca, Enter instala las marcadas desde cualquier fila (también desde la fila final `Install selected (N)`) y 0 o la fila `Back` vuelven atrás.
+- [x] `read_key` lee las flechas en Linux, macOS y Windows; en Windows se activan las secuencias VT de la consola para repintar la lista en el sitio.
+- [x] Sin terminal se mantienen los números separados por comas; los menús de una opción, `--non-interactive` y `--loras` no cambian.
+- [x] Pruebas simuladas con teclas inyectadas y prueba manual en Linux; Windows, opcional (pendiente del mantenedor).
 
 **Listo cuando:** el documento tiene mediciones reales de cada candidato preseleccionado en los cuatro niveles, el usuario ha cerrado qué modelos se integran y el paso `LoRAs` de `setup` se responde con flechas, espacio y Enter.
 
 ## Fase 15: Nuevos modelos de generación
 
 **Objetivo:** añadir los modelos elegidos en la [fase 14](#fase-14-análisis-de-modelos-de-generación) como opciones instalables, manteniendo la interfaz de ImageHearth: `create_image`, `create_images`, `quality`, `mode` y las herramientas de instalación no cambian para el agente.
+
+**Modelos (decisión del 2026-11-16):** Z-Image-Turbo (int8, bf16), FLUX.2 Klein 4B (generación y edición), Chroma1-HD (fp8, bf16), Qwen-Image (Q2_K, Q4_K_M, fp8, bf16), HiDream-I1 Full (Q4_K_M, fp8; su codificador Llama exige confirmar y mostrar la licencia de Meta) y Qwen-Image-Edit-2511 (Q4_K_M, fp8). Solo se ofrecen las precisiones medidas; HiDream fp16 y Qwen-Edit bf16 se ofrecerían solo si se miden antes. La elección es del usuario: `setup` muestra por cada opción el tamaño, los tiempos y la VRAM medidos en `analysis.md`, y recomienda según el hardware sin impedir elegir otra.
 
 **Principio:** cada modelo nuevo es una entrada del manifiesto y uno o más workflows. El motor no tiene lógica propia por modelo más allá de `build_workflow`.
 

@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import sys
+import types
 
 import pytest
 
@@ -42,9 +44,18 @@ def owned_models():
     return {entry["path"] for entry in InstallManifest.load(config.INSTALL_MANIFEST).owned("model")}
 
 
+DOWN = "\x1b[B"
+
+
 def pick(names):
-    """The keys that choose those LoRAs in the multiple choice (their numbers in the catalog)."""
-    return ",".join(str(CATALOG.index(name) + 1) for name in names)
+    """The keys that mark those LoRAs from the first row (arrows and Space), without Enter."""
+    text, row = "", 0
+
+    for index in sorted(CATALOG.index(name) for name in names):
+        text += DOWN * (index - row) + " "
+        row = index
+
+    return text
 
 
 # --loras
@@ -243,7 +254,7 @@ def test_the_loras_argument_hides_the_step(machine, monkeypatch, capsys):
 
 def test_an_answer_is_dropped_when_the_model_is_changed_afterwards(machine, monkeypatch):
     # sdxl with a LoRA, back (review, then the LoRAs step) to the model, flux-dev, accept.
-    press(monkeypatch, f"123{pick(CATALOG[:1])}\r" "0" "0\r" "1" "1")
+    press(monkeypatch, f"123{pick(CATALOG[:1])}\r" "0" "0" "1" "1")
     assert setup_command.run(interactive()) == 0
     assert present(machine) == set()
 
@@ -257,13 +268,13 @@ def test_existing_loras_come_marked_and_enter_keeps_them(machine, monkeypatch, c
     press(monkeypatch, "23" "\r" "1")
     assert setup_command.run(interactive(accept_licenses=True)) == 0
     output = capsys.readouterr().out
-    assert output.count("[x]") == 2
+    assert f"Selected: {', '.join(kept)}" in output
     assert present(machine) == set(kept) and machine.downloads == []
 
 
 def test_choosing_none_in_the_step_removes_the_installed_ones(machine, monkeypatch):
     setup_command.run(sdxl(loras=CATALOG[0]))
-    press(monkeypatch, "23none\r" "1")
+    press(monkeypatch, "23" " " "\r" "1")
     assert setup_command.run(interactive()) == 0
     assert present(machine) == set()
 
@@ -278,7 +289,7 @@ def test_nothing_is_written_before_the_confirmation(machine, monkeypatch):
 
 
 def test_exiting_from_the_review_writes_nothing(machine, monkeypatch):
-    press(monkeypatch, f"123{pick(CATALOG[:1])}\r" "0" "0\r" "0" "0" "0")
+    press(monkeypatch, f"123{pick(CATALOG[:1])}\r" "0" "0" "0" "0" "0")
     assert setup_command.run(interactive()) == 0
     assert machine.downloads == [] and not config.INSTALL_MANIFEST.exists()
 
@@ -286,7 +297,7 @@ def test_exiting_from_the_review_writes_nothing(machine, monkeypatch):
 def test_deleting_loras_in_the_step_asks_for_the_final_confirmation(machine, monkeypatch, capsys):
     setup_command.run(sdxl(loras=CATALOG[0]))
     capsys.readouterr()
-    press(monkeypatch, "23none\r" "1")
+    press(monkeypatch, "23" " " "\r" "1")
     assert setup_command.run(interactive(accept_licenses=True)) == 0
     assert "To delete:" in capsys.readouterr().out
 
@@ -422,12 +433,19 @@ def test_choose_many_with_marks_enter_keeps_them(capsys):
     assert "[ ] a" in output and "[x] b" in output
 
 
-def test_choose_many_none_chooses_nothing():
-    assert menu.choose_many("Pick", OPTIONS, reader=keys("none\r"), default=["b"]) == []
+def test_choose_many_unmarking_everything_chooses_nothing():
+    assert menu.choose_many("Pick", OPTIONS, reader=keys(DOWN + " \r"), default=["b"]) == []
 
 
-def test_choose_many_numbers_replace_the_marks():
-    assert menu.choose_many("Pick", OPTIONS, reader=keys("1,3\r"), default=["b"]) == ["a", "c"]
+def test_choose_many_keys_replace_the_marks():
+    answer = menu.choose_many("Pick", OPTIONS, reader=keys(" " + DOWN + " " + DOWN + " \r"), default=["b"])
+    assert answer == ["a", "c"]
+
+
+def test_choose_many_line_mode_none_chooses_nothing(monkeypatch):
+    monkeypatch.setattr(sys, "stdin", types.SimpleNamespace(isatty=lambda: False))
+    monkeypatch.setattr("builtins.input", lambda prompt="": "none")
+    assert menu.choose_many("Pick", OPTIONS, default=["b"]) == []
 
 
 def test_choose_many_without_marks_is_unchanged():

@@ -8,3 +8,5 @@ output/
 .pytest_cache/
 .ruff_cache/
 dist
+/specs/2026-11-15-analisis-modelos/comparison
+/specs/2026-11-15-analisis-modelos/measurements

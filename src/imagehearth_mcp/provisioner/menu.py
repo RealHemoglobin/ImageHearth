@@ -12,6 +12,7 @@ CTRL_D = "\x04"
 ENTER = ("\r", "\n")
 BACKSPACE = ("\x7f", "\b")
 MAX_SINGLE_KEY = 9
+ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
 # Para los tests: lector de teclas que sustituye a la terminal cuando no se pasa uno.
 DEFAULT_READER = None
 
@@ -35,22 +36,32 @@ class Option:
     recommended: bool = False
 
 
+ESCAPE = "\x1b"
+ESCAPE_WAIT = 0.05
+_WINDOWS_ARROWS = {"H": "UP", "P": "DOWN"}
+_ANSI_ARROWS = {"A": "UP", "B": "DOWN"}
+
+
 def read_key():
-    """Una tecla de la terminal sin esperar a Enter. La terminal se restaura siempre."""
+    """Una tecla de la terminal sin esperar a Enter. La terminal se restaura siempre.
+
+    Las flechas arriba y abajo devuelven "UP" y "DOWN"; Esc solo y las demás teclas
+    especiales devuelven "".
+    """
     if sys.platform == "win32":
         import msvcrt
 
         char = msvcrt.getwch()
 
         if char in ("\x00", "\xe0"):
-            msvcrt.getwch()
-            return ""
+            return _WINDOWS_ARROWS.get(msvcrt.getwch(), "")
 
         if char == CTRL_C:
             raise KeyboardInterrupt
 
         return char
 
+    import select
     import termios
     import tty
 
@@ -60,6 +71,9 @@ def read_key():
     try:
         tty.setcbreak(fd)
         char = sys.stdin.read(1)
+
+        if char == ESCAPE:
+            return _read_escape(select, fd)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
 
@@ -67,6 +81,21 @@ def read_key():
         raise KeyboardInterrupt
 
     return char
+
+
+def _read_escape(select, fd):
+    """Resto de una secuencia que empieza por Esc, sin bloquear si era Esc solo."""
+
+    def next_char():
+        if not select.select([fd], [], [], ESCAPE_WAIT)[0]:
+            return ""
+
+        return sys.stdin.read(1)
+
+    if next_char() not in ("[", "O"):
+        return ""
+
+    return _ANSI_ARROWS.get(next_char(), "")
 
 
 class _Reader:
@@ -77,18 +106,45 @@ class _Reader:
         self.injected = reader is not None
         self.read = reader
         self.keys = reader is not None
+        self._pending = []
 
         if reader is None and sys.stdin.isatty():
             self.read = read_key
             self.keys = True
 
-    def key(self):
-        char = self.read()
+    def key(self, arrows=False):
+        """Una tecla. Con `arrows`, las secuencias en bruto de las flechas pasan a UP/DOWN."""
+        char = self._pending.pop() if self._pending else self.read()
 
         if char in (CTRL_C, CTRL_D):
             raise KeyboardInterrupt
 
+        if arrows and char == ESCAPE and self.injected:
+            return self._injected_arrow()
+
         return char
+
+    def _injected_arrow(self):
+        """Esc seguido de `[` u `O` y A/B, venga carácter a carácter de un lector inyectado."""
+        try:
+            second = self.read()
+        except StopIteration:
+            return ""
+
+        if second not in ("[", "O"):
+            self._pending.append(second)
+            return ""
+
+        try:
+            third = self.read()
+        except StopIteration:
+            return ""
+
+        if third in _ANSI_ARROWS:
+            return _ANSI_ARROWS[third]
+
+        self._pending.append(third)
+        return ""
 
     def line(self, prompt):
         """Una línea. En la terminal real, con la edición normal; inyectada, con teclas."""
@@ -240,12 +296,110 @@ def choose_many(
     """Selección múltiple. Devuelve las `key` elegidas, o BACK con 0.
 
     `default`: las `key` marcadas al empezar, que elige Enter; con `default=None` están
-    todas. Con marcas propias, `none` no elige ninguna.
+    todas. Con terminal: flechas, espacio y Enter. Sin ella: números separados por comas.
     """
     options = list(options)
     source = _Reader(reader)
     marked = [option.key for option in options] if default is None else list(default)
 
+    if source.keys and (source.injected or _enable_ansi()):
+        return _choose_many_keys(title, options, source, marked, allow_back, back_label)
+
+    return _choose_many_line(title, options, source, marked, allow_back, back_label, default)
+
+
+def _enable_ansi():
+    """Activa las secuencias ANSI de la consola. Siempre cierto fuera de Windows."""
+    if sys.platform != "win32":
+        return True
+
+    try:
+        import ctypes
+
+        kernel = ctypes.windll.kernel32
+        handle = kernel.GetStdHandle(-11)
+        mode = ctypes.c_uint32()
+
+        if not kernel.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+
+        if mode.value & ENABLE_VIRTUAL_TERMINAL_PROCESSING:
+            return True
+
+        return bool(kernel.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+    except (AttributeError, OSError):
+        return False
+
+
+def _selector_lines(options, marked, cursor, allow_back, back_label, show_cursor=True):
+    rows = len(options)
+    hint = "\u2191/\u2193 move \u00b7 Space mark \u00b7 Enter install"
+    lines = [hint + (" \u00b7 0 back" if allow_back else "")]
+
+    def pointer(index):
+        return "> " if show_cursor and index == cursor else "  "
+
+    for index, option in enumerate(options):
+        flag = " (recommended)" if option.recommended else ""
+        mark = "[x] " if option.key in marked else "[ ] "
+        lines.append(f"{pointer(index)}{mark}{option.label}{flag}")
+        lines.extend(f"       {line}" for line in option.detail.splitlines())
+
+    lines.append(f"{pointer(rows)}\u2192 Install selected ({len(marked)})")
+
+    if allow_back:
+        lines.append(f"{pointer(rows + 1)}\u2190 {back_label}")
+
+    return lines
+
+
+def _choose_many_keys(title, options, source, marked, allow_back, back_label):
+    rows = len(options) + 1 + (1 if allow_back else 0)
+    install_row = len(options)
+    back_row = install_row + 1 if allow_back else None
+    cursor = 0
+    drawn = 0
+
+    if title:
+        print(f"\n{title}")
+
+    def draw(show_cursor=True):
+        nonlocal drawn
+        lines = _selector_lines(options, marked, cursor, allow_back, back_label, show_cursor)
+
+        if drawn:
+            print(f"\x1b[{drawn}A\r\x1b[J", end="")
+
+        print("\n".join(lines), flush=True)
+        drawn = len(lines)
+
+    def chosen():
+        return [option.key for option in options if option.key in marked]
+
+    while True:
+        draw()
+        char = source.key(arrows=True)
+
+        if char == "UP":
+            cursor = (cursor - 1) % rows
+        elif char == "DOWN":
+            cursor = (cursor + 1) % rows
+        elif char == " " and cursor < len(options):
+            key = options[cursor].key
+            marked = [k for k in marked if k != key] if key in marked else [*marked, key]
+        elif char == "0" and allow_back:
+            return BACK
+        elif char in ENTER:
+            if cursor == back_row:
+                return BACK
+
+            draw(show_cursor=False)
+            names = ", ".join(str(option.key) for option in options if option.key in marked)
+            print(f"Selected: {names or 'none'}", flush=True)
+            return chosen()
+
+
+def _choose_many_line(title, options, source, marked, allow_back, back_label, default):
     if title:
         print(f"\n{title}")
 
