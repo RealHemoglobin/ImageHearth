@@ -590,6 +590,8 @@ Cambio pequeño del instalador, independiente del análisis. Hoy las listas de s
 
 **Principio:** cada modelo nuevo es una entrada del catálogo de `models.toml` y uno o más workflows con marcadores (`%UNET%`, `%CLIP%`, `%VAE%`, `%PROMPT%`...). El motor no tiene lógica propia por modelo más allá de `build_workflow`.
 
+**Estado:** completada por decisión del usuario el 2026-11-17, tras probarla en Linux y en Windows.
+
 Especificación: [specs/2026-11-16-nuevos-modelos](2026-11-16-nuevos-modelos/requirements.md).
 
 ### Catálogo y workflows
@@ -617,11 +619,11 @@ Especificación: [specs/2026-11-16-nuevos-modelos](2026-11-16-nuevos-modelos/req
 
 - [x] Pruebas simuladas: catálogo, conjuntos y migración, elección con `model`, lotes, workflows de cada modelo y precisión, instalación y cambio de conjunto, `setup_status` y `setup_start`.
 - [x] Prueba de contrato contra ComfyUI 0.43.0 (nodos y entradas de los 19 workflows).
-- [ ] Pruebas reales rápidas del asistente en la RTX 4090 (Klein 4B, Z-Image-Turbo int8, Chroma1-HD fp8) y de los modelos grandes por el usuario.
+- [x] Pruebas reales del asistente por el usuario en Linux y Windows (2026-11-17).
 
 **Listo cuando:**
 
-- Cada modelo elegido en la fase 14 se instala con `setup`, genera con `create_image` y `create_images` y se puede cambiar por otro. *(Simulado; falta la prueba real.)*
+- Cada modelo elegido en la fase 14 se instala con `setup`, genera con `create_image` y `create_images` y se puede cambiar por otro. *(Probado en Linux y Windows por el usuario.)*
 - Hay al menos una opción recomendada y medida para cada nivel: 8, 16, 24 y 32 GB o más.
 - Existe una instalación completa (generación y edición) con licencia comercial: FLUX.2 Klein 4B en 8 y 16 GB; Z-Image-Turbo, Qwen-Image y Qwen-Image-Edit en 24 GB o más.
 

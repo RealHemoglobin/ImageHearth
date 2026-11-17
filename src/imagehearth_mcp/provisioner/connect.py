@@ -95,6 +95,31 @@ def _editor_config(*parts):
     return _xdg_config() / Path(*parts)
 
 
+def _claude_desktop_config():
+    """Dónde lee Claude Desktop su config en Windows.
+
+    Las versiones recientes la guardan en %LOCALAPPDATA%\\Claude-Data\\claude_<id>; las anteriores
+    de la Microsoft Store, en la carpeta del paquete, porque Windows redirige %APPDATA%.
+    """
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA")
+
+        data = Path(local) / "Claude-Data" if local else None
+
+        if data is not None and data.is_dir():
+            for folder in sorted(data.glob("claude_*")):
+                if folder.is_dir():
+                    return folder / "claude_desktop_config.json"
+
+        packages = Path(local) / "Packages" if local else None
+
+        if packages is not None and packages.is_dir():
+            for package in sorted(packages.glob("Claude_*")):
+                return package / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json"
+
+    return _editor_config("Claude", "claude_desktop_config.json")
+
+
 CLIENTS = {
     client.name: client
     for client in (
@@ -117,7 +142,7 @@ CLIENTS = {
             UNTESTED,
             "json",
             "mcpServers",
-            path=lambda: _editor_config("Claude", "claude_desktop_config.json"),
+            path=_claude_desktop_config,
             entry=_plain_entry,
         ),
         Client(
@@ -808,7 +833,7 @@ def _ask_each(found):
     while index < len(found):
         client = found[index]
         answer = menu.choose(
-            f"Connect {client.label} ({client.level})?",
+            f"Connect {client.label}?",
             [menu.Option("yes", "Yes"), menu.Option("no", "No")],
             default="yes",
             allow_back=True,
@@ -840,7 +865,7 @@ def _detect(args, command):
 
     if args.yes or not interactive:
         for client in found:
-            print(f"Found {client.label} ({client.level}).")
+            print(f"Found {client.label}.")
 
     if not args.yes and not interactive:
         raise ProvisionError("Nothing was changed. Non-interactive mode needs --yes.")
@@ -863,7 +888,7 @@ def _detect(args, command):
 def run(args):
     if args.list_clients:
         for client in CLIENTS.values():
-            print(f"{client.name:15} {client.label} ({client.level})")
+            print(f"{client.name:15} {client.label}")
 
         return 0
 

@@ -63,6 +63,28 @@ function Install-ImageHearth {
         $Package = $PSScriptRoot
         $FromPyPI = $false
     }
+    # Windows can't replace a program that is running. Agents keep imagehearth-mcp
+    # open while they run, and an update fails halfway and leaves it unusable.
+    $ToolDir = (uv tool dir) 2>$null
+    $Running = @()
+    if ($ToolDir) {
+        $Running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.Path -and ($_.Path -like (Join-Path $ToolDir "imagehearth-mcp\*") -or $_.Path -like "*\imagehearth-mcp.exe")
+        })
+    }
+    if ($Running.Count -gt 0) {
+        Write-Host "ImageHearth is running ($($Running.Count) processes), probably started by an agent:"
+        $Running | ForEach-Object { Write-Host "  $($_.Id) $($_.Path)" }
+        Write-Host "Windows can't update it while it runs. Close your agents (Claude Desktop, Claude Code, Codex...) or let me stop it."
+        $Answer = Read-Host "Stop these processes now? [y/N]"
+        if ($Answer -notmatch "^[yYsS]") {
+            Show-Failure "Nothing was changed. Close the agents that use ImageHearth and run this again."
+            return
+        }
+        $Running | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+    }
+
     Write-Host "Installing $Package..."
     uv tool install --python 3.13 $Package
 
@@ -75,7 +97,7 @@ function Install-ImageHearth {
     }
 
     if ($LASTEXITCODE -ne 0) {
-        Show-Failure "Can't install $Package. Check your network connection and try again."
+        Show-Failure "Can't install $Package. Read uv's error above: a network failure, or a program still running from the old installation (close your agents). If the command is damaged, run: uv tool install --python 3.13 --force $Package"
         return
     }
 

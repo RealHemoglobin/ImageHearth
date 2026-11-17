@@ -56,6 +56,7 @@ def home(tmp_path, monkeypatch):
 
     # Sin APPDATA, en Windows se usaría la carpeta real del usuario.
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
 
     # Sin CLI oficial, para cubrir la edición del archivo en todos los formatos.
     monkeypatch.setattr(connect.shutil, "which", lambda name: None)
@@ -272,6 +273,23 @@ def test_windows_path_uses_appdata(home, monkeypatch):
     monkeypatch.setattr(connect.sys, "platform", "win32")
     monkeypatch.setenv("APPDATA", str(home / "Roaming"))
     assert connect.CLIENTS["vscode"].path() == home / "Roaming" / "Code" / "User" / "mcp.json"
+
+
+def test_claude_desktop_store_package_path(home, monkeypatch):
+    monkeypatch.setattr(connect.sys, "platform", "win32")
+    monkeypatch.setenv("APPDATA", str(home / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(home / "Local"))
+    desktop = connect.CLIENTS["claude-desktop"]
+    assert desktop.path() == home / "Roaming" / "Claude" / "claude_desktop_config.json"
+
+    package = home / "Local" / "Packages" / "Claude_abc123"
+    package.mkdir(parents=True)
+    expected = package / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json"
+    assert desktop.path() == expected
+
+    data = home / "Local" / "Claude-Data" / "claude_abc123"
+    data.mkdir(parents=True)
+    assert desktop.path() == data / "claude_desktop_config.json"
 
 
 def test_skill_is_installed_and_removed_only_if_own(home):

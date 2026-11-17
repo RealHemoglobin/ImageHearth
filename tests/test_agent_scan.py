@@ -19,6 +19,7 @@ def home(tmp_path, monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
     monkeypatch.setattr(connect.shutil, "which", lambda name: None)
     monkeypatch.setattr(config, "INSTALL_MANIFEST", tmp_path / "data" / "install.json")
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
