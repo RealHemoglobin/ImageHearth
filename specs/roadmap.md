@@ -633,11 +633,13 @@ Especificación: [specs/2026-11-16-nuevos-modelos](2026-11-16-nuevos-modelos/req
 
 Especificación: [specs/2026-11-17-v1](2026-11-17-v1/requirements.md).
 
-- [ ] Mantener macOS como nivel 3 experimental; pasa a nivel 2 solo si se ha probado con hardware real, sin que eso retenga la versión.
-- [ ] Probar la matriz completa de niveles 1 y 2 antes de publicar.
-- [ ] Definir la política de versiones: la versión de ImageEngine fija ComfyUI y modelos, y `update` migra entre ellas.
-- [ ] Ejecutar periódicamente, con una tarea programada local, la prueba de contrato contra el último ComfyUI, para detectar roturas antes de actualizar la versión fijada.
-- [ ] Revisión de seguridad: scripts de instalación, descargas, edición de configuración de agentes y lectura de rutas locales.
+**Estado:** completada por decisión del usuario el 2026-11-17: ImageHearth 1.0.0 está publicada (PyPI, GitHub Release y registro MCP) y funciona, según el usuario. Las comprobaciones posteriores a la publicación no constan en la [evidencia](2026-11-17-v1/validation.md#evidencia), que recoge lo pendiente.
+
+- [x] Mantener macOS como nivel 3 experimental; pasa a nivel 2 solo si se ha probado con hardware real, sin que eso retenga la versión.
+- [x] Probar la matriz completa de niveles 1 y 2 antes de publicar.
+- [x] Definir la política de versiones: la versión de ImageEngine fija ComfyUI y modelos, y `update` migra entre ellas.
+- [x] Ejecutar periódicamente, con una tarea programada local, la prueba de contrato contra el último ComfyUI, para detectar roturas antes de actualizar la versión fijada.
+- [x] Revisión de seguridad: scripts de instalación, descargas, edición de configuración de agentes y lectura de rutas locales.
 
 **Listo cuando:** se cumplen los cinco criterios de éxito de la misión.
 
@@ -680,4 +682,4 @@ Ninguna. Las de la fase 9 se cerraron el 2026-11-05 y constan en la [propia fase
 
 ## Siguiente paso
 
-Cerrar la fase 0 y preparar la fase 1 con la skill `feature-spec`, que lee estos documentos y genera la especificación en `specs/`.
+La v1.0 está publicada. Lo siguiente sale de «Después de la v1», según la demanda y los informes de otro hardware; para empezar una, usa la skill `feature-spec`.
