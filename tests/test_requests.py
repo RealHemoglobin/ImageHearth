@@ -238,6 +238,8 @@ class McpProtocol(EngineTestCase):
             tools,
             {
                 "create_image",
+                "get_image_job",
+                "cancel_image_job",
                 "list_workflows",
                 "get_engine_status",
                 "ensure_comfyui",

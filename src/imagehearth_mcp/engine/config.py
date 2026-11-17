@@ -211,6 +211,7 @@ SETUP_LOCK = DATA_DIR / "setup.lock"
 SETUP_JOB_LOCK = DATA_DIR / "setup-job.lock"
 SETUP_JOB_FILE = DATA_DIR / "state" / "setup_job.json"
 SETUP_JOB_LOG = LOG_DIR / "setup-job.log"
+JOBS_FILE = DATA_DIR / "state" / "image_jobs.json"
 COMFY_LOG_FILE = LOG_DIR / "comfyui.log"
 ENGINE_LOG_DIR = LOG_DIR
 
@@ -238,6 +239,11 @@ FREE_TIMEOUT = _int_env("IMAGEHEARTH_FREE_TIMEOUT", 120)
 COMFY_START_TIMEOUT = _int_env("IMAGEHEARTH_COMFY_START_TIMEOUT", 180)
 CANCEL_TIMEOUT = 30
 WORKFLOW_TIMEOUT = 1200
+# Cuánto espera una llamada a create_image / get_image_job antes de devolver "sigue en curso".
+# Debe quedar por debajo del plazo más corto de los clientes (60 s en varios): pasado ese
+# plazo el cliente cancela la llamada y el agente solo ve un error genérico.
+JOB_WAIT_SECONDS = _int_env("IMAGEHEARTH_JOB_WAIT_SECONDS", 40)
+JOBS_KEPT = 20
 KONTEXT_TIMEOUT = 1800
 POLL_INTERVAL = 2.0
 OLLAMA_CHECK_INTERVAL = 15.0

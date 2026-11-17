@@ -30,7 +30,7 @@ irm https://raw.githubusercontent.com/RealHemoglobin/ImageHearth/main/install.ps
 
 ### Several images at once
 
-When your agent already knows it needs several independent images, it passes a list of prompts to `create_image` in a single call, which returns when all are done. The GPU is prepared once for the whole batch: language models are unloaded and restored once and ComfyUI starts once, instead of repeating that for every image.
+When your agent already knows it needs several independent images, it passes a list of prompts to `create_image` in a single call. The GPU is prepared once for the whole batch: language models are unloaded and restored once and ComfyUI starts once, instead of repeating that for every image.
 
 > Make four fast variations of a logo, and two high-quality posters, 1024x768.
 

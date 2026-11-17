@@ -42,6 +42,10 @@ Run `imagehearth-mcp connect --print claude-desktop`, which prints the most comm
 
 ## Long generations
 
+Generations run as background jobs, so a client that cuts a tool call after 60 s (or any other time) no longer kills the image or leaves the agent guessing. `create_image` waits up to 40 s (`IMAGEHEARTH_JOB_WAIT_SECONDS`, keep it below your client's shortest timeout) and returns the result or `RUNNING: image job <id>`, which means it has not failed. The agent then calls `get_image_job` with that id, which waits the same way, until the path comes back; `cancel_image_job` stops it. `get_engine_status` lists the running jobs, and if the server that was making an image stops, `get_image_job` says the job was interrupted instead of leaving it unknown.
+
+The measurements below, made before this, show how each client treated a single 330-second call:
+
 Measured with a 330-second tool call:
 
 | Client | Without progress | With progress, as ImageHearth sends it |

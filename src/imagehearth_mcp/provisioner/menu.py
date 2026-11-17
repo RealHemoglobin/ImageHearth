@@ -61,6 +61,7 @@ def read_key():
 
         return char
 
+    import os
     import select
     import termios
     import tty
@@ -70,10 +71,10 @@ def read_key():
 
     try:
         tty.setcbreak(fd)
-        char = sys.stdin.read(1)
+        char = _read_byte(os, fd)
 
         if char == ESCAPE:
-            return _read_escape(select, fd)
+            return _read_escape(os, select, fd)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
 
@@ -83,14 +84,39 @@ def read_key():
     return char
 
 
-def _read_escape(select, fd):
+def _read_byte(os, fd):
+    """Un carácter leído directo del descriptor, sin el búfer de `sys.stdin`.
+
+    Con `sys.stdin.read(1)` Python lee de golpe toda la secuencia de una flecha
+    (`Esc [ A`) a su búfer; `select` ya no ve nada en el descriptor y la flecha se perdía.
+    """
+    data = os.read(fd, 1)
+
+    if not data:
+        return ""
+
+    # Un carácter UTF-8 multibyte: se completan los bytes que faltan.
+    size = 1 if data[0] < 0xC0 else 2 if data[0] < 0xE0 else 3 if data[0] < 0xF0 else 4
+
+    while len(data) < size:
+        more = os.read(fd, 1)
+
+        if not more:
+            break
+
+        data += more
+
+    return data.decode("utf-8", errors="ignore")
+
+
+def _read_escape(os, select, fd):
     """Resto de una secuencia que empieza por Esc, sin bloquear si era Esc solo."""
 
     def next_char():
         if not select.select([fd], [], [], ESCAPE_WAIT)[0]:
             return ""
 
-        return sys.stdin.read(1)
+        return _read_byte(os, fd)
 
     if next_char() not in ("[", "O"):
         return ""

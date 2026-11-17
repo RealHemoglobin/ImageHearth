@@ -95,7 +95,7 @@ En Windows:
 
 - [x] `scripts/check.sh` en verde en Linux.
 - [x] `scripts/contract.sh` en verde.
-- [ ] Validaciones manuales del asistente completadas.
+- [x] Validaciones manuales del asistente completadas, salvo `setup` interactivo en un pty real y un cliente MCP real.
 - [ ] **Usuario:** pruebas con los modelos grandes.
 - [x] `README.md`, `README.es.md`, `llms-install.md`, `THIRD_PARTY_NOTICES.md`, skill e instrucciones del servidor actualizados.
 - [ ] Roadmap con la fase 15 actualizada (varios modelos por capacidad y `model`), tareas marcadas y fase completada.
@@ -107,11 +107,11 @@ En Windows:
 |---|---|---|
 | `scripts/check.sh` | **Verde**: `ruff`, 1008 tests y los mismos tests contra el wheel instalado | 2026-11-16 |
 | `scripts/contract.sh` | **Verde** contra ComfyUI 0.43.0 (el de las mediciones, con su `.venv` enlazado como `venv`): los 37 tipos de nodo y las entradas de los 19 workflows existen | 2026-11-16 |
-| Instalación de modelos pequeños con componentes compartidos | Simulado en tests: verde. Real en la RTX 4090: **pendiente** | 2026-11-16 |
-| Generación y edición con `model` y predeterminado | Simulado (servidor ComfyUI falso): verde. Real: **pendiente** | 2026-11-16 |
-| Conjunto fijo y `doctor` | Simulado en tests: verde. Real: **pendiente** | 2026-11-16 |
+| Instalación de modelos pequeños con componentes compartidos | **Real, RTX 4090, `HOME` temporal**: `setup --profile full --fast-models klein-4b,sdxl-turbo --quality-models chroma-hd:fp8 --edit-models klein-4b` (Klein una sola vez; codificadores compartidos reutilizados); después `--fast-models klein-4b,z-image-turbo:int8,sdxl-turbo` añade Z-Image int8 y su codificador fp8 sin tocar lo demás | 2026-11-17 |
+| Generación y edición con `model` y predeterminado | **Real**: sin `model` Klein (predeterminado), `model=sdxl-turbo`, `quality=high` (Chroma fp8), edición con Klein 4B y lote con `model` distinto por elemento en una sesión; PNG con `ImageHearth-Model` correcto (`klein-4b:bf16`, `sdxl-turbo:fp16`, `chroma-hd:fp8`) y workflow esperado; imágenes revisadas a ojo. Errores de `model` (desconocido, otra capacidad, no instalado, con `workflow`) antes de tocar la GPU | 2026-11-17 |
+| Conjunto fijo y `doctor` | **Real**: quitar `sdxl-turbo` sin `--yes` se rechaza; con `--yes` se borra solo su archivo y se conservan los compartidos; `doctor` lista los modelos por capacidad | 2026-11-17 |
 | `setup` interactivo en pty | Con teclas inyectadas en tests: verde. En un pty real: **pendiente** | 2026-11-16 |
 | Cliente MCP | Esquema de herramientas y llamadas a `list_workflows`/`create_image` en tests: verde. Contra el servidor real: **pendiente** | 2026-11-16 |
-| `uninstall` | Simulado en tests: verde. Real: **pendiente** | 2026-11-16 |
+| `uninstall` | **Real**: no queda ningún peso descargado; solo los archivos que ya estaban (los codificadores que dejé antes) | 2026-11-17 |
 | Modelos grandes (usuario) | Pendiente | — |
 | Windows (mantenedor) | Pendiente | — |

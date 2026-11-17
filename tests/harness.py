@@ -298,6 +298,17 @@ class FakeComfy(FakeServer):
 
 
 class EngineTestCase(unittest.TestCase):
+    @staticmethod
+    def _finish_jobs():
+        """Un trabajo en segundo plano no debe sobrevivir a su prueba."""
+        from imagehearth_mcp.engine import jobs
+
+        for job in list(jobs._jobs.values()):
+            job.tracker.cancelled.set()
+            job.done.wait(5)
+
+        jobs._jobs.clear()
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="imagehearth-test-"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
@@ -309,6 +320,7 @@ class EngineTestCase(unittest.TestCase):
         self.comfy = FakeComfy(self.comfy_dir)
         self.ollama = FakeOllama()
         self.addCleanup(self.comfy.stop)
+        self.addCleanup(self._finish_jobs)
         self.addCleanup(self.ollama.stop)
 
         patches = {
@@ -324,6 +336,7 @@ class EngineTestCase(unittest.TestCase):
             "LOCK_FILE": self.tmp / "engine.lock",
             "PID_FILE": self.tmp / "state" / "comfyui.pid",
             "STATE_FILE": self.tmp / "state" / "session.json",
+            "JOBS_FILE": self.tmp / "state" / "image_jobs.json",
             "POLL_INTERVAL": 0.01,
             "OLLAMA_CHECK_INTERVAL": 0.0,
             "FREE_TIMEOUT": 0.1,

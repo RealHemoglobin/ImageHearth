@@ -1,12 +1,13 @@
 import asyncio
 import io
+import time
 from pathlib import Path
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.utilities.types import Image
 from PIL import Image as PILImage
 
-from imagehearth_mcp.engine import batch, catalog, config, orchestrator, progress
+from imagehearth_mcp.engine import batch, catalog, config, jobs, orchestrator
 from imagehearth_mcp.engine import loras as loras_module
 from imagehearth_mcp.engine.image_router import create_image as route_image
 from imagehearth_mcp.engine.status import get_status
@@ -22,6 +23,14 @@ edit, pass the existing files in image_paths. Don't call ComfyUI directly or \
 unload language models yourself: ImageHearth frees the GPU and gives the memory back when it finishes. If you are a \
 local model, this works while you are loaded, so calling it is safe.
 
+A generation can take minutes, so it runs in the background. create_image waits \
+a while and then returns one of two things: the result, or a line starting with \
+"RUNNING:" and a job id. RUNNING means the image is still being made. It has NOT \
+failed and nothing was lost: call get_image_job with that job id (as many times as \
+it takes, it waits for you) until it returns the result. Never call create_image \
+again for an image that is RUNNING, and never report it as failed or cut off. \
+cancel_image_job stops a job, only if the user asks for it.
+
 After a tool returns:
 - For one prompt, the first line is the path of the image. Always tell the user \
 that path.
@@ -30,14 +39,17 @@ that path.
 others; retry only those. Tell the user every path.
 - Each following line starting with WARNING: means the image exists but something \
 needs attention. Tell the user and don't generate it again because of a warning.
-- Only say an image exists if the tool returned a path.
+- Only say an image exists if a tool returned a path.
 
 If a tool fails:
 - If the error names an `imagehearth-mcp setup` command, tell the user. Never use a \
 different model instead.
 - Otherwise call get_engine_status. recovery_required: call recover_engine, then \
-retry once. busy: another image is being made, so wait before retrying. stopped \
-ComfyUI: call ensure_comfyui. If it still fails, report the actual error.
+retry once. busy: another image is being made (jobs lists it), so wait before \
+retrying. stopped ComfyUI: call ensure_comfyui. If it still fails, report the actual \
+error.
+- A call that fails or times out on the client side does not mean the image failed: \
+get_image_job with no job id shows the latest job and what happened to it.
 - memory_mode manual: ImageHearth does not touch the user's models, so the user \
 must free GPU memory.
 
@@ -82,36 +94,75 @@ HEARTBEAT_SECONDS = 5
 PREVIEW_SIDE = 1568
 
 
-async def _run_generation(ctx, function, **arguments):
-    """Ejecuta en un hilo para no bloquear MCP, informando de la etapa en curso.
+async def _wait(ctx, job):
+    """Wait up to `config.JOB_WAIT_SECONDS` for the job, reporting its stage.
 
     Enviar progreso mantiene viva la petición en los clientes que reinician su plazo
-    con él. Al cancelar, la sesión del hilo se detiene y termina su propia limpieza.
+    con él. Cancelar la espera no cancela el trabajo: sigue en segundo plano.
     """
-    tracker = progress.Tracker()
-
     async def heartbeat():
         elapsed = 0
 
         while True:
             await asyncio.sleep(HEARTBEAT_SECONDS)
             elapsed += HEARTBEAT_SECONDS
-            await ctx.report_progress(elapsed, message=f"{tracker.stage} ({elapsed}s)")
-
-    def work():
-        with progress.tracking(tracker):
-            return function(**arguments)
+            await ctx.report_progress(elapsed, message=f"{job.stage} ({elapsed}s)")
 
     reporter = asyncio.create_task(heartbeat()) if ctx is not None else None
+    deadline = time.monotonic() + config.JOB_WAIT_SECONDS
 
     try:
-        return await asyncio.to_thread(work)
-    except asyncio.CancelledError:
-        tracker.cancelled.set()
-        raise
+        while not job.done.is_set() and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
     finally:
         if reporter is not None:
             reporter.cancel()
+
+
+def _running_message(job):
+    return (
+        f"RUNNING: image job {job.id} is still being generated "
+        f"({job.stage}, {job.elapsed}s so far). It has NOT failed and keeps running in "
+        f'the background. Call get_image_job(job_id="{job.id}") to keep waiting for it; '
+        "do not call create_image again for this image."
+    )
+
+
+async def _respond(job, include_image):
+    """What the agent is told about a job: the result, a failure or that it runs on."""
+    if not job.done.is_set():
+        return _running_message(job)
+
+    if job.status == jobs.COMPLETED:
+        result = job.result
+
+        if not include_image or job.kind != "single":
+            return result if isinstance(result, str) else str(result)
+
+        result = str(result)
+        path = Path(result.splitlines()[0])
+
+        try:
+            return [result, await asyncio.to_thread(_preview, path)]
+        except OSError as error:
+            return f"{result}\nWARNING: The image could not be attached: {error}"
+
+    if job.status == jobs.CANCELLED:
+        message = f"CANCELLED: image job {job.id} was cancelled."
+        return f"{message}\n{job.result}" if job.result else message
+
+    if job.status == jobs.INTERRUPTED:
+        raise RuntimeError(
+            f"Image job {job.id} was interrupted: the ImageHearth server that was "
+            "making it stopped before it finished, so there is no image. Call "
+            "get_engine_status; if it says recovery_required, call recover_engine; "
+            "then run create_image again once."
+        )
+
+    if job.exception is not None:
+        raise job.exception
+
+    raise RuntimeError(job.error or f"Image job {job.id} failed.")
 
 
 def _preview(path):
@@ -142,8 +193,14 @@ async def create_image(
     ctx: Context = None,
 ):
     """Create or edit images. If you need more than one image, make ONE call with
-    a list of prompts in prompt: never one call per image. The call waits and
-    returns when all are done, and it is much faster than separate calls.
+    a list of prompts in prompt: never one call per image. All are made in a single
+    session, which is much faster than separate calls.
+
+    The generation runs in the background and this call waits for it a while (under
+    a minute). If it finishes, you get the result. If not, you get a line starting
+    with "RUNNING:" and a job id: the image has NOT failed, it keeps being made. Call
+    get_image_job with that id until it returns the result; never call create_image
+    again for it.
 
     One image: create_image(prompt="a red fox")
     Several:   create_image(prompt=["a red fox", "a blue whale", "an owl"])
@@ -192,7 +249,8 @@ async def create_image(
 
     If the models are missing, the error names the setup command to run; another
     model is never used instead.
-    Returns the image path on the first line. Tell the user that path. Later lines
+    Returns the image path on the first line (or RUNNING: and a job id, see above).
+    Tell the user that path. Later lines
     starting with WARNING mean the image exists but something needs attention.
     With a list of prompts, the whole list is checked first (nothing is made if an
     item is invalid) and the result has one line per prompt in order:
@@ -204,9 +262,9 @@ async def create_image(
         if include_image:
             raise ValueError("include_image only works with a single prompt.")
 
-        result = await _run_generation(
-            ctx,
+        job = jobs.start(
             batch.run,
+            "batch",
             items=prompt,
             quality=quality,
             width=width,
@@ -219,33 +277,81 @@ async def create_image(
             loras=loras,
             model=model,
         )
-        return str(result)
+    else:
+        job = jobs.start(
+            route_image,
+            "single",
+            include_image=include_image,
+            prompt=prompt,
+            mode=mode,
+            quality=quality,
+            image_paths=image_paths,
+            workflow=workflow,
+            width=width,
+            height=height,
+            negative_prompt=negative_prompt,
+            style=style,
+            loras=loras,
+            model=model,
+        )
 
-    result = await _run_generation(
-        ctx,
-        route_image,
-        prompt=prompt,
-        mode=mode,
-        quality=quality,
-        image_paths=image_paths,
-        workflow=workflow,
-        width=width,
-        height=height,
-        negative_prompt=negative_prompt,
-        style=style,
-        loras=loras,
-        model=model,
-    )
+    await _wait(ctx, job)
+    return await _respond(job, include_image)
 
-    if not include_image:
-        return result
 
-    path = Path(result.splitlines()[0])
+def _known_job(job_id):
+    job = jobs.get(job_id)
 
-    try:
-        return [result, await asyncio.to_thread(_preview, path)]
-    except OSError as error:
-        return f"{result}\nWARNING: The image could not be attached: {error}"
+    if job is None:
+        known = ", ".join(jobs.known_ids()) or "none"
+        raise ValueError(f"There is no image job {job_id!r}. Known jobs: {known}.")
+
+    return job
+
+
+# Sin salida estructurada: la imagen opcional no cabe en un esquema de texto.
+@mcp.tool(structured_output=False)
+async def get_image_job(
+    job_id: str = "",
+    include_image: bool = False,
+    ctx: Context = None,
+):
+    """Wait for an image that create_image reported as RUNNING, and get its result.
+
+    job_id: The id create_image gave. Empty means the latest job, which is how to find
+      out what happened to an image if a call was cut off.
+    include_image: true also returns the picture of a single image, as in create_image.
+
+    Waits a while and returns the same as create_image: the result (the image path
+    first), or another line starting with "RUNNING:" if it is still being made. Then
+    call this again; the image is not lost and nothing is generated twice. If the job
+    failed, the error says why. If the server that was making it stopped, the error
+    says so and what to do.
+    """
+    job = _known_job(job_id)
+    await _wait(ctx, job)
+    return await _respond(job, include_image or job.include_image)
+
+
+@mcp.tool()
+async def cancel_image_job(job_id: str = "") -> str:
+    """Stop an image that is being generated. Only when the user asks for it.
+
+    job_id: Empty means the latest job. The job ends by itself once it has freed the
+    GPU and restored the language models; get_image_job confirms it.
+    """
+    job = _known_job(job_id)
+
+    if job.status != jobs.RUNNING:
+        return f"Image job {job.id} is not running: it is {job.status}."
+
+    if not jobs.cancel(job):
+        return (
+            f"Image job {job.id} belongs to another ImageHearth server process, which "
+            "is the only one that can stop it."
+        )
+
+    return f"Cancelling image job {job.id}; it ends once the GPU is released."
 
 
 @mcp.tool()
@@ -296,10 +402,12 @@ async def get_engine_status() -> dict:
     """Check why an image failed: ImageHearth, ComfyUI and local model servers.
 
     imageengine.status is one of:
-    ready: working. busy: another image is being made, wait.
+    ready: working. busy: an image is being made, wait: imageengine.jobs says which
+    (id, stage, seconds) and get_image_job waits for it.
     not_installed: see imageengine.issues, or call setup_status.
     degraded: a problem, see imageengine.issues.
-    recovery_required: call recover_engine.
+    recovery_required: a session was interrupted (imageengine.session.reason says
+    how): call recover_engine.
     imageengine.quality_model is the model quality="high" generates with, its license
     and whether it allows commercial use (null if none is installed).
     memory.mode says how local models are handled: auto, off or manual.

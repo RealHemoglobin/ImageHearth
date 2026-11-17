@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-17
+
+- Image generation runs as a background job. `create_image` waits up to 40 s (`IMAGEHEARTH_JOB_WAIT_SECONDS`) and returns the result or `RUNNING: image job <id>`, which tells the agent the image has not failed; the new `get_image_job` waits for it and `cancel_image_job` stops it. A client that cuts the call (several do at 60 s) no longer kills the generation and leaves a stuck `recovery_required`.
+- `get_engine_status` lists the running jobs and always says why a session needs `recover_engine`. A job whose server stopped is reported as interrupted, with what to do.
+
 ## 2026-11-06
 
 - Bumped the version to `0.1.0b3` (package, installers, `server.json` and docs).

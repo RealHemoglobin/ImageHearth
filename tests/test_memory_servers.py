@@ -15,6 +15,7 @@ from imagehearth_mcp import server
 from imagehearth_mcp.engine import (
     comfyui_manager,
     config,
+    jobs,
     memory,
     memory_servers,
     orchestrator,
@@ -381,7 +382,27 @@ class Responses(EngineTestCase):
         with self.assertRaisesRegex(ValueError, "at most|At most"):
             asyncio.run(server.create_image("x", image_paths=[reference] * 7))
 
-    def test_cancelling_cleans_the_session(self):
+    def test_cancelling_the_call_does_not_cancel_the_generation(self):
+        self.comfy.behavior = "never"
+
+        async def cancelled():
+            task = asyncio.create_task(server.create_image("a cat"))
+
+            while not self.comfy.workflows:
+                await asyncio.sleep(0.01)
+
+            task.cancel()
+
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+
+        asyncio.run(cancelled())
+        job = jobs.get()
+        self.assertEqual(job.status, jobs.RUNNING)
+        self.assertNotIn("interrupt prompt-1", self.comfy.events)
+        self.addCleanup(job.tracker.cancelled.set)
+
+    def test_cancelling_the_job_cleans_the_session(self):
         self.ollama.add("gemma")
         self.comfy.behavior = "never"
 
@@ -391,15 +412,14 @@ class Responses(EngineTestCase):
             while not self.comfy.workflows:
                 await asyncio.sleep(0.01)
 
-            threads = asyncio.all_tasks()
-            task.cancel()
+            job = jobs.get()
+            self.assertIn("Cancelling", await server.cancel_image_job(job.id))
+            await task
+            return job
 
-            with self.assertRaises(asyncio.CancelledError):
-                await task
-
-            return threads
-
-        asyncio.run(cancelled())
+        job = asyncio.run(cancelled())
+        self.assertTrue(job.done.wait(5))
+        self.assertEqual(job.status, jobs.CANCELLED)
         self.assertIsNone(state.read())
         self.assertIn("gemma", self.ollama.loaded)
         self.assertIn("interrupt prompt-1", self.comfy.events)

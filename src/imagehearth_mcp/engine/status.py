@@ -6,6 +6,7 @@ from imagehearth_mcp.engine import (
     comfyui_manager,
     config,
     gpu,
+    jobs,
     memory,
     ollama_manager,
     orchestrator,
@@ -111,10 +112,19 @@ def get_status():
         "quality_model": _quality_model(),
     }
 
+    running = jobs.active()
+
+    if running:
+        engine["jobs"] = [jobs.describe(job) for job in running]
+
     if pending:
+        phase = pending.get("phase")
         engine["session"] = {
-            "phase": pending.get("phase"),
-            "reason": pending.get("reason"),
+            "phase": phase,
+            # Un servidor detenido a mitad de sesión no deja motivo: se explica la causa probable.
+            "reason": pending.get("reason")
+            or f"The previous session was interrupted while {phase}: its server stopped "
+            "before it could release the GPU. Call recover_engine.",
             "models": [model["name"] for model in pending.get("models", [])],
         }
 

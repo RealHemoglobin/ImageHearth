@@ -1,3 +1,4 @@
+import os
 import sys
 import types
 
@@ -270,15 +271,16 @@ def test_read_key_restores_the_terminal(monkeypatch, failure):
         def fileno(self):
             return 0
 
-        def read(self, count):
-            if failure:
-                raise failure
+    def fake_read(fd, count):
+        if failure:
+            raise failure
 
-            return "5"
+        return b"5"
 
     monkeypatch.setitem(sys.modules, "termios", fake)
     monkeypatch.setitem(sys.modules, "tty", fake_tty)
     monkeypatch.setattr(sys, "stdin", Stdin())
+    monkeypatch.setattr(os, "read", fake_read)
 
     if failure:
         with pytest.raises(failure):
@@ -294,13 +296,13 @@ def test_read_key_restores_the_terminal(monkeypatch, failure):
 
 class ScriptedStdin:
     def __init__(self, text):
-        self.chars = list(text)
+        self.chars = list(text.encode())
 
     def fileno(self):
         return 0
 
-    def read(self, count):
-        return self.chars.pop(0) if self.chars else ""
+    def read_byte(self, fd, count):
+        return bytes([self.chars.pop(0)]) if self.chars else b""
 
 
 def posix_terminal(monkeypatch, text):
@@ -317,6 +319,7 @@ def posix_terminal(monkeypatch, text):
         types.SimpleNamespace(select=lambda r, w, x, t: (r if stdin.chars else [], [], [])),
     )
     monkeypatch.setattr(sys, "stdin", stdin)
+    monkeypatch.setattr(os, "read", stdin.read_byte)
     monkeypatch.setattr(sys, "platform", "linux")
     return fake
 
@@ -339,6 +342,23 @@ def test_read_key_reads_arrows_on_posix(monkeypatch, text, expected):
     fake = posix_terminal(monkeypatch, text)
     assert menu.read_key() == expected
     assert fake.calls == ["get", "cbreak", ("set", ["saved"])]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="pty es de POSIX")
+@pytest.mark.parametrize(("text", "expected"), [(b"\x1b[A", "UP"), (b"\x1b[B", "DOWN"), (b"\x1bOB", "DOWN"), (b"\x1b", "")])
+def test_read_key_reads_arrows_from_a_real_terminal(monkeypatch, text, expected):
+    """Regresión: `sys.stdin` con búfer se tragaba el resto de la secuencia de la flecha."""
+    import pty
+
+    master, slave = pty.openpty()
+    monkeypatch.setattr(sys, "stdin", os.fdopen(slave, "r", closefd=False))
+
+    try:
+        os.write(master, text + b"x")
+        assert menu.read_key() == expected
+    finally:
+        os.close(master)
+        os.close(slave)
 
 
 def windows_console(monkeypatch, text):
