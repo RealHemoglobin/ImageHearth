@@ -119,6 +119,12 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def scrub(text):
+    """El texto sin el valor de HF_TOKEN: un mensaje de error nunca debe llevarlo a un log."""
+    token = os.environ.get("HF_TOKEN")
+    return str(text).replace(token, "***") if token else str(text)
+
+
 def _translate(error, model):
     from huggingface_hub.errors import (
         GatedRepoError,
@@ -135,7 +141,7 @@ def _translate(error, model):
 
     if isinstance(error, HfHubHTTPError):
         return ProvisionError(
-            f"Downloading {model.name} from {model.repo} failed: {error}. "
+            f"Downloading {model.name} from {model.repo} failed: {scrub(error)}. "
             "Run the same command again to continue."
         )
 

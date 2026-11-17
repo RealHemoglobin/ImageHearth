@@ -11,7 +11,9 @@ from importlib.metadata import PackageNotFoundError, version
 
 import requests
 
-SCHEMA = 1
+from imagehearth_mcp.provisioner import migrations
+from imagehearth_mcp.provisioner.migrations import REPORT_SCHEMA
+
 OK = "ok"
 WARN = "warn"
 FAIL = "fail"
@@ -708,6 +710,22 @@ def collect(verify_hashes=False, session=requests, run=subprocess.run, detection
             )
             records = InstallManifest(config.INSTALL_MANIFEST)
 
+        if records.needs_migration and checks["config"].status == OK:
+            checks["config"].status = WARN
+            checks["config"].message += (
+                f" The install record is in an older format ({records.migrated_from}) and "
+                "needs migrating."
+            )
+            checks["config"].fix = "Run `imagehearth-mcp update`."
+
+        if records.exists and checks["config"].status != FAIL:
+            checks["config"].details["install_record"] = {
+                "schema": records.migrated_from or migrations.INSTALL_SCHEMA,
+                "current_schema": migrations.INSTALL_SCHEMA,
+                "needs_migration": records.needs_migration,
+                "written_by": records.written_by,
+            }
+
         checks["comfyui"] = check_comfyui(config, records)
 
         if checks["comfyui"].status != FAIL:
@@ -738,7 +756,7 @@ def collect(verify_hashes=False, session=requests, run=subprocess.run, detection
 
 def to_json(checks):
     return {
-        "schema": SCHEMA,
+        "schema": REPORT_SCHEMA,
         "ok": all(check.status != FAIL for check in checks),
         "checks": [asdict(check) for check in checks],
     }

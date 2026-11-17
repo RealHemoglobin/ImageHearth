@@ -9,7 +9,7 @@
 #
 # Everything is inside main(), so a cut-off download can't run half a script.
 
-VERSION="0.1.0b3"
+VERSION="1.0.0"
 DOCS="https://github.com/RealHemoglobin/ImageHearth"
 
 fail() {
@@ -78,7 +78,14 @@ main() {
     # a local wheel; otherwise, the pinned version from PyPI.
     package="imagehearth-mcp==$VERSION"
     from_pypi=1
-    repo_dir=$(cd "$(dirname "$0")" 2>/dev/null && pwd) || repo_dir=""
+    # Only when this very file is run from a clone: with `curl | sh`, $0 is "sh" and the
+    # current directory must never be taken for the repository.
+    repo_dir=""
+    case "$0" in
+        install.sh | */install.sh)
+            [ -f "$0" ] && repo_dir=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+            ;;
+    esac
     if [ -n "${IMAGEHEARTH_INSTALL_SOURCE:-}" ]; then
         package="$IMAGEHEARTH_INSTALL_SOURCE"
         from_pypi=""

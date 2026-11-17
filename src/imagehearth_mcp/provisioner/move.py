@@ -25,6 +25,7 @@ from imagehearth_mcp.provisioner import (
     locations,
     manifest,
     menu,
+    migrations,
     models,
     preflight,
     quality,
@@ -33,7 +34,7 @@ from imagehearth_mcp.provisioner import (
 from imagehearth_mcp.provisioner.install_manifest import InstallManifest
 from imagehearth_mcp.provisioner.manifest import format_size
 
-SCHEMA = 1
+SCHEMA = migrations.MOVE_SCHEMA
 COPY_CHUNK = 8 * 1024 * 1024
 TEMP_SUFFIX = ".imagehearth-move"
 # Entre dos escrituras de `move.json` se copian como mucho tantos archivos pequeños.

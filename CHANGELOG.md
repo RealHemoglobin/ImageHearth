@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-17 (1.0.0)
+
+- ImageHearth 1.0.0. Bumped the version everywhere (package, installers, `server.json` and docs) and removed the beta wording. The README support table has levels: 1 supported, 2 expected to work, 3 experimental or untested.
+- Version policy in `docs/versioning.md`: semantic versioning, what each release pins, and what a patch, a minor and a major release may change. A change of the pinned ComfyUI or of the `install.json` format only comes in a minor or major release.
+- Versioned migrations. `install.json` records the ImageHearth version that wrote it, and `update` migrates older formats in order, keeping the previous record as `install.json.bak-<format>`. An install record from a newer ImageHearth is refused without changes. `doctor` reports a record that needs migrating. A migration never downloads or deletes models.
+- `update` shows, before acting, the ImageHearth version it comes from and goes to, the record format, the pinned ComfyUI before and after, and the models that change. It asks before applying them; `--yes` doesn't ask.
+- Scheduled contract test: `scripts/contract_latest` (with `.sh` and `.ps1`) tests the latest ComfyUI release in a temporary folder, writes a dated log with the tested version and exits with 1 if a workflow would break. `docs/releasing.md` explains how to schedule it with the Windows Task Scheduler, cron or a systemd timer. `scripts/contract` shares its check.
+- Security review (`docs/security-review.md`). Fixed: `install.sh` no longer takes the current directory for a clone of the repository when run with `curl | sh`; `connect` writes agent configuration files with private permissions from the start and keeps a symbolic link a link; an error message can't carry `HF_TOKEN`. Tests cover unsafe archive members for ComfyUI and its custom nodes.
+
 ## 2026-11-17
 
 - Image generation runs as a background job. `create_image` waits up to 40 s (`IMAGEHEARTH_JOB_WAIT_SECONDS`) and returns the result or `RUNNING: image job <id>`, which tells the agent the image has not failed; the new `get_image_job` waits for it and `cancel_image_job` stops it. A client that cuts the call (several do at 60 s) no longer kills the generation and leaves a stuck `recovery_required`.

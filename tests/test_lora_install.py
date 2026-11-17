@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -41,7 +42,7 @@ def present(box):
 
 
 def owned_models():
-    return {entry["path"] for entry in InstallManifest.load(config.INSTALL_MANIFEST).owned("model")}
+    return {Path(entry["path"]).as_posix() for entry in InstallManifest.load(config.INSTALL_MANIFEST).owned("model")}
 
 
 DOWN = "\x1b[B"

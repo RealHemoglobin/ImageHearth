@@ -150,7 +150,7 @@ def _build_parser():
     update.add_argument(
         "--yes",
         action="store_true",
-        help="With --move-to, move without asking.",
+        help="Apply the changes (or, with --move-to, move) without asking.",
     )
 
     uninstall = commands.add_parser(

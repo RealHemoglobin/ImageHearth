@@ -5,6 +5,7 @@ libre, así que no toca la que esté en uso. Los nodos fijados en el manifiesto,
 ComfyUI-GGUF, se instalan en una carpeta temporal: el ComfyUI local no cambia.
 """
 
+import contextlib
 import json
 import os
 import shutil
@@ -122,19 +123,34 @@ def install_nodes(base_dir):
     return packages
 
 
-def main():
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
-        check_contract(Path(folder))
+class ContractError(Exception):
+    """ComfyUI no llegó a responder: no se pudo comprobar nada."""
 
 
-def check_contract(base_dir):
-    python = paths.venv_python(config.COMFY_DIR / "venv")
+def verify(source_dir, base_dir, python=None, log_file=None):
+    """Arranca el ComfyUI de `source_dir` en CPU y lo compara con los workflows.
 
-    if not python.exists() or not (config.COMFY_DIR / "main.py").exists():
-        sys.exit(f"ComfyUI not found in {config.COMFY_DIR} (set IMAGEHEARTH_COMFY_DIR).")
+    `python` es el intérprete con el que arrancarlo (por defecto, el entorno del ComfyUI
+    local). Devuelve la lista de problemas, vacía si todo cuadra, y lanza `ContractError`
+    si ComfyUI no arranca. La salida de ComfyUI va a `log_file` si se da.
+    """
+    source_dir = Path(source_dir)
+    python = python or paths.venv_python(config.COMFY_DIR / "venv")
+
+    if not Path(python).exists() or not (source_dir / "main.py").exists():
+        raise ContractError(
+            f"ComfyUI not found in {source_dir} or its Python environment is missing "
+            f"({python}); set IMAGEHEARTH_COMFY_DIR."
+        )
 
     packages = install_nodes(base_dir)
     port = free_port()
+
+    with open(log_file, "ab") if log_file else contextlib.nullcontext() as log:
+        return _run(source_dir, base_dir, python, packages, port, log)
+
+
+def _run(source_dir, base_dir, python, packages, port, log):
     base = f"http://127.0.0.1:{port}"
     process = subprocess.Popen(
         [
@@ -148,11 +164,11 @@ def check_contract(base_dir):
             "--base-directory",
             str(base_dir),
         ],
-        cwd=config.COMFY_DIR,
+        cwd=source_dir,
         env={**os.environ, "PYTHONPATH": str(packages)},
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log or subprocess.DEVNULL,
+        stderr=subprocess.STDOUT if log else subprocess.DEVNULL,
         **spawn.detached_options(),
     )
 
@@ -161,42 +177,60 @@ def check_contract(base_dir):
 
         while True:
             if process.poll() is not None:
-                sys.exit(f"ComfyUI exited at startup (code {process.returncode}).")
+                raise ContractError(f"ComfyUI exited at startup (code {process.returncode}).")
 
             try:
                 available = requests.get(f"{base}/object_info", timeout=10).json()
                 break
             except (requests.RequestException, ValueError):
                 if time.monotonic() >= deadline:
-                    sys.exit(f"ComfyUI did not respond within {START_TIMEOUT} seconds.")
+                    raise ContractError(
+                        f"ComfyUI did not respond within {START_TIMEOUT} seconds."
+                    ) from None
 
                 time.sleep(1)
 
-        missing = {
-            name: sorted(files)
-            for name, files in workflow_nodes().items()
-            if name not in available
-        }
-
-        if missing:
-            for name, files in missing.items():
-                print(f"MISSING {name} (used by {', '.join(files)})")
-
-            sys.exit(1)
-
-        wrong = unknown_inputs(available)
-
-        if wrong:
-            for name, item in wrong:
-                print(f"UNKNOWN INPUT {item} ({name})")
-
-            sys.exit(1)
-
-        print(f"OK: {len(workflow_nodes())} node types used by the workflows exist.")
-        print(f"OK: the inputs of the {len(workflows())} workflows exist.")
+        return compare(available)
     finally:
         if not processes.terminate(process.pid, 30):
             processes.kill(process.pid)
+
+
+def compare(available):
+    """Problemas entre los workflows y los nodos que ComfyUI declara (`/object_info`)."""
+    problems = [
+        f"MISSING {name} (used by {', '.join(sorted(files))})"
+        for name, files in workflow_nodes().items()
+        if name not in available
+    ]
+
+    if problems:
+        return problems
+
+    return [f"UNKNOWN INPUT {item} ({name})" for name, item in unknown_inputs(available)]
+
+
+def report(problems):
+    """Imprime el resultado y devuelve el código de salida."""
+    for problem in problems:
+        print(problem)
+
+    if problems:
+        return 1
+
+    print(f"OK: {len(workflow_nodes())} node types used by the workflows exist.")
+    print(f"OK: the inputs of the {len(workflows())} workflows exist.")
+    return 0
+
+
+def main():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
+        try:
+            problems = verify(config.COMFY_DIR, Path(folder))
+        except ContractError as error:
+            sys.exit(str(error))
+
+    sys.exit(report(problems))
 
 
 if __name__ == "__main__":

@@ -6,12 +6,11 @@ ya registrada no cambia: lo preexistente nunca pasa a ser propio.
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 from imagehearth_mcp.platform import files
-from imagehearth_mcp.provisioner import ProvisionError
-
-SCHEMA = 1
+from imagehearth_mcp.provisioner import ProvisionError, migrations
 
 
 def _normal(path):
@@ -44,6 +43,11 @@ class InstallManifest:
         self.entries = values.get("entries", [])
         self.settings = values.get("settings", [])
         self.connections = values.get("connections", [])
+        # Versión de ImageHearth que escribió el registro; falta en los de antes de la 1.0.
+        self.written_by = values.get("imagehearth_version")
+        # Esquema del que se migró en memoria al cargar; None si ya era el actual.
+        self.migrated_from = None
+        self._backed_up = False
 
     def _normalize_legacy_profile(self):
         """Records used to name the variant (quality-gguf); now profile and precision apart."""
@@ -71,24 +75,40 @@ class InstallManifest:
                 f"Can't read the install record {path}: {error}. Nothing was changed."
             ) from error
 
-        if not isinstance(values, dict) or values.get("schema") != SCHEMA:
-            raise ProvisionError(
-                f"Unknown install record format in {path}. Nothing was changed."
-            )
+        values, origin = migrations.migrate(values, path)
+        records = cls(path, values)
 
-        return cls(path, values)
+        if origin != migrations.INSTALL_SCHEMA:
+            records.migrated_from = origin
+
+        return records
 
     @property
     def exists(self):
         return self.path.exists()
 
+    @property
+    def needs_migration(self):
+        return self.migrated_from is not None
+
+    def _back_up(self):
+        """Copia el registro anterior a `install.json.bak-<esquema>` antes de sobrescribirlo."""
+        if self._backed_up or not self.needs_migration or not self.path.exists():
+            return
+
+        backup = self.path.with_name(f"{self.path.name}.bak-{self.migrated_from}")
+        shutil.copy2(self.path, backup)
+        self._backed_up = True
+
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._back_up()
         temporary = self.path.with_suffix(".tmp")
         temporary.write_text(
             json.dumps(
                 {
-                    "schema": SCHEMA,
+                    "schema": migrations.INSTALL_SCHEMA,
+                    "imagehearth_version": migrations.package_version() or self.written_by,
                     "mode": self.mode,
                     "comfy_dir": self.comfy_dir,
                     "models_dir": self.models_dir,
@@ -110,6 +130,8 @@ class InstallManifest:
             encoding="utf-8",
         )
         files.replace(temporary, self.path)
+        # Ya está en el esquema actual en disco.
+        self.migrated_from = None
 
     def entry(self, path):
         normal = _normal(path)

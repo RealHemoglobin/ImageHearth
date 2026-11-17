@@ -1,6 +1,6 @@
 # Security policy
 
-ImageHearth is in public beta, and only the latest published version receives fixes.
+Only the latest published version receives fixes. See the [security review](docs/security-review.md) for what has been checked.
 
 ## Reporting a vulnerability
 

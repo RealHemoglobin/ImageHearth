@@ -96,10 +96,31 @@ Después de publicar:
 
 ## Evidencia
 
-Se rellena durante la implementación con:
+Implementación del 2026-11-17 en Windows 11 (la máquina de desarrollo, con NVIDIA). Lo que sigue pendiente es lo que exige una persona, una máquina limpia, Linux o la publicación.
 
-- los comandos;
-- la fecha;
-- la máquina;
-- los resultados;
-- los ajustes de tests existentes.
+### Hecho por el asistente
+
+| Qué | Resultado |
+|---|---|
+| `docs/security-review.md` | 10 hallazgos: 0 altos, 2 medios corregidos (`install.sh` tomando el directorio actual por el repositorio; `connect` escribiendo configuraciones con permisos por defecto y rompiendo enlaces simbólicos), 8 bajos documentados. `HF_TOKEN` se limpia de los mensajes |
+| `tests/test_security.py` | Extracción de ComfyUI y de nodos: rechaza `..`, enlaces simbólicos y duros que salen de la carpeta; una ruta absoluta se extrae dentro, sin salir. Hash incorrecto: se rechaza y se borra. Los tests de permisos y enlaces son solo POSIX y se saltan en Windows: **hay que ejecutarlos en Linux** |
+| `docs/versioning.md`, `provisioner/migrations.py` | Política y migraciones. `SCHEMA` centralizado (`INSTALL_SCHEMA`, `MOVE_SCHEMA`, `REPORT_SCHEMA`). `install.json` guarda `imagehearth_version` |
+| `tests/test_migrations.py` | Registros de esquema 1 de las fases 9, 13 y 15: cargan sin cambios y migran a un esquema 2 simulado conservando modelos, predeterminados, carpeta y conexiones. Orden de migraciones, una sola copia `.bak-1`, esquema futuro rechazado sin tocar nada, `update` con origen y destino, sin descargas si nada cambia, pregunta salvo con `--yes`, y `doctor` (y `--json`) informa de la migración pendiente |
+| `scripts/contract_latest.{py,sh,ps1}` | Con la API de GitHub simulada (`tests/test_contract_latest.py`): resuelve la versión, la anota en el log y devuelve 0 o 1; GitHub caído, descarga rota y archivo malicioso devuelven 1 con log. `scripts/contract.py` comparte su comprobación (`verify`, `compare`) |
+| `docs/releasing.md` | Guía para programarlo con `schtasks`, cron y un temporizador de systemd, y qué hacer si falla |
+| Documentación y versión | `tech-stack.md` (trabajos en segundo plano, política de versiones, contrato periódico, revisión de seguridad, nivel de cada plataforma), READMEs sin la beta y con niveles, `CHANGELOG.md`. `0.1.0b3` ya no aparece fuera del historial del `CHANGELOG.md` y de `specs/` |
+
+Comandos en Windows 11 (2026-11-17): `uv run ruff check .` sin errores. `uv run pytest` fallaba en 10 tests que ya fallaban antes de la fase (comprobado con `git stash`), por suponer rutas POSIX o enlaces simbólicos. Se corrigieron (ver abajo) y los archivos afectados pasan; la ejecución completa final queda por repetir. `scripts/contract_latest` no se ha ejecutado de verdad: esta máquina no tiene ComfyUI instalado.
+
+Ajustes a tests existentes, solo para Windows: `test_batch` y `test_lora_install` comparan rutas con `Path`/`as_posix()`; `test_locations` usa `as_posix()` y salta en Windows los tests de montajes POSIX y de enlaces simbólicos. Se añadió `tests/test_migrations.py` a las excepciones F811 de `pyproject.toml`, como los demás tests que importan fixtures.
+
+### Pendiente de ejecutar o decidir por el usuario
+
+- `scripts/check.sh` y `scripts/contract.sh` en Linux (incluidos los tests solo POSIX).
+- `scripts\check.ps1`, `scripts\contract.ps1` y `scripts\contract_latest.ps1` en Windows con el ComfyUI local, y anotar aquí el resultado y la versión probada.
+- Máquina limpia con Windows 11 y NVIDIA: instalación, primera imagen, `doctor`, `uninstall`.
+- `update` desde una instalación `0.1.0b3`.
+- Programar `contract_latest.ps1` con el Programador de tareas.
+- Supuesto de Linux: los READMEs lo anuncian como nivel 1 «según las pruebas de la beta» (RTX 4090); hace falta confirmarlo con una prueba real de 1.0.0 o rebajarlo antes de publicar.
+- Windows 11 con NVIDIA figura como nivel 1 en los READMEs: se confirma con la máquina limpia; si no pasa, hay que rebajarlo (criterio 5).
+- Fusión, publicación y comprobaciones posteriores, y marcar la fase en el roadmap.

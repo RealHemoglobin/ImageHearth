@@ -8,7 +8,7 @@ ImageHearth is an [MCP](https://modelcontextprotocol.io) server that connects ag
 
 [Leer en español](https://github.com/RealHemoglobin/ImageHearth/blob/main/README.es.md)
 
-**Public beta.** Install it with one command, and if something fails, [tell us](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/troubleshooting.md#reporting-a-problem).
+Install it with one command, and if something fails, [tell us](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/troubleshooting.md#reporting-a-problem). Versions follow [semantic versioning](https://github.com/RealHemoglobin/ImageHearth/blob/main/docs/versioning.md).
 
 ```bash
 # Linux
@@ -57,17 +57,17 @@ If you also run local language models, ImageHearth frees them from GPU memory wh
 
 ### Support
 
-Only what has run on real hardware is announced as supported.
+Only what has run on real hardware is announced as supported. Level 1 is supported, level 2 is expected to work, and level 3 is experimental or untested.
 
 | System and GPU | Level |
 |---|---|
-| Linux, NVIDIA series 20 or newer | **Supported.** Tested on real hardware |
-| Windows 11, NVIDIA series 20 or newer | **Target of this beta.** Its verification on clean machines is pending |
-| Windows 11, AMD Radeon RX 7000 and 9000 series | **Experimental.** Installed automatically with AMD's own ROCm packages (about 5 GB, estimated), never tested on a real Radeon. Needs a current AMD driver. Cards: RX 9060 (gfx1200), RX 9070 (gfx1201), RX 7900 (gfx1100), RX 7800/7700 (gfx1101), RX 7600 (gfx1102), Radeon 780M/760M/740M (gfx1103) |
-| Linux, AMD | **Experimental.** ROCm 7.2 packages from PyTorch, never tested |
+| Windows 11, NVIDIA series 20 or newer | **1. Supported.** Tested on real hardware |
+| Linux, NVIDIA series 20 or newer | **1. Supported.** Tested on real hardware (RTX 4090) |
+| Windows 11, AMD Radeon RX 7000 and 9000 series | **3. Experimental.** Installed automatically with AMD's own ROCm packages (about 5 GB, estimated), never tested on a real Radeon. Needs a current AMD driver. Cards: RX 9060 (gfx1200), RX 9070 (gfx1201), RX 7900 (gfx1100), RX 7800/7700 (gfx1101), RX 7600 (gfx1102), Radeon 780M/760M/740M (gfx1103) |
+| Linux, AMD | **3. Experimental.** ROCm 7.2 packages from PyTorch, never tested |
 | Windows, other AMD cards (RX 6000 and older) | **Not installed by setup.** Install ComfyUI by hand and use `--attach` |
-| NVIDIA series 10 or older, Intel Arc, CPU only | **Experimental.** Detected and offered with a warning, never tested. CPU only runs `fast` |
-| macOS on Apple Silicon | **Untested.** Prepared behind `--experimental`: see [below](#macos-untested) |
+| NVIDIA series 10 or older, Intel Arc, CPU only | **3. Experimental.** Detected and offered with a warning, never tested. CPU only runs `fast` |
+| macOS on Apple Silicon | **3. Untested.** Prepared behind `--experimental`: see [below](#macos-untested) |
 
 ### Measured requirements
 
@@ -121,7 +121,7 @@ Without Git, download the ZIP from GitHub and run the same script inside the fol
 **Most advanced: by hand.** With [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
 
 ```bash
-uv tool install --python 3.13 imagehearth-mcp==0.1.0b3
+uv tool install --python 3.13 imagehearth-mcp==1.0.0
 imagehearth-mcp setup
 imagehearth-mcp connect --detect
 ```

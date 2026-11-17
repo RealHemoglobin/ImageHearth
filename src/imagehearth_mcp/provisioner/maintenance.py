@@ -16,6 +16,7 @@ from imagehearth_mcp.provisioner import (
     detect,
     manifest,
     menu,
+    migrations,
     models,
     preflight,
     quality,
@@ -30,6 +31,43 @@ from imagehearth_mcp.provisioner.setup import (
 
 STOP_TIMEOUT = 30
 PLACEHOLDER_PREFIX = "put_"
+
+
+def _show_changes(records, catalog, pending):
+    """Dice de dónde viene y a dónde va la actualización. True si cambia algo."""
+    current = migrations.package_version()
+    origin = records.written_by or "a version before 1.0"
+    target_comfy = catalog.comfyui.version
+    changed = False
+
+    print(f"ImageHearth: {origin} -> {current or 'unknown'}")
+
+    if records.needs_migration:
+        changed = True
+        print(
+            f"Install record: format {records.migrated_from} -> {migrations.INSTALL_SCHEMA} "
+            f"(the old one is kept as {records.path.name}.bak-{records.migrated_from})"
+        )
+
+    if records.mode != ATTACHED:
+        before = records.comfyui_version or "none"
+        note = "" if before == target_comfy else "  (changes)"
+        changed = changed or bool(note)
+        print(f"ComfyUI: {before} -> {target_comfy}{note}")
+
+    if pending:
+        changed = True
+        print("Models that change:")
+
+        for item in pending:
+            print(f"  {item.model.name} ({manifest.format_size(item.model.bytes)})")
+    else:
+        print("Models: no changes.")
+
+    if not changed:
+        print("Nothing to change.")
+
+    return changed
 
 
 def _update(args):
@@ -55,8 +93,24 @@ def _update(args):
         if item.state != models.PRESENT
     ]
 
+    interactive = is_interactive(args)
+    changes = _show_changes(records, catalog, pending)
+
+    if (
+        changes
+        and not pending
+        and not getattr(args, "yes", False)
+        and not args.accept_licenses
+        and interactive
+        and not menu.confirm("Apply these changes?")
+    ):
+        raise ProvisionError("Nothing was changed.")
+
+    if records.needs_migration:
+        # Una sola escritura, con copia del registro anterior (`install.json.bak-<esquema>`).
+        records.save()
+
     if pending:
-        interactive = is_interactive(args)
         pending_bytes = sum(item.model.bytes for item in pending)
         show_summary(
             catalog,

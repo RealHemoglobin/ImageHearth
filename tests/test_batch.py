@@ -268,9 +268,9 @@ class OneSession(BatchCase):
         self.assertEqual(
             str(result).splitlines(),
             [
-                "1: /x/a.png | WARNING: careful",
+                f"1: {Path('/x/a.png')} | WARNING: careful",
                 "2: ERROR: boom",
-                "3: /x/c.png",
+                f"3: {Path('/x/c.png')}",
                 "WARNING: global",
             ],
         )

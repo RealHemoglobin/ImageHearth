@@ -1,6 +1,7 @@
 """Unidades, propuesta de carpeta y comprobaciones previas (fase 12)."""
 
 import shutil
+import sys
 from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
 
@@ -11,6 +12,9 @@ from imagehearth_mcp.provisioner import locations
 from imagehearth_mcp.provisioner.preflight import ERROR, WARNING
 
 GB = 1_000_000_000
+POSIX_PATHS = pytest.mark.skipif(
+    sys.platform == "win32", reason="Rutas de montaje POSIX: en Windows se resuelven a una unidad"
+)
 
 MOUNTS = r"""sysfs /sys sysfs rw,nosuid 0 0
 proc /proc proc rw 0 0
@@ -47,9 +51,9 @@ def test_default_is_the_data_dir(data):
 
 def test_linux_drives_filter_virtual_and_read_only(data):
     drives = locations.list_drives(linux(), usage=usage, writable=lambda p, m: True)
-    mounts = [str(drive.path) for drive in drives]
+    mounts = [drive.path.as_posix() for drive in drives]
     assert mounts == ["/", "/mnt/Big Disk", "/media/paco/USB", "/mnt/nas"]
-    by_path = {str(drive.path): drive for drive in drives}
+    by_path = {drive.path.as_posix(): drive for drive in drives}
     assert by_path["/"].system and not by_path["/mnt/Big Disk"].system
     assert by_path["/media/paco/USB"].removable and by_path["/media/paco/USB"].fstype == "vfat"
     assert by_path["/mnt/nas"].network
@@ -76,7 +80,7 @@ def test_proposal_is_the_default_on_the_system_drive(data):
 def test_separate_home_partition_is_the_system_drive(data):
     text = "/dev/a / ext4 rw 0 0\n/dev/b /home ext4 rw 0 0\n/dev/c /mnt/x ext4 rw 0 0\n"
     drives = locations.list_drives(linux(text), usage=usage, writable=lambda p, m: True)
-    assert [str(d.path) for d in drives if d.system] == ["/home"]
+    assert [d.path.as_posix() for d in drives if d.system] == ["/home"]
 
 
 class FakeWindows:
@@ -119,6 +123,7 @@ def test_windows_drives(monkeypatch):
     assert by_letter["Z:\\"].network
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Enlaces simbólicos POSIX")
 def test_macos_volumes(tmp_path, data):
     (tmp_path / "Backup").mkdir()
     (tmp_path / "Macintosh HD").symlink_to("/")
@@ -170,6 +175,7 @@ def test_not_enough_space_is_an_error(tmp_path, monkeypatch):
     assert codes(issues, ERROR) == ["disk_space"]
 
 
+@POSIX_PATHS
 def test_fat32_with_a_big_file_is_an_error(roomy):
     issues = check("/media/paco/USB/ImageHearth", sizes=[6 * GB, 1 * GB])
     assert codes(issues, ERROR) == ["fat32_large_files"]
@@ -177,18 +183,21 @@ def test_fat32_with_a_big_file_is_an_error(roomy):
     assert "removable_drive" in codes(issues, WARNING)
 
 
+@POSIX_PATHS
 def test_fat32_without_big_files_only_warns(roomy):
     issues = check("/media/paco/USB/ImageHearth", sizes=[1 * GB, 3 * GB])
     assert codes(issues, ERROR) == []
     assert "fat32" in codes(issues, WARNING)
 
 
+@POSIX_PATHS
 def test_exfat_only_warns(roomy):
     text = "/dev/sdd1 /mnt/exfat exfat rw 0 0\n"
     issues = check("/mnt/exfat/ImageHearth", system=linux(text), sizes=[7 * GB])
     assert codes(issues) == ["exfat"] and issues[0].level == WARNING
 
 
+@POSIX_PATHS
 def test_network_drive_only_warns(roomy):
     issues = check("/mnt/nas/ImageHearth", sizes=[7 * GB])
     assert codes(issues) == ["network_drive"] and issues[0].level == WARNING
@@ -215,6 +224,7 @@ def test_windows_fat32_removable(roomy, monkeypatch):
     assert codes(issues, ERROR) == ["fat32_large_files"]
 
 
+@POSIX_PATHS
 def test_split_separates_errors_and_warnings(roomy):
     issues = check("/media/paco/USB/ImageHearth", sizes=[6 * GB])
     errors, warnings = locations.split(issues)

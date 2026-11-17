@@ -96,7 +96,7 @@ def _editor_config(*parts):
 
 
 def _claude_desktop_config():
-    """Dónde lee Claude Desktop su config en Windows.
+    r"""Dónde lee Claude Desktop su config en Windows.
 
     Las versiones recientes la guardan en %LOCALAPPDATA%\\Claude-Data\\claude_<id>; las anteriores
     de la Microsoft Store, en la carpeta del paquete, porque Windows redirige %APPDATA%.
@@ -364,10 +364,20 @@ def _backup(path):
 
 
 def _write(path, text):
-    """Escritura atómica que conserva los permisos: estos archivos guardan secretos."""
+    """Escritura atómica que conserva los permisos: estos archivos guardan secretos.
+
+    El temporal nace con permisos 0600, así que el contenido no es legible por otros
+    ni un instante. Si `path` es un enlace simbólico (archivos de configuración
+    gestionados con dotfiles), se escribe en su destino y el enlace se conserva.
+    """
+    path = Path(os.path.realpath(path))
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.imagehearth.tmp")
-    temporary.write_text(text, encoding="utf-8")
+    temporary.unlink(missing_ok=True)
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+
+    with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+        file.write(text)
 
     if path.exists():
         shutil.copymode(path, temporary)

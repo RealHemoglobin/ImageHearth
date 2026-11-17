@@ -1,6 +1,6 @@
 [project]
 name = "imagehearth-mcp"
-version = "0.1.0b3"
+version = "1.0.0"
 description = "MCP server that lets AI agents generate and edit images locally through ComfyUI"
 readme = "README.md"
 license = "MIT AND GPL-3.0-only"
@@ -13,7 +13,7 @@ requires-python = ">=3.13"
 authors = [{ name = "Hemoglobin" }]
 keywords = ["mcp", "model-context-protocol", "comfyui", "image-generation", "flux", "ai-agents"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Environment :: GPU :: NVIDIA CUDA",
     "Intended Audience :: Developers",
@@ -89,6 +89,7 @@ explicit-preview-rules = true
 "tests/test_setup_steps.py" = ["F811"]
 "tests/test_install_dir.py" = ["F811"]
 "tests/test_move.py" = ["F811"]
+"tests/test_migrations.py" = ["F811"]
 "tests/test_loras.py" = ["F811"]
 "tests/test_lora_install.py" = ["F811"]
 "tests/test_model_install.py" = ["F811"]
